@@ -1,0 +1,14 @@
+schema: 1
+description: No push lands on a protected branch, and git commands that throw work away ask first.
+needs:
+  - capability: command-block
+    without: the push rule does not run; only branch protection on the server stops a push to a protected branch
+commands:
+  ask:
+    - git reset --hard*
+    - git checkout -- *
+    - git restore *
+    - git clean *
+    - git branch -D *
+    - git stash drop*
+    - git stash clear

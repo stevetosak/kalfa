@@ -101,7 +101,7 @@ test('the session report lists open Tasks, and after /clear gives the Handoff', 
 test('the session report puts the open Plans before the Tasks, and a broken glob is a notice', async () => {
 	const root = repo("schema: 1\nplans: ['docs/**/*.md', 'nowhere/*.md']\n");
 	await task.run(['start', 'Build the monitoring', '--plan', 'docs/plan.md'], captureIo(root));
-	const context = { project: { root, file: { schema: 1 as const, modules: [], plans: ['docs/**/*.md', 'nowhere/*.md'] } }, settings: { schema: 1 as const }, env: {}, capabilities: new Set<never>() };
+	const context = { project: { root, file: { schema: 1 as const, modules: [], plans: ['docs/**/*.md', 'nowhere/*.md'], settings: {} } }, settings: { schema: 1 as const }, env: {}, capabilities: new Set<never>() };
 	const result = await coreModule.handlers['session.start']!({ harness: 'fake', cwd: root, name: 'session.start', source: 'startup' }, context);
 	assert.match(
 		result?.context ?? '',
@@ -112,6 +112,6 @@ test('the session report puts the open Plans before the Tasks, and a broken glob
 
 test('a repository without Plans or Tasks gets no session report', async () => {
 	const root = repo();
-	const context = { project: { root, file: { schema: 1 as const, modules: [], plans: [] } }, settings: { schema: 1 as const }, env: {}, capabilities: new Set<never>() };
+	const context = { project: { root, file: { schema: 1 as const, modules: [], plans: [], settings: {} } }, settings: { schema: 1 as const }, env: {}, capabilities: new Set<never>() };
 	assert.equal(await coreModule.handlers['session.start']!({ harness: 'fake', cwd: root, name: 'session.start', source: 'startup' }, context), undefined);
 });

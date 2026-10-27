@@ -30,3 +30,11 @@ test('the event table lists each handled event once, in Core event order', () =>
 	const root = gitRepo({ '.gitignore': '.kalfa/\n' });
 	assert.equal(readFileSync(writeEventTable(root, [a, b]), 'utf8'), 'session.start\ncommand.before\ntool.after\n');
 });
+
+test('an event keeps its filter only while every Module that handles it has one', () => {
+	const push = { name: 'push', handlers: { 'command.before': () => undefined }, filters: { 'command.before': 'git[[:space:]]' } };
+	const pr = { name: 'pr', handlers: { 'command.before': () => undefined }, filters: { 'command.before': 'gh[[:space:]]+pr' } };
+	const root = gitRepo({ '.gitignore': '.kalfa/\n' });
+	assert.equal(readFileSync(writeEventTable(root, [push, pr]), 'utf8'), 'command.before\t(git[[:space:]])|(gh[[:space:]]+pr)\n');
+	assert.equal(readFileSync(writeEventTable(root, [push, b]), 'utf8'), 'session.start\ncommand.before\n');
+});

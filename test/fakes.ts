@@ -25,7 +25,7 @@ export function registry(...modules: ModuleDefinition[]): Map<string, ModuleDefi
 
 export function handlerContext(modules: string[] | undefined, root = '/repo', plans: string[] = []): HandlerContext {
 	return {
-		project: { root, file: modules ? { schema: 1, modules, plans } : undefined },
+		project: { root, file: modules ? { schema: 1, modules, plans, settings: {} } : undefined },
 		settings: DEFAULT_SETTINGS,
 		env: {},
 		capabilities: fakeAdapter.capabilities,

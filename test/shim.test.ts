@@ -49,3 +49,15 @@ test('the event table decides, unless kalfa.yaml is newer', () => {
 	utimesSync(join(root, 'kalfa.yaml'), new Date(), new Date(Date.now() + 60_000));
 	assert.equal(shimRuns(root, 'tool.after'), true);
 });
+
+test('a filtered event starts Node only when the payload matches the filter', () => {
+	const root = tempRepo({ 'kalfa.yaml': 'schema: 1\n' });
+	mkdirSync(join(root, '.kalfa'));
+	writeFileSync(join(root, '.kalfa', 'events'), 'session.start\ncommand.before\t(git[[:space:]]+push)|(gh[[:space:]]+pr)\n');
+	utimesSync(join(root, 'kalfa.yaml'), new Date(2000, 0), new Date(2000, 0));
+	const runs = (input: string) => execFileSync('bash', [shim, 'fake', 'command.before'], { cwd: root, input, env: { ...process.env, KALFA_NODE: stub } }).toString() !== '';
+	assert.equal(runs('{"command":"git push origin x"}'), true);
+	assert.equal(runs('{"command":"gh  pr create"}'), true);
+	assert.equal(runs('{"command":"git status"}'), false);
+	assert.equal(shimRuns(root, 'tool.after'), false, 'an event the table does not list');
+});

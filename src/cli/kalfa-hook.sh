@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # kalfa-hook <harness> <event>: the fast path in front of `kalfa hook`. A hook
 # fires on every tool call, so Node starts only when a handler can run here:
-# the Core handles the event, or the repository's event table lists it. With a
-# project file and no table yet, Node runs (and session.start writes the table).
+# the Core handles the event, or the repository's event table lists it and the
+# payload matches the table's filter for it, if it has one. With a project
+# file and no table yet, Node runs (and session.start writes the table).
 set -u
 event=${2:-}
 input=$(cat)
@@ -20,5 +21,12 @@ done
 [[ -f $root/kalfa.yaml ]] || exit 0
 table=$root/.kalfa/events
 [[ -f $table && $table -nt $root/kalfa.yaml ]] || run "$@"
-grep -qxF -- "$event" "$table" && run "$@"
+tab=$'\t'
+while IFS= read -r line; do
+	[[ $line == "$event" ]] && run "$@"
+	[[ $line == "$event$tab"* ]] || continue
+	filter=${line#*"$tab"}
+	[[ $input =~ $filter ]] && run "$@"
+	exit 0
+done < "$table"
 exit 0

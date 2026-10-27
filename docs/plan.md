@@ -42,7 +42,9 @@ that part. Result: [APM spike Log](spikes/2026-10-27-apm.md).
 The old hooks keep running while these are built.
 
 - [ ] `docs`: the documentation recorder, the Definition of Done, the push gate's documentation check.
-- [ ] `guardrails`: the push gate's hard rules, the approval lists, a generic infrastructure rule pack.
+- [x] `guardrails`: no push to a protected branch in any form (a `command.before` handler that fails closed; `settings.guardrails.protected-branches`, default `main` and `master`), and approval prompts before git commands that throw work away.
+- [x] `infra`: approval prompts before every terraform command and the kubectl verbs that write. Its rule pack comes from the memory sort (step 6).
+- [x] A Module can give a payload filter per event, so the shim starts Node only for a payload its handler acts on, and its own `settings:` part in `kalfa.yaml`.
 - [ ] `meter`: the context meter, the idle guard, the status line, the rate tap, the usage report.
 - [ ] `herdr`: session state and the successor launch.
 - [ ] Move the existing agent tests with their code.
@@ -69,7 +71,7 @@ settings backup is the rollback.
 ## 6. Memory
 
 - [ ] Sort the current memory into the three layers; the operator reviews the sort before anything moves.
-- [ ] Move the workspace deployment doctrine into the infrastructure Module.
+- [ ] Move the workspace deployment doctrine and the generic infrastructure rules into the `infra` Module.
 - [ ] Enforce each layer's budget at `session.start`.
 
 ## 7. Retire the old setup

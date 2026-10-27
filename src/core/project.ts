@@ -25,6 +25,8 @@ const projectFileSchema = z.strictObject({
 		.refine((names) => new Set(names).size === names.length, 'a Module is listed twice'),
 	/** Where the Plans are: globs over Markdown files; only pages with `type: plan` count. */
 	plans: z.array(repoGlob).default([]),
+	/** Per Module, its own settings; each Module checks its part. */
+	settings: z.record(moduleName, z.unknown()).default({}),
 });
 
 export type ProjectFile = z.infer<typeof projectFileSchema>;
