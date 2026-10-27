@@ -1,2 +1,4 @@
 .claude/
 .kalfa/
+node_modules/
+dist/

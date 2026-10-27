@@ -1,0 +1,40 @@
+// The Dispatcher runs the handlers of the Core and of the enabled Modules for
+// one Core event, in that order, and merges their results.
+import type { CoreEvent, DispatchResult } from './events.ts';
+import { BLOCKING_EVENTS } from './events.ts';
+import { CORE_MODULE, type HandlerContext, type ModuleDefinition } from './modules.ts';
+
+/** The Modules that run in this context: the Core, then those the project file enables. */
+export function activeModules(registry: ReadonlyMap<string, ModuleDefinition>, context: HandlerContext): { modules: ModuleDefinition[]; unknown: string[] } {
+	const names = [CORE_MODULE, ...(context.project?.file?.modules ?? [])];
+	const modules: ModuleDefinition[] = [];
+	const unknown: string[] = [];
+	for (const name of names) {
+		const module = registry.get(name);
+		if (module) modules.push(module);
+		else if (name !== CORE_MODULE) unknown.push(name);
+	}
+	return { modules, unknown };
+}
+
+export async function dispatch(event: CoreEvent, registry: ReadonlyMap<string, ModuleDefinition>, context: HandlerContext): Promise<DispatchResult> {
+	const result: DispatchResult = { context: [], block: [], notice: [] };
+	const { modules, unknown } = activeModules(registry, context);
+	if (unknown.length) result.notice.push(`kalfa: kalfa.yaml names unknown Module(s): ${unknown.join(', ')}; check \`kalfa doctor\``);
+
+	for (const module of modules) {
+		const handler = module.handlers[event.name];
+		if (!handler) continue;
+		try {
+			const out = await handler(event, context);
+			if (out?.context) result.context.push(out.context);
+			if (out?.notice) result.notice.push(out.notice);
+			if (out?.block && BLOCKING_EVENTS.has(event.name)) result.block.push(out.block);
+		} catch (error) {
+			const message = `kalfa: Module ${module.name} failed on ${event.name}: ${(error as Error).message}`;
+			if (module.failClosed?.includes(event.name) && BLOCKING_EVENTS.has(event.name)) result.block.push(`${message} (the action is stopped because this guard could not run)`);
+			else result.notice.push(message);
+		}
+	}
+	return result;
+}

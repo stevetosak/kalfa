@@ -25,8 +25,8 @@ that part. Result: [APM spike Log](spikes/2026-10-27-apm.md).
 
 ## 2. Core, unwired
 
-- [ ] CLI skeleton, `kalfa.yaml` schema 1, machine settings file.
-- [ ] Dispatcher `kalfa hook <event>` with the fast path.
+- [x] CLI skeleton, `kalfa.yaml` schema 1, machine settings file.
+- [x] Dispatcher `kalfa hook <harness> <event>` with the fast path: the `kalfa-hook` shim starts Node only when the Core or the repository's event table handles the event.
 - [ ] Claude Code Adapter: hook translation, task-list mapping, Capability set.
 - [ ] Task Record (schema 1), the git-ignore refusal, the Handoff view.
 - [ ] Plans: the portable format, globs in `kalfa.yaml`, the session report.
