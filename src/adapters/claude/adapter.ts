@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { Capability } from '../../core/capabilities.ts';
 import { KalfaError } from '../../core/errors.ts';
 import type { CoreEvent, CoreEventName, DispatchResult } from '../../core/events.ts';
-import type { Adapter, HookOutput } from '../adapter.ts';
+import type { Adapter, HookOutput, SessionStart } from '../adapter.ts';
 import { claudeProject } from './project.ts';
 import { claudeSkills } from './skills.ts';
 
@@ -79,6 +79,8 @@ function render(event: CoreEvent, result: DispatchResult): HookOutput {
 	return { stdout: Object.keys(output).length ? JSON.stringify(output) : undefined, exitCode: 0 };
 }
 
+const sessionArgs = ({ name, prompt, model }: SessionStart) => ['-n', name, ...(model ? ['--model', model] : []), prompt];
+
 export const claudeAdapter: Adapter = {
 	name: 'claude',
 	capabilities: new Set<Capability>(['context-injection', 'command-block', 'transcript', 'task-list', 'status-line', 'background-agent']),
@@ -88,4 +90,5 @@ export const claudeAdapter: Adapter = {
 	render,
 	project: claudeProject,
 	skills: claudeSkills,
+	session: { program: 'claude', interactive: sessionArgs, background: (start) => ['--bg', ...sessionArgs(start)] },
 };

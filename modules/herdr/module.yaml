@@ -1,0 +1,2 @@
+schema: 1
+description: Starts the next session on an open Task, in a new Herdr tab or in the background, and says when Herdr cannot show the session's state.

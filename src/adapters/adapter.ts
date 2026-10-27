@@ -25,6 +25,24 @@ export interface Adapter {
 	project?: ProjectFiles;
 	/** Where this harness finds skills and commands, for `kalfa doctor`; `undefined` when kalfa cannot tell. */
 	skills?: SkillLookup;
+	/** How a new session of this harness starts; `undefined` when kalfa cannot start one. */
+	session?: SessionLaunch;
+}
+
+/** A new session: its name and the prompt it starts on. */
+export interface SessionStart {
+	name: string;
+	prompt: string;
+	model?: string;
+}
+
+export interface SessionLaunch {
+	/** The program that runs the harness. */
+	program: string;
+	/** Its arguments for an interactive session that starts on the prompt. */
+	interactive(start: SessionStart): string[];
+	/** Its arguments for the same session in the background; `undefined` when the harness has no background sessions. */
+	background?(start: SessionStart): string[];
 }
 
 export interface SkillLookup {
