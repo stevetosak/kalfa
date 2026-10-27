@@ -13,15 +13,15 @@ events is switched, so other work can go on during the migration.
 ## 1. APM spike
 
 In a throwaway repository. A part that fails here is built by hand, and only
-that part.
+that part. Result: [APM spike Log](spikes/2026-10-27-apm.md).
 
-- [ ] Install a pinned third-party skill at user scope and read it back from the lock file.
-- [ ] Merge hooks into the harness settings and keep a foreign hook untouched.
-- [ ] Apply an Overlay to a third-party skill through a local path.
-- [ ] Uninstall and leave nothing behind.
-- [ ] Prove that Claude Code reads `AGENTS.md` only through `@AGENTS.md` in `CLAUDE.md`.
-- [ ] Check whether APM's `applyTo` instruction compile can produce the per-harness rule files.
-- [ ] Record the pinned APM version and the result of each item.
+- [x] Install a pinned third-party skill at user scope and read it back from the lock file.
+- [x] Merge hooks into the harness settings and keep a foreign hook untouched.
+- [x] Apply an Overlay to a third-party skill through a local path. APM cannot keep it next to the upstream skill; `kalfa build` composes it (see the spike Log).
+- [x] Uninstall and leave nothing behind.
+- [x] Check how Claude Code reads `AGENTS.md`: on its own only when no `CLAUDE.md` exists; otherwise only through `@AGENTS.md`.
+- [x] Check whether APM's `applyTo` instruction compile can produce the per-harness rule files.
+- [x] Record the pinned APM version and the result of each item.
 
 ## 2. Core, unwired
 
@@ -30,6 +30,8 @@ that part.
 - [ ] Claude Code Adapter: hook translation, task-list mapping, Capability set.
 - [ ] Task Record (schema 1), the git-ignore refusal, the Handoff view.
 - [ ] Plans: the portable format, globs in `kalfa.yaml`, the session report.
+- [ ] `kalfa build` keeps APM project state (`apm.yml`, `apm.lock.yaml`) out of the repository and composes Overlays from the pinned upstream skill.
+- [ ] Decide whether the nested `AGENTS.md` files that `apm compile` writes are committed or ignored.
 - [ ] `kalfa build`, `kalfa doctor`, `kalfa link` / `unlink`, `kalfa init`.
 - [ ] Tests: unit, Adapter contract on recorded payloads, clean-state smoke.
 - [ ] CI: the three test levels and the leak scan.
