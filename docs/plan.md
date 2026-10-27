@@ -33,7 +33,7 @@ that part. Result: [APM spike Log](spikes/2026-10-27-apm.md).
 - [x] `kalfa build` keeps APM project state out of the repository: it writes the Module files itself and APM stays at user scope (amendment to ADR 0001). It composes Overlays from the pinned upstream skill and records each pin's hash.
 - [x] Decide whether the nested `AGENTS.md` files are committed or ignored: none while Claude Code is the only harness; then each one goes in `.git/info/exclude`.
 - [x] `kalfa build`, `kalfa doctor`, `kalfa link` / `unlink`, `kalfa init`.
-- [ ] `kalfa doctor` names skill references in `CLAUDE.md` and `AGENTS.md` that no installed skill answers.
+- [x] `kalfa doctor` names skill references in `CLAUDE.md` and `AGENTS.md` that no installed skill answers (the Adapter says where its harness finds skills and commands).
 - [x] Tests: unit, Adapter contract on recorded payloads, clean-state smoke (`kalfa doctor --smoke`: install, the `.kalfa/` refusal, init, build next to the Operator's own settings, hooks through the shim, uninstall leaves nothing).
 - [ ] CI: the three test levels and the leak scan.
 

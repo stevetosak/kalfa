@@ -110,3 +110,10 @@ test('doctor shows the install mode, the Capabilities that are off and whether t
 	writeFileSync(join(root, '.claude/rules/kalfa-guardrails-r.md'), 'mine\n');
 	assert.match((await run(doctor, root, [], env)).out, /build: problem: kalfa build changed nothing:\n- \.claude\/rules\/kalfa-guardrails-r\.md: exists and kalfa did not write it/);
 });
+
+test('doctor names the skill references that no installed skill answers', async () => {
+	const home = tempRepo({ '.claude/skills/present/SKILL.md': 'x' });
+	const root = gitRepo({ 'AGENTS.md': 'Use the `present` skill.\n', 'CLAUDE.md': '@AGENTS.md\n\nRun `/compact`, then `/gone`.\n' });
+	const doctor = doctorCommand(adapters, () => modulesDir, () => checkout());
+	assert.match((await run(doctor, root, [], { HOME: home })).out, /skill references:\n {2}claude: 1 of 3 not found\n {4}CLAUDE\.md:3: gone$/m);
+});

@@ -4,14 +4,15 @@
 // without them, and whether the build is up to date. A broken part is
 // reported and the next part still runs; only a broken project file stops it.
 // `--smoke` runs the clean-state smoke instead (see smoke.ts).
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import type { Adapter } from '../../adapters/adapter.ts';
 import { KalfaError } from '../../core/errors.ts';
 import { loadModuleSource, type ModuleManifest } from '../../core/module-source.ts';
 import { findPlans, isOpenPlan } from '../../core/plans.ts';
-import { loadProject, type Project, PROJECT_FILE } from '../../core/project.ts';
+import { AGENTS_FILE, loadProject, type Project, PROJECT_FILE } from '../../core/project.ts';
 import { loadSettings, settingsPath } from '../../core/settings.ts';
+import { installedSkills, skillRefs } from '../../core/skill-refs.ts';
 import { coreNeeds } from '../../modules/core.ts';
 import { type Command, parseCommandArgs } from '../command.ts';
 import type { Io } from '../io.ts';
@@ -57,6 +58,22 @@ function capabilityLines(project: Project | undefined, adapters: ReadonlyMap<str
 	return ['', ...lines];
 }
 
+/** Per harness: the skill references in the instruction files it reads that none of its skills answers. */
+function skillRefLines(root: string, env: NodeJS.ProcessEnv, adapters: ReadonlyMap<string, Adapter>): string[] {
+	if (!env.HOME) throw new KalfaError('HOME is not set; kalfa cannot find the installed skills');
+	const lines: string[] = [];
+	for (const adapter of adapters.values()) {
+		if (!adapter.skills) continue;
+		const known = new Set([...installedSkills(adapter.skills.sources(env.HOME, root)), ...adapter.skills.builtins]);
+		const files = [...new Set([AGENTS_FILE, adapter.project?.instructions?.file ?? AGENTS_FILE])].filter((file) => existsSync(join(root, file)));
+		const refs = files.flatMap((file) => skillRefs(readFileSync(join(root, file), 'utf8')).map((ref) => ({ file, ...ref })));
+		const missing = refs.filter((ref) => !known.has(ref.name));
+		lines.push(missing.length ? `${adapter.name}: ${missing.length} of ${refs.length} not found` : `${adapter.name}: ${refs.length} found`);
+		for (const ref of missing) lines.push(`  ${ref.file}:${ref.line}: ${ref.name}`);
+	}
+	return ['', ...lines];
+}
+
 export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, modulesRoot: () => string, packageRoot: () => string): Command {
 	return {
 		summary: 'Report what kalfa sees on this machine and in this repository',
@@ -91,6 +108,7 @@ export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, modulesRoo
 				}
 			}
 			part(io, 'Capabilities', () => capabilityLines(project, adapters, modulesRoot()));
+			part(io, 'skill references', () => skillRefLines(project.root, io.env, adapters));
 			if (project.file) {
 				part(io, 'build', () => {
 					const run = buildProject(project, adapters, modulesRoot(), io.env, { dryRun: true, offline: true });

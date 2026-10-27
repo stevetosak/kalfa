@@ -10,12 +10,11 @@ import { KalfaError } from '../../core/errors.ts';
 import { loadModuleSource } from '../../core/module-source.ts';
 import { findPlans } from '../../core/plans.ts';
 import { isPrivateDirIgnored, PRIVATE_DIR } from '../../core/private-dir.ts';
-import { PROJECT_FILE } from '../../core/project.ts';
+import { AGENTS_FILE, PROJECT_FILE } from '../../core/project.ts';
 import { type Command, parseCommandArgs } from '../command.ts';
 import { requireProject } from '../project.ts';
 
 const DEFAULT_PLANS = 'docs/**/*.md';
-const AGENTS_FILE = 'AGENTS.md';
 
 export function initCommand(adapters: ReadonlyMap<string, Adapter>, modulesRoot: () => string): Command {
 	return {

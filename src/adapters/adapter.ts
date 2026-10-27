@@ -4,6 +4,7 @@
 import type { Capability } from '../core/capabilities.ts';
 import type { CoreEvent, CoreEventName, DispatchResult } from '../core/events.ts';
 import type { ApprovalKind, Rule } from '../core/module-source.ts';
+import type { SkillSource } from '../core/skill-refs.ts';
 
 export interface HookOutput {
 	stdout?: string;
@@ -22,6 +23,14 @@ export interface Adapter {
 	render(event: CoreEvent, result: DispatchResult): HookOutput;
 	/** Where `kalfa build` writes a Module's files for this harness; `undefined` when it has none. */
 	project?: ProjectFiles;
+	/** Where this harness finds skills and commands, for `kalfa doctor`; `undefined` when kalfa cannot tell. */
+	skills?: SkillLookup;
+}
+
+export interface SkillLookup {
+	sources(home: string, root: string): SkillSource[];
+	/** The commands the harness answers itself. */
+	builtins: ReadonlySet<string>;
 }
 
 /** A harness's project file layout. Paths are relative to the repository root. */
