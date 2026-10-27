@@ -13,7 +13,7 @@ const guard = { name: 'guardrails', handlers: { 'command.before': () => ({ block
 
 test('the Core runs first, then the enabled Modules in the order kalfa.yaml lists them', async () => {
 	const result = await dispatch(command, registry(core, docs, guard), handlerContext(['guardrails', 'docs']));
-	assert.deepEqual(result, { context: ['from core', 'why', 'from docs'], block: ['no push'], notice: ['docs notice'] });
+	assert.deepEqual(result, { context: ['from core', 'why', 'from docs'], block: ['no push'], quiet: false, stop: [], notice: ['docs notice'] });
 });
 
 test('a repository without kalfa.yaml runs the Core alone', async () => {
@@ -24,6 +24,17 @@ test('a repository without kalfa.yaml runs the Core alone', async () => {
 test('a block on an event that cannot block is dropped', async () => {
 	const result = await dispatch(toolAfter, registry(core, guard), handlerContext(['guardrails']));
 	assert.deepEqual(result.block, []);
+});
+
+test('a block is quiet only when every block asks for it; a stop counts only after a tool', async () => {
+	const prompt: CoreEvent = { harness: 'fake', cwd: '/repo', name: 'prompt.submit', prompt: '/meter' };
+	const quiet = { name: 'quiet', handlers: { 'prompt.submit': () => ({ block: 'answered', quiet: true }), 'tool.after': () => ({ stop: 'paused' }) } };
+	const loud = { name: 'loud', handlers: { 'prompt.submit': () => ({ block: 'held' }) } };
+	assert.equal((await dispatch(prompt, registry(quiet), handlerContext(['quiet']))).quiet, true);
+	assert.equal((await dispatch(prompt, registry(quiet, loud), handlerContext(['quiet', 'loud']))).quiet, false);
+	assert.deepEqual((await dispatch(toolAfter, registry(quiet), handlerContext(['quiet']))).stop, ['paused']);
+	const stopOnCommand = { name: 'q', handlers: { 'command.before': () => ({ stop: 'x' }) } };
+	assert.deepEqual((await dispatch(command, registry(stopOnCommand), handlerContext(['q']))).stop, []);
 });
 
 test('an unknown Module gives a notice and the others still run', async () => {

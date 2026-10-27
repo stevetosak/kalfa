@@ -1,0 +1,11 @@
+schema: 1
+description: The context meter (reminds the Operator to compact), the idle guard (stops a cold session from writing its whole context again unasked), the usage-limit tap of the status line and the usage report.
+needs:
+  - capability: usage
+    without: no meter and no idle guard, because kalfa cannot see the context size
+  - capability: context-injection
+    without: the agent is not told to remind the Operator to compact; the idle guard still works
+  - capability: turn-stop
+    without: a tool result that waited on the Operator for an hour goes on and writes the whole context again; a typed prompt is still held
+  - capability: status-line
+    without: no usage limits are saved, so kalfa herdr continue cannot check them

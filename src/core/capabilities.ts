@@ -8,6 +8,8 @@ export const CAPABILITIES = {
 	'task-list': 'the harness shows a live task list',
 	'status-line': 'the harness runs a command for its status line',
 	'background-agent': 'a skill can start a background agent',
+	usage: 'kalfa can read the token use of each request, and so the size of the context',
+	'turn-stop': "a hook can end the agent's turn after a tool ran",
 } as const;
 
 export type Capability = keyof typeof CAPABILITIES;

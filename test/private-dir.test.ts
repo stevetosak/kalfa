@@ -37,4 +37,8 @@ test('an event keeps its filter only while every Module that handles it has one'
 	const root = gitRepo({ '.gitignore': '.kalfa/\n' });
 	assert.equal(readFileSync(writeEventTable(root, [push, pr]), 'utf8'), 'command.before\t(git[[:space:]])|(gh[[:space:]]+pr)\n');
 	assert.equal(readFileSync(writeEventTable(root, [push, b]), 'utf8'), 'session.start\ncommand.before\n');
+	const sized = { name: 'meter', handlers: { 'command.before': () => undefined }, minContext: { 'command.before': 150_000 } };
+	const small = { name: 'small', handlers: { 'command.before': () => undefined }, minContext: { 'command.before': 100_000 } };
+	assert.equal(readFileSync(writeEventTable(root, [sized, small]), 'utf8'), 'command.before\t\t100000\n', 'the smallest size, no regex');
+	assert.equal(readFileSync(writeEventTable(root, [push, sized]), 'utf8'), 'command.before\t(git[[:space:]])\t150000\n');
 });

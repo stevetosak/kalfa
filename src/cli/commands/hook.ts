@@ -46,7 +46,7 @@ async function runHook(args: string[], io: Io, adapters: ReadonlyMap<string, Ada
 	const root = repoRootOf(event.cwd);
 	const project: Project | undefined = orNotice(() => loadProject(event.cwd), root ? { root, file: undefined } : undefined, notices);
 	const settings: Settings = orNotice(() => loadSettings(io.env), DEFAULT_SETTINGS, notices);
-	const context: HandlerContext = { project, settings, env: io.env, capabilities: adapter.capabilities };
+	const context: HandlerContext = { project, settings, env: io.env, capabilities: adapter.capabilities, usage: adapter.usage };
 
 	const result = await dispatch(event, registry, context);
 	result.notice.unshift(...notices);

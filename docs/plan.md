@@ -45,7 +45,7 @@ The old hooks keep running while these are built.
 - [x] `guardrails`: no push to a protected branch in any form (a `command.before` handler that fails closed; `settings.guardrails.protected-branches`, default `main` and `master`), and approval prompts before git commands that throw work away.
 - [x] `infra`: approval prompts before every terraform command and the kubectl verbs that write. Its rule pack comes from the memory sort (step 6).
 - [x] A Module can give a payload filter per event, so the shim starts Node only for a payload its handler acts on, and its own `settings:` part in `kalfa.yaml`.
-- [ ] `meter`: the context meter, the idle guard, the status line, the rate tap, the usage report.
+- [x] `meter`: the context meter and `/meter`, the idle guard, the status-line tap (it saves the usage limits), `kalfa meter usage`. The Core gained a quiet prompt block, a turn stop, the subagent marker, the tool duration, the `usage` Capability, and a context size per event in the event table (each Adapter ships a context probe, so a small session never starts Node).
 - [x] `herdr`: the successor launch (`kalfa herdr continue`, the `successor` skill): a new session on the open Task, in a Herdr tab or in the harness's background session, refused near a usage limit. Herdr's own integration shows the session state; the Module says when it is missing.
 - [ ] Move the existing agent tests with their code.
 - [ ] Decide for each loose personal skill: move it into a Module or drop it.

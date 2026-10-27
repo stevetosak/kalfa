@@ -20,7 +20,7 @@ const expected: Record<string, CoreEvent> = {
 	'session.start': { ...common, name: 'session.start', source: 'startup' },
 	'prompt.submit': { ...common, name: 'prompt.submit', prompt: 'Run the shell command `echo hi` with the Bash tool, then reply with the single word: done.' },
 	'command.before': { ...common, name: 'command.before', command: 'echo hi' },
-	'tool.after': { ...common, name: 'tool.after', tool: 'Bash' },
+	'tool.after': { ...common, name: 'tool.after', tool: 'Bash', durationMs: 350 },
 };
 
 test('at least one Claude Code version is recorded', () => assert.ok(versions.length > 0));
@@ -36,6 +36,10 @@ for (const version of versions) {
 		test('a tool that is not the shell raises no command.before', () => {
 			assert.equal(claudeAdapter.toEvent('command.before', { ...preToolUse, tool_name: 'Read', tool_input: { file_path: '/x' } }), undefined);
 		});
+		test('a hook from a subagent marks the event', () => {
+			assert.equal(claudeAdapter.toEvent('command.before', { ...preToolUse, agent_id: 'a1' })?.subagent, true);
+			assert.equal(claudeAdapter.toEvent('command.before', preToolUse)?.subagent, undefined);
+		});
 		test('a hook wired to the wrong event is refused', () => {
 			assert.throws(() => claudeAdapter.toEvent('session.start', preToolUse), { name: 'KalfaError', message: /wired to the PreToolUse hook; it belongs on SessionStart/ });
 		});
@@ -50,7 +54,7 @@ test('events Claude Code has no hook for are not raised by it', () => {
 	assert.equal(claudeAdapter.toEvent('task.close', { hook_event_name: 'Stop', cwd: '/' }), undefined);
 });
 
-const result = (part: Partial<DispatchResult>): DispatchResult => ({ context: [], block: [], notice: [], ...part });
+const result = (part: Partial<DispatchResult>): DispatchResult => ({ context: [], block: [], quiet: false, stop: [], notice: [], ...part });
 const json = (event: CoreEvent, part: Partial<DispatchResult>) => {
 	const out = claudeAdapter.render(event, result(part));
 	assert.equal(out.exitCode, 0);
@@ -74,4 +78,20 @@ test('a block on a command is a deny with the reasons', () => {
 
 test('a block on a prompt is a block decision', () => {
 	assert.deepEqual(json(expected['prompt.submit']!, { block: ['compact first'] }), { decision: 'block', reason: 'compact first' });
+});
+
+test('a quiet block on a prompt also drops the prompt from the session', () => {
+	assert.deepEqual(json(expected['prompt.submit']!, { block: ['meter off'], quiet: true }), {
+		decision: 'block',
+		reason: 'meter off',
+		hookSpecificOutput: { hookEventName: 'UserPromptSubmit', suppressOriginalPrompt: true },
+	});
+});
+
+test('a stop after a tool ends the turn, with the reasons for the Operator', () => {
+	assert.deepEqual(json(expected['tool.after']!, { stop: ['paused'], context: ['note'] }), {
+		continue: false,
+		stopReason: 'paused',
+		hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: 'note' },
+	});
 });

@@ -5,14 +5,17 @@ import type { Command } from '../cli/command.ts';
 import { guardrailsModule } from '../../modules/guardrails/handlers.ts';
 import { herdrCommand } from '../../modules/herdr/command.ts';
 import { herdrModule } from '../../modules/herdr/handlers.ts';
+import { meterCommand } from '../../modules/meter/command.ts';
+import { meterModule } from '../../modules/meter/handlers.ts';
 import { coreModule } from './core.ts';
 
 /** The Modules this kalfa ships with handlers, by name; the Core is one of them. */
-export const modules: ReadonlyMap<string, ModuleDefinition> = new Map([coreModule, guardrailsModule, herdrModule].map((m) => [m.name, m]));
+export const modules: ReadonlyMap<string, ModuleDefinition> = new Map([coreModule, guardrailsModule, herdrModule, meterModule].map((m) => [m.name, m]));
 
-/** The Modules' own CLI commands, `kalfa <module> …`; each runs only where its Module is on. */
+/** The Modules' own CLI commands, `kalfa <module> …`; each says whether it needs its Module on in the repository. */
 export const moduleCommands: Record<string, (adapters: ReadonlyMap<string, Adapter>) => Command> = {
 	herdr: (adapters) => herdrCommand(adapters),
+	meter: (adapters) => meterCommand(adapters),
 };
 
 /**
