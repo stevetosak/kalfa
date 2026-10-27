@@ -18,14 +18,14 @@ import { raise, report } from '../raise.ts';
 const taskOption = { task: { type: 'string' } } as const;
 
 /** The Task named by --task, else the one of the checked-out branch. */
-function taskId(project: Project, flag: string | undefined): string {
+export function taskId(project: Project, flag: string | undefined): string {
 	if (flag) return taskIdOf(flag);
 	const branch = currentBranch(project.root);
 	if (!branch) throw new KalfaError('no branch is checked out; name the Task with --task <id>');
 	return taskIdOf(branch);
 }
 
-function openRecord(project: Project, id: string): TaskRecord {
+export function openRecord(project: Project, id: string): TaskRecord {
 	const record = readRecord(project.root, id);
 	if (!record) throw new KalfaError(`no Task Record '${id}'; start one with: kalfa task start "<goal>"`);
 	if (record.header.status !== 'open') throw new KalfaError(`Task '${id}' is closed`);
