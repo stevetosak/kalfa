@@ -41,14 +41,14 @@ that part. Result: [APM spike Log](spikes/2026-10-27-apm.md).
 
 The old hooks keep running while these are built.
 
-- [ ] `docs`: the documentation recorder, the Definition of Done, the push gate's documentation check.
+- [x] `docs` (thin): the Definition of Done gate before `gh pr create` (a Log is a file under the `logs` globs of `kalfa.yaml`; `Docs: none — <reason>` in the PR body skips it), `kalfa docs check`, and the recorder `kalfa docs draft`, which drafts the Log from the Task Record. The site-specific parts stay with the documentation site until its redesign.
 - [x] `guardrails`: no push to a protected branch in any form (a `command.before` handler that fails closed; `settings.guardrails.protected-branches`, default `main` and `master`), and approval prompts before git commands that throw work away.
 - [x] `infra`: approval prompts before every terraform command and the kubectl verbs that write. Its rule pack comes from the memory sort (step 6).
 - [x] A Module can give a payload filter per event, so the shim starts Node only for a payload its handler acts on, and its own `settings:` part in `kalfa.yaml`.
 - [x] `meter`: the context meter and `/meter`, the idle guard, the status-line tap (it saves the usage limits), `kalfa meter usage`. The Core gained a quiet prompt block, a turn stop, the subagent marker, the tool duration, the `usage` Capability, and a context size per event in the event table (each Adapter ships a context probe, so a small session never starts Node).
 - [x] `herdr`: the successor launch (`kalfa herdr continue`, the `successor` skill): a new session on the open Task, in a Herdr tab or in the harness's background session, refused near a usage limit. Herdr's own integration shows the session state; the Module says when it is missing.
-- [ ] Move the existing agent tests with their code.
-- [ ] Decide for each loose personal skill: move it into a Module or drop it.
+- [x] Move the existing agent tests with their code. Each old test runs next to its kalfa code: the PR command and the gate in `docs`, the launcher in `herdr`, the guard, the prices and the usage report in `meter`, the transcript reader with the Claude Adapter, the handoff's limit check in the Core usage limits, open Plans and the Handoff after `/clear` in the Core session report. Not moved: the documentation site keeps its own (page guides, the docs work tree, the Lesson inbox, the Procedure or Reference check); the hook install and the status-line wrap come with step 4, the memory budget with step 6.
+- [x] Decide for each loose personal skill: move it into a Module or drop it. The documentation site's `meter`, `handoff`, `close-task` and `docs-from-brief` retire at the step 4 switch (kalfa's `meter`, the Task Record, `herdr` and `docs` replace them); its page-writing skill stays with the site. The Operator dropped `discuss` and the unpinned `docker-development` copy.
 
 ## 4. Switch, one event at a time
 
