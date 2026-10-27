@@ -14,6 +14,8 @@ export interface Adapter {
 	/** The Harness name used on the command line, e.g. `claude`. */
 	name: string;
 	capabilities: ReadonlySet<Capability>;
+	/** Whether a command runs inside this harness (for events the CLI raises). */
+	detect(env: NodeJS.ProcessEnv): boolean;
 	/** The Core event in the payload; `undefined` when the payload is not one (e.g. a tool that is not a shell). */
 	toEvent(name: CoreEventName, payload: unknown): CoreEvent | undefined;
 	render(event: CoreEvent, result: DispatchResult): HookOutput;

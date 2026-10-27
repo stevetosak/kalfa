@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS } from '../src/core/settings.ts';
 export const fakeAdapter: Adapter = {
 	name: 'fake',
 	capabilities: new Set(Object.keys(CAPABILITIES) as Capability[]),
+	detect: (env) => env.KALFA_FAKE_HARNESS === '1',
 	toEvent(name: CoreEventName, payload: unknown) {
 		const p = payload as Record<string, unknown>;
 		if (p.skip) return undefined;

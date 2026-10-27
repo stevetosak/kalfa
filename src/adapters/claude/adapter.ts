@@ -80,6 +80,8 @@ function render(event: CoreEvent, result: DispatchResult): HookOutput {
 export const claudeAdapter: Adapter = {
 	name: 'claude',
 	capabilities: new Set<Capability>(['context-injection', 'command-block', 'transcript', 'task-list', 'status-line', 'background-agent']),
+	// Claude Code sets CLAUDECODE=1 for the commands it runs.
+	detect: (env) => env.CLAUDECODE === '1',
 	toEvent,
 	render,
 };

@@ -1,3 +1,5 @@
+import type { Section } from './task-record.ts';
+
 // The harness-neutral moments of a session. An Adapter turns a harness hook
 // into one of these; Modules handle them and never see a harness payload.
 
@@ -27,8 +29,10 @@ export type CoreEvent = EventBase &
 		/** A shell command the agent is about to run. */
 		| { name: 'command.before'; command: string }
 		| { name: 'tool.after'; tool: string }
-		| { name: 'section.close' }
-		| { name: 'task.close' }
+		/** Raised by `kalfa section close` after the Section is written. */
+		| { name: 'section.close'; task: string; record: string; section: Section }
+		/** Raised by `kalfa task close` after the record is closed. */
+		| { name: 'task.close'; task: string; record: string }
 	);
 
 /** What a handler gives back. Each part is optional. */

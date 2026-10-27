@@ -28,7 +28,7 @@ that part. Result: [APM spike Log](spikes/2026-10-27-apm.md).
 - [x] CLI skeleton, `kalfa.yaml` schema 1, machine settings file.
 - [x] Dispatcher `kalfa hook <harness> <event>` with the fast path: the `kalfa-hook` shim starts Node only when the Core or the repository's event table handles the event.
 - [x] Claude Code Adapter: hook translation and Capability set, with contract tests on payloads recorded from Claude Code 2.1.311 (`scripts/record-claude-fixtures.sh`).
-- [ ] Task Record (schema 1), the git-ignore refusal, the Handoff view, the task-list mapping (Sections to the harness task list; fallback: Sections as text).
+- [x] Task Record (schema 1) written through `kalfa task` and `kalfa section close` (parts as Markdown on stdin), the git-ignore refusal, the Handoff view, the task-list mapping (fallback: the Section stays in the record only).
 - [ ] Plans: the portable format, globs in `kalfa.yaml`, the session report.
 - [ ] `kalfa build` keeps APM project state (`apm.yml`, `apm.lock.yaml`) out of the repository and composes Overlays from the pinned upstream skill.
 - [ ] Decide whether the nested `AGENTS.md` files that `apm compile` writes are committed or ignored.

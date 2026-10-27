@@ -12,7 +12,8 @@ export interface Io {
 export const processIo: Io = {
 	cwd: process.cwd(),
 	env: process.env,
-	stdin: () => text(process.stdin),
+	// An interactive terminal gives no input instead of waiting for it.
+	stdin: async () => (process.stdin.isTTY ? '' : text(process.stdin)),
 	out: (text) => process.stdout.write(`${text}\n`),
 	err: (text) => process.stderr.write(`${text}\n`),
 };
