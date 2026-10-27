@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { loadModuleSource, parseRule } from '../src/core/module-source.ts';
+import { loadModuleSource, moduleFolders, parseRule } from '../src/core/module-source.ts';
 import { modulesRoot, packageRoot } from '../src/core/package-root.ts';
 import { coreModule } from '../src/modules/core.ts';
 import { withFolderModules } from '../src/modules/index.ts';
@@ -63,4 +63,10 @@ test('a Module folder without handlers is a known Module; a folder without modul
 test('KALFA_MODULES_DIR moves the Module folders', () => {
 	assert.equal(modulesRoot({ KALFA_MODULES_DIR: '/elsewhere' }), '/elsewhere');
 	assert.equal(modulesRoot({}), `${packageRoot()}/modules`);
+});
+
+test('every Module folder this kalfa ships loads', () => {
+	const names = moduleFolders(modulesRoot({}));
+	assert.deepEqual(names, ['guardrails', 'infra']);
+	for (const name of names) assert.equal(loadModuleSource(modulesRoot({}), name).name, name);
 });
