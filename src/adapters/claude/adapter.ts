@@ -6,6 +6,7 @@ import type { Capability } from '../../core/capabilities.ts';
 import { KalfaError } from '../../core/errors.ts';
 import type { CoreEvent, CoreEventName, DispatchResult } from '../../core/events.ts';
 import type { Adapter, HookOutput } from '../adapter.ts';
+import { claudeProject } from './project.ts';
 
 /** The Claude Code hook (and tool matcher) that raises each Core event. */
 export const CLAUDE_HOOKS: Partial<Record<CoreEventName, { hook: string; matcher?: string }>> = {
@@ -84,4 +85,5 @@ export const claudeAdapter: Adapter = {
 	detect: (env) => env.CLAUDECODE === '1',
 	toEvent,
 	render,
+	project: claudeProject,
 };
