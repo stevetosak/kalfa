@@ -35,7 +35,7 @@ that part. Result: [APM spike Log](spikes/2026-10-27-apm.md).
 - [x] `kalfa build`, `kalfa doctor`, `kalfa link` / `unlink`, `kalfa init`.
 - [x] `kalfa doctor` names skill references in `CLAUDE.md` and `AGENTS.md` that no installed skill answers (the Adapter says where its harness finds skills and commands).
 - [x] Tests: unit, Adapter contract on recorded payloads, clean-state smoke (`kalfa doctor --smoke`: install, the `.kalfa/` refusal, init, build next to the Operator's own settings, hooks through the shim, uninstall leaves nothing).
-- [ ] CI: the three test levels and the leak scan.
+- [x] CI: the three test levels and the leak scan (`.github/workflows/ci.yml`; the leak scan reads its words from the repository secret `KALFA_LEAK_PATTERN`). `main` takes pull requests only, with both checks required.
 
 ## 3. Modules from the old setup
 
