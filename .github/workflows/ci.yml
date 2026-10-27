@@ -1,0 +1,39 @@
+# The three test levels of ADR 0001 and the leak scan, on every pull request.
+# Tests and the build run on the TypeScript source, so they need Node 24; the
+# bundle must run on every Node that package.json allows, so the smoke runs on
+# the oldest one too.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Unit and Adapter contract tests
+        run: npm test
+      - run: npm run build
+      - name: Clean-state smoke (Node 24)
+        run: npm run smoke
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Clean-state smoke (Node 22)
+        run: npm run smoke
+  leak-scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: scripts/leak-scan.sh
+        env:
+          KALFA_LEAK_PATTERN: ${{ secrets.KALFA_LEAK_PATTERN }}
