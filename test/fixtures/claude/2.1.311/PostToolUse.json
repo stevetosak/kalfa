@@ -1,0 +1,25 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000000",
+  "transcript_path": "/home/operator/.claude/projects/-work-repo/00000000-0000-4000-8000-000000000000.jsonl",
+  "cwd": "/work/repo",
+  "prompt_id": "00000000-0000-4000-8000-000000000001",
+  "permission_mode": "auto",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo hi",
+    "description": "Print hi"
+  },
+  "tool_response": {
+    "stdout": "hi",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  },
+  "tool_use_id": "toolu_fixture",
+  "duration_ms": 350
+}
