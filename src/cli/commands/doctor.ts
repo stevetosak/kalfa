@@ -1,6 +1,7 @@
 // Reports what kalfa sees on this machine and in this repository. Later
 // sections add the harness Capabilities, the install mode and stale files.
 import { existsSync } from 'node:fs';
+import { findPlans, isOpenPlan } from '../../core/plans.ts';
 import { loadProject, PROJECT_FILE } from '../../core/project.ts';
 import { loadSettings, settingsPath } from '../../core/settings.ts';
 import { type Command, parseCommandArgs } from '../command.ts';
@@ -26,6 +27,11 @@ export const doctor: Command = {
 		}
 		const modules = project.file.modules.length ? project.file.modules.join(', ') : 'none';
 		io.out(`project file: ${PROJECT_FILE} schema ${project.file.schema}; Modules: ${modules}`);
+		if (project.file.plans.length) {
+			const { plans, problems } = findPlans(project.root, project.file.plans);
+			io.out(`Plans: ${plans.length} found, ${plans.filter(isOpenPlan).length} open (${project.file.plans.join(', ')})`);
+			for (const problem of problems) io.out(`  problem: ${problem}`);
+		}
 		return 0;
 	},
 };

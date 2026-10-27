@@ -5,6 +5,7 @@ import { adapters } from '../adapters/index.ts';
 import { modules } from '../modules/index.ts';
 import { doctor } from './commands/doctor.ts';
 import { hookCommand } from './commands/hook.ts';
+import { planCommand } from './commands/plan.ts';
 import { sectionCommand, taskCommand } from './commands/task.ts';
 import type { Io } from './io.ts';
 
@@ -13,6 +14,7 @@ const commands: Record<string, Command> = {
 	hook: hookCommand(adapters, modules),
 	task: taskCommand(adapters, modules),
 	section: sectionCommand(adapters, modules),
+	plan: planCommand,
 };
 
 export const version = pkg.version;

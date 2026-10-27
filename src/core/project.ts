@@ -9,12 +9,20 @@ export const PROJECT_FILE = 'kalfa.yaml';
 
 const moduleName = z.string().regex(/^[a-z][a-z0-9-]*$/, 'a Module name is lower-case letters, digits and dashes');
 
+// A glob relative to the repository root that cannot leave it.
+const repoGlob = z
+	.string()
+	.min(1)
+	.refine((glob) => !glob.startsWith('/') && !glob.split('/').includes('..'), 'a glob is relative to the repository root and stays inside it');
+
 const projectFileSchema = z.strictObject({
 	schema: z.literal(1),
 	modules: z
 		.array(moduleName)
 		.default([])
 		.refine((names) => new Set(names).size === names.length, 'a Module is listed twice'),
+	/** Where the Plans are: globs over Markdown files; only pages with `type: plan` count. */
+	plans: z.array(repoGlob).default([]),
 });
 
 export type ProjectFile = z.infer<typeof projectFileSchema>;

@@ -1,24 +1,21 @@
 // `kalfa task` and `kalfa section`: the agent writes the Task Record through
 // these commands, so the record stays valid and the Core events are raised on
 // every harness.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Adapter } from '../../adapters/adapter.ts';
 import { KalfaError } from '../../core/errors.ts';
+import { parsePlan } from '../../core/plans.ts';
 import { currentBranch } from '../../core/git.ts';
 import type { ModuleDefinition } from '../../core/modules.ts';
-import { loadProject, type Project } from '../../core/project.ts';
+import type { Project } from '../../core/project.ts';
 import { handoffView, listRecords, parseParts, readRecord, sectionParts, type TaskRecord, taskIdOf, writeRecord } from '../../core/task-record.ts';
 import { type Command, parseCommandArgs, UsageError } from '../command.ts';
 import type { Io } from '../io.ts';
+import { requireProject } from '../project.ts';
 import { raise, report } from '../raise.ts';
 
 const taskOption = { task: { type: 'string' } } as const;
-
-function requireProject(io: Io): Project {
-	const project = loadProject(io.cwd);
-	if (!project) throw new KalfaError('not in a git repository');
-	return project;
-}
 
 /** The Task named by --task, else the one of the checked-out branch. */
 function taskId(project: Project, flag: string | undefined): string {
@@ -35,6 +32,13 @@ function openRecord(project: Project, id: string): TaskRecord {
 	return record;
 }
 
+/** A Task names its Plan by path from the repository root; the page must be a Plan. */
+function requirePlan(project: Project, path: string): void {
+	const file = join(project.root, path);
+	if (!existsSync(file)) throw new KalfaError(`--plan: no file '${path}' (give the path from the repository root)`);
+	if (!parsePlan(readFileSync(file, 'utf8'), path)) throw new KalfaError(`--plan: '${path}' is not a Plan (no \`type: plan\` frontmatter)`);
+}
+
 const today = () => new Date().toLocaleDateString('sv-SE');
 
 export function taskCommand(adapters: ReadonlyMap<string, Adapter>, registry: ReadonlyMap<string, ModuleDefinition>): Command {
@@ -45,6 +49,7 @@ export function taskCommand(adapters: ReadonlyMap<string, Adapter>, registry: Re
 			if (!goal) throw new UsageError('give the Task goal');
 			const project = requireProject(io);
 			const id = taskId(project, values.task);
+			if (values.plan) requirePlan(project, values.plan);
 			const existing = readRecord(project.root, id);
 			if (existing) throw new KalfaError(`Task '${id}' already exists (${existing.header.status}); name another with --task <id>`);
 			const path = writeRecord(project.root, {

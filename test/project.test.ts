@@ -16,7 +16,7 @@ test('a repository without kalfa.yaml is a project without a file', () => {
 
 test('the project file is found from a subdirectory, and modules default to none', () => {
 	const root = tempRepo({ 'kalfa.yaml': 'schema: 1\n', 'a/b/.keep': '' });
-	assert.deepEqual(loadProject(join(root, 'a', 'b')), { root, file: { schema: 1, modules: [] } });
+	assert.deepEqual(loadProject(join(root, 'a', 'b')), { root, file: { schema: 1, modules: [], plans: [] } });
 });
 
 test('a work tree, where .git is a file, is a repository root', () => {
@@ -40,6 +40,8 @@ const refusals: Array<[string, string, RegExp]> = [
 	['an unknown key', 'schema: 1\nmodule: [docs]\n', /not valid:[\s\S]*module/],
 	['a Module listed twice', 'schema: 1\nmodules: [docs, docs]\n', /listed twice/],
 	['a bad Module name', 'schema: 1\nmodules: [Docs]\n', /lower-case/],
+	['a Plan glob that leaves the repository', "schema: 1\nplans: ['../other/**/*.md']\n", /stays inside it/],
+	['an absolute Plan glob', "schema: 1\nplans: ['/docs/*.md']\n", /stays inside it/],
 	['a list instead of a mapping', '- schema\n', /must be a mapping/],
 	['broken YAML', 'schema: [1\n', /not valid YAML/],
 ];

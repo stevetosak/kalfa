@@ -15,8 +15,10 @@ const adapters = new Map([['fake', fakeAdapter]]);
 const task = taskCommand(adapters, modules);
 const section = sectionCommand(adapters, modules);
 
+const PLAN = '---\ntitle: Monitoring\ntype: plan\nstatus: active\n---\n\n- [x] **Prove** the platforms.\n- [ ] **Render** core/monitoring.\n';
+
 function repo(kalfaYaml = 'schema: 1\nmodules: [docs]\n', ignore = '.kalfa/\n'): string {
-	const root = gitRepo({ 'kalfa.yaml': kalfaYaml, '.gitignore': ignore });
+	const root = gitRepo({ 'kalfa.yaml': kalfaYaml, '.gitignore': ignore, 'docs/plan.md': PLAN, 'docs/log.md': '---\ntype: log\n---\n' });
 	execFileSync('git', ['-C', root, 'checkout', '-q', '-b', 'feat/monitoring']);
 	return root;
 }
@@ -69,6 +71,13 @@ test('a second start on the same branch is refused, --task names another', async
 	assert.deepEqual(io.stdout, ['feat-monitoring  open  0 Section(s)  one', 'side-quest  open  0 Section(s)  two']);
 });
 
+test('--plan must name a Plan page from the repository root', async () => {
+	const root = repo();
+	await assert.rejects(task.run(['start', 'goal', '--plan', 'plan.md'], captureIo(root)), /--plan: no file 'plan\.md'/);
+	await assert.rejects(task.run(['start', 'goal', '--plan', 'docs/log.md'], captureIo(root)), /is not a Plan/);
+	assert.equal(existsSync(join(root, '.kalfa')), false);
+});
+
 test('a Section for a Module that is off is refused through main, with exit 1', async () => {
 	const root = repo('schema: 1\n');
 	await task.run(['start', 'goal'], captureIo(root));
@@ -87,4 +96,22 @@ test('the session report lists open Tasks, and after /clear gives the Handoff', 
 	assert.match(startup?.context ?? '', /- feat-monitoring: Build the monitoring \(1 Section\(s\)\)\n  Next: render it\./);
 	const clear = await coreModule.handlers['session.start']!({ ...base, source: 'clear' }, context);
 	assert.match(clear?.context ?? '', /^Continue the Task[\s\S]*Next: render it\.$/);
+});
+
+test('the session report puts the open Plans before the Tasks, and a broken glob is a notice', async () => {
+	const root = repo("schema: 1\nplans: ['docs/**/*.md', 'nowhere/*.md']\n");
+	await task.run(['start', 'Build the monitoring', '--plan', 'docs/plan.md'], captureIo(root));
+	const context = { project: { root, file: { schema: 1 as const, modules: [], plans: ['docs/**/*.md', 'nowhere/*.md'] } }, settings: { schema: 1 as const }, env: {}, capabilities: new Set<never>() };
+	const result = await coreModule.handlers['session.start']!({ harness: 'fake', cwd: root, name: 'session.start', source: 'startup' }, context);
+	assert.match(
+		result?.context ?? '',
+		/^Open Plans in this repository \(kalfa plan list\):\n- Monitoring \(active, 1 of 2 steps done; docs\/plan\.md\)\n  Next: Render\n\nOpen Tasks/,
+	);
+	assert.equal(result?.notice, "kalfa: Plans: plans glob 'nowhere/*.md' matches no file");
+});
+
+test('a repository without Plans or Tasks gets no session report', async () => {
+	const root = repo();
+	const context = { project: { root, file: { schema: 1 as const, modules: [], plans: [] } }, settings: { schema: 1 as const }, env: {}, capabilities: new Set<never>() };
+	assert.equal(await coreModule.handlers['session.start']!({ harness: 'fake', cwd: root, name: 'session.start', source: 'startup' }, context), undefined);
 });
