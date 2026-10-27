@@ -204,7 +204,11 @@ export function applyHarness(root: string, project: ProjectFiles, planned: Plann
 			rmSync(join(root, path));
 			removeEmptyParents(root, dirname(join(root, path)));
 		}
-		if (approvalsChange) {
+		if (approvalsChange && !Object.keys(after).length) {
+			// Nothing but kalfa's entries were in it: the file goes, as if kalfa had never run.
+			rmSync(join(root, approvalPath), { force: true });
+			removeEmptyParents(root, dirname(join(root, approvalPath)));
+		} else if (approvalsChange) {
 			mkdirSync(dirname(join(root, approvalPath)), { recursive: true });
 			writeFileSync(join(root, approvalPath), `${JSON.stringify(after, null, 2)}\n`);
 		}

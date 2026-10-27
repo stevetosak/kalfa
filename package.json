@@ -16,7 +16,8 @@
   "scripts": {
     "build": "node scripts/build.ts",
     "typecheck": "tsc",
-    "test": "node --test 'test/**/*.test.ts'"
+    "test": "node --test 'test/**/*.test.ts'",
+    "smoke": "node dist/kalfa.mjs doctor --smoke"
   },
   "dependencies": {
     "mdast-util-from-markdown": "2.1.0",

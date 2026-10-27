@@ -2,7 +2,7 @@ import { KalfaError } from '../core/errors.ts';
 import { modulesRoot, packageRoot } from '../core/package-root.ts';
 import { type Command, UsageError } from './command.ts';
 import { adapters } from '../adapters/index.ts';
-import { modules } from '../modules/index.ts';
+import { modules, withFolderModules } from '../modules/index.ts';
 import { buildCommand } from './commands/build.ts';
 import { doctorCommand } from './commands/doctor.ts';
 import { initCommand } from './commands/init.ts';
@@ -13,15 +13,17 @@ import { sectionCommand, taskCommand } from './commands/task.ts';
 import type { Io } from './io.ts';
 import { version } from './version.ts';
 
+const registry = withFolderModules(modules, modulesRoot());
+
 const commands: Record<string, Command> = {
 	init: initCommand(adapters, modulesRoot),
 	build: buildCommand(adapters, modulesRoot),
 	doctor: doctorCommand(adapters, modulesRoot, () => packageRoot()),
 	link: linkCommand(() => packageRoot()),
 	unlink: unlinkCommand(() => packageRoot()),
-	hook: hookCommand(adapters, modules),
-	task: taskCommand(adapters, modules),
-	section: sectionCommand(adapters, modules),
+	hook: hookCommand(adapters, registry),
+	task: taskCommand(adapters, registry),
+	section: sectionCommand(adapters, registry),
 	plan: planCommand,
 };
 

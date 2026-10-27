@@ -3,6 +3,7 @@
 // Capabilities each harness lacks with what the Core and the Modules do
 // without them, and whether the build is up to date. A broken part is
 // reported and the next part still runs; only a broken project file stops it.
+// `--smoke` runs the clean-state smoke instead (see smoke.ts).
 import { existsSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import type { Adapter } from '../../adapters/adapter.ts';
@@ -14,6 +15,7 @@ import { loadSettings, settingsPath } from '../../core/settings.ts';
 import { coreNeeds } from '../../modules/core.ts';
 import { type Command, parseCommandArgs } from '../command.ts';
 import type { Io } from '../io.ts';
+import { runSmoke } from '../smoke.ts';
 import { version } from '../version.ts';
 import { buildProject } from './build.ts';
 import { LINKED, linkTarget } from './link.ts';
@@ -58,11 +60,13 @@ function capabilityLines(project: Project | undefined, adapters: ReadonlyMap<str
 export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, modulesRoot: () => string, packageRoot: () => string): Command {
 	return {
 		summary: 'Report what kalfa sees on this machine and in this repository',
-		usage: 'kalfa doctor',
+		usage: 'kalfa doctor [--smoke]   (--smoke: install, use and remove this kalfa in a throw-away HOME and repository)',
 		async run(args, io) {
-			parseCommandArgs(args, {});
+			const { values } = parseCommandArgs(args, { smoke: { type: 'boolean' } });
+			if (values.smoke) return runSmoke(packageRoot(), io);
 			io.out(`kalfa ${version} from ${packageRoot()}`);
 			part(io, 'install', () => [installMode(io.env, packageRoot())]);
+			if (io.env.KALFA_MODULES_DIR) io.out(`Modules folder: ${modulesRoot()} (from KALFA_MODULES_DIR)`);
 			const path = settingsPath(io.env);
 			part(io, 'machine settings', () => {
 				loadSettings(io.env);

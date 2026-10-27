@@ -10,5 +10,5 @@ export function packageRoot(from = fileURLToPath(import.meta.url)): string {
 	}
 }
 
-/** Where the Module folders are. */
-export const modulesRoot = (): string => join(packageRoot(), 'modules');
+/** Where the Module folders are: the package's own, or KALFA_MODULES_DIR (Module work and the smoke). */
+export const modulesRoot = (env: NodeJS.ProcessEnv = process.env): string => env.KALFA_MODULES_DIR || join(packageRoot(), 'modules');

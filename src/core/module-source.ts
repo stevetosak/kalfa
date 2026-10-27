@@ -84,6 +84,11 @@ export function parseRule(text: string, ruleName: string, path: string): Rule {
 const subdirs = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((entry) => statSync(join(dir, entry)).isDirectory()).sort() : []);
 const markdownFiles = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((entry) => entry.endsWith('.md')).sort() : []);
 
+/** The names of the Module folders in `modulesRoot` (each has a `module.yaml`). */
+export function moduleFolders(modulesRoot: string): string[] {
+	return subdirs(modulesRoot).filter((entry) => existsSync(join(modulesRoot, entry, MODULE_FILE)));
+}
+
 /** The Module folder `<modulesRoot>/<moduleName>`, checked. */
 export function loadModuleSource(modulesRoot: string, moduleName: string): ModuleSource {
 	const dir = join(modulesRoot, moduleName);

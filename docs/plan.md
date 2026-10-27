@@ -34,7 +34,7 @@ that part. Result: [APM spike Log](spikes/2026-10-27-apm.md).
 - [x] Decide whether the nested `AGENTS.md` files are committed or ignored: none while Claude Code is the only harness; then each one goes in `.git/info/exclude`.
 - [x] `kalfa build`, `kalfa doctor`, `kalfa link` / `unlink`, `kalfa init`.
 - [ ] `kalfa doctor` names skill references in `CLAUDE.md` and `AGENTS.md` that no installed skill answers.
-- [ ] Tests: unit, Adapter contract on recorded payloads, clean-state smoke.
+- [x] Tests: unit, Adapter contract on recorded payloads, clean-state smoke (`kalfa doctor --smoke`: install, the `.kalfa/` refusal, init, build next to the Operator's own settings, hooks through the shim, uninstall leaves nothing).
 - [ ] CI: the three test levels and the leak scan.
 
 ## 3. Modules from the old setup
@@ -58,6 +58,7 @@ settings backup is the rollback.
 - [ ] The meter (`prompt.submit`, `tool.after`)
 - [ ] The status line
 - [ ] Remove the dead stop hook.
+- [ ] The smoke also installs the harness hooks at user scope and checks that a foreign hook stays.
 
 ## 5. Projects
 

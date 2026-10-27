@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { loadModuleSource, parseRule } from '../src/core/module-source.ts';
-import { packageRoot } from '../src/core/package-root.ts';
+import { modulesRoot, packageRoot } from '../src/core/package-root.ts';
+import { coreModule } from '../src/modules/core.ts';
+import { withFolderModules } from '../src/modules/index.ts';
 import { tempRepo } from './helpers.ts';
 
 const PIN = 'a'.repeat(40);
@@ -48,4 +50,17 @@ test('a rule without frontmatter loads everywhere', () => {
 
 test('the package root is found from the source', () => {
 	assert.equal(packageRoot(), process.cwd());
+});
+
+test('a Module folder without handlers is a known Module; a folder without module.yaml is not', () => {
+	const root = tempRepo({ 'rules-only/module.yaml': 'schema: 1\ndescription: d\n', 'stray/notes.md': 'x\n' });
+	const registry = withFolderModules(new Map([['core', coreModule]]), root);
+	assert.deepEqual([...registry.keys()], ['core', 'rules-only']);
+	assert.deepEqual(registry.get('rules-only')?.handlers, {});
+	assert.equal(withFolderModules(new Map([['core', coreModule]]), `${root}/missing`).size, 1);
+});
+
+test('KALFA_MODULES_DIR moves the Module folders', () => {
+	assert.equal(modulesRoot({ KALFA_MODULES_DIR: '/elsewhere' }), '/elsewhere');
+	assert.equal(modulesRoot({}), `${packageRoot()}/modules`);
 });

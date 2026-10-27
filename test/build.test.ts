@@ -64,6 +64,15 @@ test('turning a Module off removes its files and only the approvals kalfa added'
 	assert.deepEqual(JSON.parse(read(root, SETTINGS)), { permissions: { ask: ['Bash(terraform *)'] } });
 });
 
+test('with every Module off, a settings file that only kalfa wrote is removed, with its folder', async () => {
+	const root = repo('[guardrails]');
+	await run(root);
+	assert.deepEqual(JSON.parse(read(root, SETTINGS)), { permissions: { ask: ['Bash(terraform *)', 'Bash(kubectl apply *)'] } });
+	setModules(root, '[]');
+	await run(root);
+	assert.equal(existsSync(join(root, '.claude')), false);
+});
+
 test('a file changed by hand is refused, nothing is written, and --force overwrites it', async () => {
 	const root = repo('[guardrails]');
 	await run(root);
