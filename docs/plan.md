@@ -41,7 +41,7 @@ that part. Result: [APM spike Log](spikes/2026-10-27-apm.md).
 
 The old hooks keep running while these are built.
 
-- [ ] `docs`: the documentation recorder, the Definition of Done, the push gate's documentation check.
+- [x] `docs` (thin): the Definition of Done gate before `gh pr create` (a Log is a file under the `logs` globs of `kalfa.yaml`; `Docs: none — <reason>` in the PR body skips it), `kalfa docs check`, and the recorder `kalfa docs draft`, which drafts the Log from the Task Record. The site-specific parts stay with the documentation site until its redesign.
 - [x] `guardrails`: no push to a protected branch in any form (a `command.before` handler that fails closed; `settings.guardrails.protected-branches`, default `main` and `master`), and approval prompts before git commands that throw work away.
 - [x] `infra`: approval prompts before every terraform command and the kubectl verbs that write. Its rule pack comes from the memory sort (step 6).
 - [x] A Module can give a payload filter per event, so the shim starts Node only for a payload its handler acts on, and its own `settings:` part in `kalfa.yaml`.

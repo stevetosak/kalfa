@@ -1,0 +1,5 @@
+schema: 1
+description: The Definition of Done before a pull request (a Log for the work, or a stated reason for none), and a first draft of the Log from the Task Record.
+needs:
+  - capability: command-block
+    without: the gate does not run before `gh pr create`; `kalfa docs check` still judges the branch on demand
