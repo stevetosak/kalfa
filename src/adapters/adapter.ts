@@ -5,6 +5,7 @@ import type { Capability } from '../core/capabilities.ts';
 import type { CoreEvent, CoreEventName, DispatchResult } from '../core/events.ts';
 import type { ApprovalKind, Rule } from '../core/module-source.ts';
 import type { SkillSource } from '../core/skill-refs.ts';
+import type { UsageSource } from '../core/usage.ts';
 
 export interface HookOutput {
 	stdout?: string;
@@ -27,6 +28,12 @@ export interface Adapter {
 	skills?: SkillLookup;
 	/** How a new session of this harness starts; `undefined` when kalfa cannot start one. */
 	session?: SessionLaunch;
+	/**
+	 * The token use of its sessions (with the `usage` Capability). The Adapter
+	 * also ships `context-probe.sh`, which the shim runs to read the context
+	 * size of the session in a hook payload without starting Node.
+	 */
+	usage?: UsageSource;
 }
 
 /** A new session: its name and the prompt it starts on. */

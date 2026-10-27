@@ -8,6 +8,7 @@ import type { CoreEvent, CoreEventName, DispatchResult } from '../../core/events
 import type { Adapter, HookOutput, SessionStart } from '../adapter.ts';
 import { claudeProject } from './project.ts';
 import { claudeSkills } from './skills.ts';
+import { claudeUsage } from './transcript.ts';
 
 /** The Claude Code hook (and tool matcher) that raises each Core event. */
 export const CLAUDE_HOOKS: Partial<Record<CoreEventName, { hook: string; matcher?: string }>> = {
@@ -24,13 +25,15 @@ const base = z.looseObject({
 	cwd: z.string(),
 	session_id: z.string().optional(),
 	transcript_path: z.string().optional(),
+	/** Set only in a subagent's hooks. */
+	agent_id: z.string().optional(),
 });
 
 const payloads = {
 	'session.start': base.extend({ source: z.enum(['startup', 'resume', 'clear', 'compact']) }),
 	'prompt.submit': base.extend({ prompt: z.string() }),
 	'command.before': base.extend({ tool_name: z.string(), tool_input: z.looseObject({ command: z.string().optional() }) }),
-	'tool.after': base.extend({ tool_name: z.string() }),
+	'tool.after': base.extend({ tool_name: z.string(), duration_ms: z.number().optional() }),
 };
 
 function parse<S extends z.ZodType>(schema: S, payload: unknown, hook: string): z.infer<S> {
@@ -44,7 +47,7 @@ function toEvent(name: CoreEventName, payload: unknown): CoreEvent | undefined {
 	if (!hook) return undefined;
 	const p = parse(base, payload, hook);
 	if (p.hook_event_name !== hook) throw new KalfaError(`${name} is wired to the ${p.hook_event_name} hook; it belongs on ${hook}`);
-	const common = { harness: 'claude', cwd: p.cwd, sessionId: p.session_id, transcript: p.transcript_path };
+	const common = { harness: 'claude', cwd: p.cwd, sessionId: p.session_id, transcript: p.transcript_path, ...(p.agent_id ? { subagent: true } : {}) };
 
 	switch (name) {
 		case 'session.start':
@@ -56,8 +59,10 @@ function toEvent(name: CoreEventName, payload: unknown): CoreEvent | undefined {
 			if (tool_name !== SHELL_TOOL || tool_input.command === undefined) return undefined;
 			return { ...common, name, command: tool_input.command };
 		}
-		case 'tool.after':
-			return { ...common, name, tool: parse(payloads[name], payload, hook).tool_name };
+		case 'tool.after': {
+			const { tool_name, duration_ms } = parse(payloads[name], payload, hook);
+			return { ...common, name, tool: tool_name, durationMs: duration_ms };
+		}
 		default:
 			return undefined;
 	}
@@ -74,8 +79,13 @@ function render(event: CoreEvent, result: DispatchResult): HookOutput {
 		output.hookSpecificOutput = { hookEventName, permissionDecision: 'deny', permissionDecisionReason: block };
 	} else {
 		if (event.name === 'prompt.submit' && block) Object.assign(output, { decision: 'block', reason: block });
-		if (context) output.hookSpecificOutput = { hookEventName, additionalContext: context };
+		const specific = {
+			...(context ? { additionalContext: context } : {}),
+			...(event.name === 'prompt.submit' && block && result.quiet ? { suppressOriginalPrompt: true } : {}),
+		};
+		if (Object.keys(specific).length) output.hookSpecificOutput = { hookEventName, ...specific };
 	}
+	if (event.name === 'tool.after' && result.stop.length) Object.assign(output, { continue: false, stopReason: result.stop.join('\n\n') });
 	return { stdout: Object.keys(output).length ? JSON.stringify(output) : undefined, exitCode: 0 };
 }
 
@@ -83,7 +93,7 @@ const sessionArgs = ({ name, prompt, model }: SessionStart) => ['-n', name, ...(
 
 export const claudeAdapter: Adapter = {
 	name: 'claude',
-	capabilities: new Set<Capability>(['context-injection', 'command-block', 'transcript', 'task-list', 'status-line', 'background-agent']),
+	capabilities: new Set<Capability>(['context-injection', 'command-block', 'transcript', 'task-list', 'status-line', 'background-agent', 'usage', 'turn-stop']),
 	// Claude Code sets CLAUDECODE=1 for the commands it runs.
 	detect: (env) => env.CLAUDECODE === '1',
 	toEvent,
@@ -91,4 +101,5 @@ export const claudeAdapter: Adapter = {
 	project: claudeProject,
 	skills: claudeSkills,
 	session: { program: 'claude', interactive: sessionArgs, background: (start) => ['--bg', ...sessionArgs(start)] },
+	usage: claudeUsage,
 };

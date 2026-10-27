@@ -6,6 +6,7 @@ import { KalfaError } from './errors.ts';
 import type { CoreEvent, CoreEventName, HandlerResult } from './events.ts';
 import type { Project } from './project.ts';
 import type { Settings } from './settings.ts';
+import type { UsageSource } from './usage.ts';
 
 export interface HandlerContext {
 	project: Project | undefined;
@@ -13,6 +14,8 @@ export interface HandlerContext {
 	env: NodeJS.ProcessEnv;
 	/** The Capabilities of the Adapter that raised the event. */
 	capabilities: ReadonlySet<Capability>;
+	/** The token use of the session, from an Adapter with the `usage` Capability. */
+	usage?: UsageSource;
 }
 
 export type Handler = (event: CoreEvent, context: HandlerContext) => Promise<HandlerResult | undefined> | HandlerResult | undefined;
@@ -31,6 +34,12 @@ export interface ModuleDefinition {
 	 * the handler acts on; no filter means every payload.
 	 */
 	filters?: Partial<Record<CoreEventName, string>>;
+	/**
+	 * Per event, the context size (tokens) from which the shim also starts Node
+	 * for this Module, as the Adapter's context probe measures it. With a
+	 * filter, either one is enough.
+	 */
+	minContext?: Partial<Record<CoreEventName, number>>;
 	/** The schema of the Module's part of `settings:` in `kalfa.yaml`. */
 	settings?: z.ZodType;
 }

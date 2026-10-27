@@ -61,3 +61,19 @@ test('a filtered event starts Node only when the payload matches the filter', ()
 	assert.equal(runs('{"command":"git status"}'), false);
 	assert.equal(shimRuns(root, 'tool.after'), false, 'an event the table does not list');
 });
+
+test('an event with a context size starts Node from that size, as the Adapter probe reads it', () => {
+	const root = tempRepo({ 'kalfa.yaml': 'schema: 1\n' });
+	mkdirSync(join(root, '.kalfa'));
+	writeFileSync(join(root, '.kalfa', 'events'), 'prompt.submit\t"/meter"\t100000\ntool.after\t\t100000\n');
+	utimesSync(join(root, 'kalfa.yaml'), new Date(2000, 0), new Date(2000, 0));
+	mkdirSync(join(bin, 'adapters', 'fake'), { recursive: true });
+	writeFileSync(join(bin, 'adapters', 'fake', 'context-probe'), '#!/usr/bin/env bash\ngrep -o "[0-9]*" | head -n 1\n');
+	chmodSync(join(bin, 'adapters', 'fake', 'context-probe'), 0o755);
+	const runs = (event: string, input: string) => execFileSync('bash', [shim, 'fake', event], { cwd: root, input, env: { ...process.env, KALFA_NODE: stub } }).toString() !== '';
+	assert.equal(runs('tool.after', '{"size":99999}'), false);
+	assert.equal(runs('tool.after', '{"size":100000}'), true);
+	assert.equal(runs('tool.after', '{"no":"size"}'), true, 'the probe cannot tell: Node decides');
+	assert.equal(runs('prompt.submit', '{"prompt":"/meter","size":5}'), true, 'the filter alone is enough');
+	assert.equal(runs('prompt.submit', '{"prompt":"hi","size":5}'), false);
+});
