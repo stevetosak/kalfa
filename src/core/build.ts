@@ -27,9 +27,15 @@ const harnessState = z.strictObject({
 
 export type HarnessState = z.infer<typeof harnessState>;
 
+const pinState = z.strictObject({ source: z.string(), path: z.string(), commit: z.string(), sha256: z.string() });
+
+export type PinState = z.infer<typeof pinState>;
+
 const buildStateSchema = z.strictObject({
 	schema: z.literal(1),
 	harnesses: z.record(z.string(), harnessState).default({}),
+	/** Third-party skills by name: the pin and the upstream hash, before the Overlay. */
+	pins: z.record(z.string(), pinState).default({}),
 });
 
 export type BuildState = z.infer<typeof buildStateSchema>;
@@ -38,7 +44,7 @@ const buildStateFormat: VersionedFormat<BuildState> = { name: 'build.yaml', curr
 
 export const buildStatePath = (root: string) => join(root, PRIVATE_DIR, 'build.yaml');
 
-export const readBuildState = (root: string): BuildState => readVersioned(buildStatePath(root), buildStateFormat) ?? { schema: 1, harnesses: {} };
+export const readBuildState = (root: string): BuildState => readVersioned(buildStatePath(root), buildStateFormat) ?? { schema: 1, harnesses: {}, pins: {} };
 
 export function writeBuildState(root: string, state: BuildState): void {
 	privateDir(root);

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { claudeAdapter } from '../src/adapters/claude/adapter.ts';
 import { buildCommand } from '../src/cli/commands/build.ts';
-import { captureIo, gitRepo, tempRepo } from './helpers.ts';
+import { captureIo, gitRepo, tempDir, tempRepo } from './helpers.ts';
 
 const modulesDir = tempRepo({
 	'guardrails/module.yaml': "schema: 1\ndescription: Hard rules.\ncommands:\n  ask: ['terraform *', 'kubectl apply *']\n",
@@ -111,4 +112,54 @@ test('two Modules that write the same file, or an unknown Module, are refused', 
 	const bare = gitRepo({ '.gitignore': '.kalfa/\n' });
 	mkdirSync(join(bare, 'sub'));
 	await assert.rejects(build.run([], captureIo(join(bare, 'sub'))), /no kalfa\.yaml .*; run kalfa init/);
+});
+
+// A local upstream with two commits; the Module pins the older one.
+function upstream(): { url: string; old: string } {
+	const url = gitRepo({ 'skills/grill-me/SKILL.md': '---\nname: grill-me\n---\nAsk one question at a time.\n', 'skills/grill-me/ref.md': 'ref\n' });
+	const commit = (message: string) => execFileSync('git', ['-C', url, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', message]);
+	execFileSync('git', ['-C', url, 'add', '.']);
+	commit('one');
+	const old = execFileSync('git', ['-C', url, 'rev-parse', 'HEAD']).toString().trim();
+	writeFileSync(join(url, 'skills/grill-me/SKILL.md'), 'newer upstream text\n');
+	commit('two');
+	return { url, old };
+}
+
+function pinnedBuild(pin: string, overlay = true) {
+	const modules = tempRepo({
+		'grill/module.yaml': `schema: 1\ndescription: d\nthird-party:\n  - name: grill-me\n    source: ${pin}\n${overlay ? '    overlay: overlays/grill-me.md\n' : ''}`,
+		'grill/overlays/grill-me.md': 'Start each question with a Background section.\n',
+	});
+	return buildCommand(new Map([['claude', claudeAdapter]]), () => modules);
+}
+
+test('a pinned third-party skill is installed at its commit with the Overlay appended', async () => {
+	const { url, old } = upstream();
+	const pinned = pinnedBuild(`${url}\n    path: skills/grill-me\n    commit: ${old}`);
+	const root = repo('[grill]');
+	const env = { HOME: tempDir() };
+	const io = captureIo(root, env);
+	assert.equal(await pinned.run([], io), 0);
+	assert.match(io.stdout[0]!, new RegExp(`^pin grill-me: ${url} skills/grill-me at ${old.slice(0, 12)}$`));
+	assert.equal(
+		read(root, '.claude/skills/grill-me/SKILL.md'),
+		"---\nname: grill-me\n---\nAsk one question at a time.\n\n<!-- kalfa Overlay from the Module 'grill' -->\n\nStart each question with a Background section.\n",
+	);
+	assert.equal(read(root, '.claude/skills/grill-me/ref.md'), 'ref\n');
+	const state = JSON.parse(read(root, '.kalfa/build.yaml'));
+	assert.equal(state.pins['grill-me'].commit, old);
+	assert.match(state.pins['grill-me'].sha256, /^[0-9a-f]{64}$/);
+
+	// The cache is used again, and a cache changed on disk is refused.
+	const cached = execFileSync('find', [join(env.HOME, '.cache/kalfa/sources'), '-name', 'SKILL.md']).toString().trim();
+	writeFileSync(cached, 'tampered\n');
+	await assert.rejects(pinned.run([], captureIo(root, env)), /grill-me: the cached copy of .* differs from the hash kalfa recorded/);
+});
+
+test('a commit the source does not have is refused and leaves no partial cache', async () => {
+	const { url } = upstream();
+	const env = { HOME: tempDir() };
+	await assert.rejects(pinnedBuild(`${url}\n    path: skills/grill-me\n    commit: ${'b'.repeat(40)}`, false).run([], captureIo(repo('[grill]'), env)), /git fetch/);
+	assert.deepEqual(execFileSync('find', [join(env.HOME, '.cache/kalfa/sources'), '-mindepth', '2']).toString(), '');
 });

@@ -26,7 +26,10 @@ const thirdPartySkill = z.strictObject({
 	/** A git URL. */
 	source: z.string().min(1),
 	/** The skill folder inside the source repository. */
-	path: z.string().min(1),
+	path: z
+		.string()
+		.min(1)
+		.refine((path) => !path.startsWith('/') && !path.split('/').includes('..'), 'the skill path stays inside the source repository'),
 	commit: z.string().regex(/^[0-9a-f]{40}$/, 'pin a full 40-character commit'),
 	/** A Markdown file in the Module folder that is appended to the skill. */
 	overlay: z.string().min(1).optional(),
