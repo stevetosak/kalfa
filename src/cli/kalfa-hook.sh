@@ -7,7 +7,9 @@ set -u
 event=${2:-}
 input=$(cat)
 here=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
-run() { printf '%s' "$input" | exec "${KALFA_NODE:-node}" "$here/kalfa.mjs" hook "$@"; }
+# Not `printf | exec node`: in a pipeline exec runs in a subshell, and the
+# shim would go on and could start Node a second time.
+run() { exec "${KALFA_NODE:-node}" "$here/kalfa.mjs" hook "$@" < <(printf '%s' "$input"); }
 
 case " @CORE_EVENTS@ " in *" $event "*) run "$@" ;; esac
 root=$PWD

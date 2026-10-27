@@ -24,6 +24,11 @@ test('a Core event always starts Node', () => {
 	assert.equal(shimRuns(tempDir(), 'session.start'), true);
 });
 
+test('Node starts once, also for a Core event where the event table would start it too', () => {
+	const root = tempRepo({ 'kalfa.yaml': 'schema: 1\n' });
+	assert.equal(shimRuns(root, 'session.start'), true);
+});
+
 test('outside a repository, or without kalfa.yaml, a Module event does not', () => {
 	assert.equal(shimRuns(tempDir(), 'command.before'), false);
 	assert.equal(shimRuns(tempRepo(), 'command.before'), false);
