@@ -1,20 +1,22 @@
-// The meter: the levels, the idle guard, the handler, the Claude transcript
-// reader, the context probe and the status-line tap.
+// The meter: the levels, the idle guard, the handler, the prices, the usage
+// report, the Claude context probe and the status-line tap.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { claudeAdapter } from '../../src/adapters/claude/adapter.ts';
-import { lastRequest, loadSessions, parseRequests } from '../../src/adapters/claude/transcript.ts';
+import { loadSessions } from '../../src/adapters/claude/transcript.ts';
 import { checkLimits } from '../../src/core/usage-limits.ts';
 import type { LastRequest } from '../../src/core/usage.ts';
 import { handlerContext } from '../../test/fakes.ts';
-import { tempDir } from '../../test/helpers.ts';
+import { writeRecord } from '../../src/core/task-record.ts';
+import { gitRepo, tempDir } from '../../test/helpers.ts';
 import { COMPACT_AT, GUARD_FROM, IDLE_MS, REPEAT_EVERY } from './budget.ts';
 import { decide, type GuardInput, meterLevel, onlyMonitorExpiry, parseMeter } from './guard.ts';
-import { meterModule } from './handlers.ts';
-import { report } from './report.ts';
+import { freshStart, meterModule } from './handlers.ts';
+import { carryCost, requestCost, rewriteCost } from './pricing.ts';
+import { cacheWrites, report, wakeups } from './report.ts';
 
 const NOW = Date.parse('2026-10-04T13:30:00Z');
 const usage = { input: 0, output: 0, cacheWrite: { '5m': 0, '1h': 0 }, cacheRead: 0 };
@@ -132,22 +134,23 @@ test('the handler reads the session through the Adapter, keeps its state in the 
 	await assert.rejects(Promise.resolve().then(() => meterModule.handlers['tool.after'](event(path, { sessionId: 's4' }), project)), /settings\.meter: compact-at/);
 });
 
-test('the Claude transcript folds the lines of one request and splits the cache writes', () => {
-	const lines = [
-		{ type: 'user', message: { content: 'build the meter' } },
-		{ type: 'assistant', requestId: 'a', timestamp: '2026-10-27T10:00:00Z', message: { model: 'claude-opus-5-5', usage: { input_tokens: 5, cache_creation_input_tokens: 100, cache_creation: { ephemeral_1h_input_tokens: 100 }, output_tokens: 7 }, content: [{ type: 'tool_use', name: 'Skill', input: { skill: 'meter' } }] } },
-		{ type: 'assistant', requestId: 'a', message: { usage: { input_tokens: 5 }, content: [{ type: 'tool_use', name: 'Bash' }] } },
-		{ type: 'user', message: { content: [{ type: 'tool_result' }] } },
-		{ type: 'assistant', isSidechain: true, requestId: 's', message: { usage: { input_tokens: 9 } } },
-		{ type: 'assistant', requestId: 'b', timestamp: '2026-10-27T10:01:00Z', message: { model: 'claude-opus-5-5', usage: { input_tokens: 1, cache_read_input_tokens: 105, cache_creation_input_tokens: 20 } } },
-	].map((l) => JSON.stringify(l));
-	const [a, b] = parseRequests(lines);
-	assert.deepEqual([a!.trigger, a!.prompt, a!.tools, a!.context, a!.usage.cacheWrite], ['operator', 'build the meter', ['Skill:meter', 'Bash'], 105, { '5m': 0, '1h': 100 }]);
-	assert.deepEqual([b!.trigger, b!.context, b!.usage.cacheWrite], ['tool-result', 126, { '5m': 20, '1h': 0 }], 'no split: the five-minute lifetime');
-	assert.equal(parseRequests(lines).length, 2, 'the side chain is left out');
-	const path = transcript(120_000);
-	assert.equal(lastRequest(path)?.context, 120_000);
-	assert.equal(lastRequest(join(tempDir(), 'none.jsonl')), undefined);
+test('API-equivalent prices: Opus 5.5 with an hour-long write; an unknown model costs nothing', () => {
+	const u = { input: 2, output: 100, cacheWrite: { '5m': 0, '1h': 1_000_000 }, cacheRead: 1_000_000 };
+	const cost = requestCost('claude-opus-5-5', u);
+	assert.deepEqual([cost.read, cost.write, cost.output], [0.2, 8, 100 * 20e-6]);
+	assert.equal(requestCost('<synthetic>', u).total, 0);
+	assert.equal(rewriteCost('claude-sonnet-5-5', 1_000_000, '5m'), 2.5);
+	assert.equal(carryCost('claude-haiku-4-5-20251001', 1_000_000), 0.1);
+});
+
+test('the idle guard offers the open Task of the branch, else a fresh session', () => {
+	const root = gitRepo({ '.gitignore': '.kalfa/\n' });
+	execFileSync('git', ['-C', root, 'checkout', '-q', '-b', 'feat/x']);
+	const project = { root, file: undefined };
+	assert.equal(freshStart(project), '/clear starts a fresh, small session.');
+	writeRecord(root, { id: 'feat-x', header: { schema: 1, goal: 'g', status: 'open', started: '2026-10-27' }, sections: [] });
+	assert.match(freshStart(project), /^Task feat-x is open: record the Section with `kalfa section close`, then \/clear shows its Handoff/);
+	assert.equal(freshStart(undefined), '/clear starts a fresh, small session.');
 });
 
 test('the usage report sums the sessions of the projects folder', () => {
@@ -164,6 +167,35 @@ test('the usage report sums the sessions of the projects folder', () => {
 	assert.match(text, /main sessions\s+\$4\.02\s+50%/);
 	assert.equal(loadSessions(root, Date.parse('2026-10-28')).length, 0);
 	assert.equal(report([]), 'No requests in this period.');
+});
+
+test('the usage report names what woke the model, tells session starts from rewrites, and names a subagent by its meta file', () => {
+	const root = tempDir();
+	const project = join(root, '-home-op-Projects-Active-demo');
+	mkdirSync(join(project, 'abc12345', 'subagents'), { recursive: true });
+	const request = (id: string, at: string, read: number, write: number, extra = {}) =>
+		JSON.stringify({ type: 'assistant', requestId: id, timestamp: at, message: { model: 'claude-opus-5-5', usage: { input_tokens: 1, output_tokens: 10, cache_read_input_tokens: read, cache_creation_input_tokens: write, cache_creation: { ephemeral_1h_input_tokens: write } } }, ...extra });
+	const user = (content: unknown) => JSON.stringify({ type: 'user', message: { content } });
+	writeFileSync(
+		join(project, 'abc12345.jsonl'),
+		[
+			user('Go on with the Task'),
+			request('r1', '2026-10-27T10:00:00Z', 0, 60_000),
+			user([{ type: 'tool_result', content: 'ok' }]),
+			request('r2', '2026-10-27T10:00:10Z', 60_000, 1_000),
+			user('<task-notification>\n<event>[Monitor expired after 30m]</event>\n</task-notification>'),
+			request('r3', '2026-10-27T12:30:00Z', 0, 61_000),
+		].join('\n'),
+	);
+	writeFileSync(join(project, 'abc12345', 'subagents', 'agent-x.jsonl'), request('s1', '2026-10-27T10:00:05Z', 50_000, 2_000, { isSidechain: true }));
+	writeFileSync(join(project, 'abc12345', 'subagents', 'agent-x.meta.json'), JSON.stringify({ name: 'reviewer' }));
+	const sessions = loadSessions(root);
+	assert.deepEqual(sessions.map((s) => [s.project, s.agent, s.requests.length]), [['demo', undefined, 3], ['demo', 'reviewer', 1]]);
+	assert.match(wakeups(sessions).join('\n'), /task notification/);
+	const writes = cacheWrites(sessions).join('\n');
+	assert.match(writes, /Session starts: 1 wrote/);
+	assert.match(writes, /Rewrites after a pause past the cache lifetime: 1[\s\S]*after 150 min/);
+	assert.match(report(sessions), /Main sessions, most expensive first[\s\S]*Go on with the Task/);
 });
 
 const hasJq = (() => {

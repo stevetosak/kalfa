@@ -47,7 +47,7 @@ The old hooks keep running while these are built.
 - [x] A Module can give a payload filter per event, so the shim starts Node only for a payload its handler acts on, and its own `settings:` part in `kalfa.yaml`.
 - [x] `meter`: the context meter and `/meter`, the idle guard, the status-line tap (it saves the usage limits), `kalfa meter usage`. The Core gained a quiet prompt block, a turn stop, the subagent marker, the tool duration, the `usage` Capability, and a context size per event in the event table (each Adapter ships a context probe, so a small session never starts Node).
 - [x] `herdr`: the successor launch (`kalfa herdr continue`, the `successor` skill): a new session on the open Task, in a Herdr tab or in the harness's background session, refused near a usage limit. Herdr's own integration shows the session state; the Module says when it is missing.
-- [ ] Move the existing agent tests with their code.
+- [x] Move the existing agent tests with their code. Each old test runs next to its kalfa code: the PR command and the gate in `docs`, the launcher in `herdr`, the guard, the prices and the usage report in `meter`, the transcript reader with the Claude Adapter, the handoff's limit check in the Core usage limits, open Plans and the Handoff after `/clear` in the Core session report. Not moved: the documentation site keeps its own (page guides, the docs work tree, the Lesson inbox, the Procedure or Reference check); the hook install and the status-line wrap come with step 4, the memory budget with step 6.
 - [ ] Decide for each loose personal skill: move it into a Module or drop it.
 
 ## 4. Switch, one event at a time
