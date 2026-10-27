@@ -18,6 +18,8 @@ export const claudeProject: ProjectFiles = {
 		const header = rule.paths ? `---\n${stringify({ paths: rule.paths }).trimEnd()}\n---\n` : '';
 		return { path: `.claude/rules/kalfa-${module}-${rule.name}.md`, text: `${header}${generated(module)}\n\n${rule.body}` };
 	},
+	// Claude Code reads AGENTS.md only when there is no CLAUDE.md (APM spike Log).
+	instructions: { file: 'CLAUDE.md', importLine: '@AGENTS.md' },
 	approvals: {
 		path: '.claude/settings.local.json',
 		entry: (pattern) => `Bash(${pattern})`,

@@ -29,6 +29,11 @@ export interface ProjectFiles {
 	skillDir(skill: string): string;
 	rule(module: string, rule: Rule): { path: string; text: string };
 	approvals: ApprovalFile;
+	/**
+	 * The harness's own instruction file, when it does not read `AGENTS.md`
+	 * next to it, and the line that imports `AGENTS.md` into it.
+	 */
+	instructions?: { file: string; importLine: string };
 }
 
 /** The harness's own file of command approvals, which kalfa shares with the Operator's entries. */

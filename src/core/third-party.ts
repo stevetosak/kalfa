@@ -23,10 +23,11 @@ function git(args: string[], cwd: string): string {
 	return out.stdout.trim();
 }
 
-/** The checkout of `source` at `commit` in the cache; fetched once. */
-export function checkoutAt(cache: string, source: string, commit: string): string {
+/** The checkout of `source` at `commit` in the cache; fetched once, never when `offline`. */
+export function checkoutAt(cache: string, source: string, commit: string, offline = false): string {
 	const dir = join(cache, 'sources', createHash('sha256').update(source).digest('hex').slice(0, 16), commit);
 	if (existsSync(dir)) return dir;
+	if (offline) throw new KalfaError(`${source} at ${commit.slice(0, 12)} is not fetched yet; run kalfa build`);
 	const work = `${dir}.partial-${process.pid}`;
 	rmSync(work, { recursive: true, force: true });
 	mkdirSync(work, { recursive: true });
@@ -61,8 +62,8 @@ export interface FetchedSkill {
 }
 
 /** The pinned skill with the Module's Overlay appended to its SKILL.md. */
-export function composeThirdParty(source: ModuleSource, pin: ThirdPartySkill, cache: string): FetchedSkill {
-	const dir = join(checkoutAt(cache, pin.source, pin.commit), pin.path);
+export function composeThirdParty(source: ModuleSource, pin: ThirdPartySkill, cache: string, offline = false): FetchedSkill {
+	const dir = join(checkoutAt(cache, pin.source, pin.commit, offline), pin.path);
 	if (!existsSync(join(dir, 'SKILL.md'))) throw new KalfaError(`${pin.source} at ${pin.commit.slice(0, 12)}: no SKILL.md in ${pin.path}`);
 	const files = readTree(dir);
 	const sha256 = treeHash(files);

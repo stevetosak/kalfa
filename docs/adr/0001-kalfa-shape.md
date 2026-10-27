@@ -69,3 +69,15 @@ cannot prove is built by hand, and only that part.
   a schema number, and `kalfa migrate` rewrites older files.
 - A CI leak scan refuses personal content, since the personal layer must never
   enter this repository.
+
+## Amendment 2026-10-27: APM at user scope only
+
+The spike showed that APM cannot keep its project state out of a repository:
+`--root` moves every write, the harness files too. Overlays already need kalfa
+to fetch the pinned upstream skill itself. So `kalfa build` writes a Module's
+files into a repository without APM, through the Adapter, and records what it
+wrote, each pin and its hash in the git-ignored `.kalfa/build.yaml`. APM installs
+what lives at user scope: the Core, the hook plugin and the personal skills.
+Nested `AGENTS.md` files for other harnesses are not written while Claude Code
+is the only one; once they are, each goes in `.git/info/exclude`, so a public
+repository never carries them.

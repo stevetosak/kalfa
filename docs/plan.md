@@ -30,9 +30,10 @@ that part. Result: [APM spike Log](spikes/2026-10-27-apm.md).
 - [x] Claude Code Adapter: hook translation and Capability set, with contract tests on payloads recorded from Claude Code 2.1.311 (`scripts/record-claude-fixtures.sh`).
 - [x] Task Record (schema 1) written through `kalfa task` and `kalfa section close` (parts as Markdown on stdin), the git-ignore refusal, the Handoff view, the task-list mapping (fallback: the Section stays in the record only).
 - [x] Plans: the portable format (the documentation site Contract's steps), `plans:` globs in `kalfa.yaml`, the session report, `kalfa plan list` / `show` / `check`, and `kalfa task start --plan` checks the page.
-- [ ] `kalfa build` keeps APM project state (`apm.yml`, `apm.lock.yaml`) out of the repository and composes Overlays from the pinned upstream skill.
-- [ ] Decide whether the nested `AGENTS.md` files that `apm compile` writes are committed or ignored.
-- [ ] `kalfa build`, `kalfa doctor`, `kalfa link` / `unlink`, `kalfa init`.
+- [x] `kalfa build` keeps APM project state out of the repository: it writes the Module files itself and APM stays at user scope (amendment to ADR 0001). It composes Overlays from the pinned upstream skill and records each pin's hash.
+- [x] Decide whether the nested `AGENTS.md` files are committed or ignored: none while Claude Code is the only harness; then each one goes in `.git/info/exclude`.
+- [x] `kalfa build`, `kalfa doctor`, `kalfa link` / `unlink`, `kalfa init`.
+- [ ] `kalfa doctor` names skill references in `CLAUDE.md` and `AGENTS.md` that no installed skill answers.
 - [ ] Tests: unit, Adapter contract on recorded payloads, clean-state smoke.
 - [ ] CI: the three test levels and the leak scan.
 

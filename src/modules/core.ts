@@ -3,6 +3,7 @@
 // A later section adds memory budgets to the report.
 import { currentBranch } from '../core/git.ts';
 import type { HandlerResult } from '../core/events.ts';
+import type { ModuleManifest } from '../core/module-source.ts';
 import { CORE_MODULE, type Handler, type ModuleDefinition } from '../core/modules.ts';
 import { findPlans, isOpenPlan, planSummary } from '../core/plans.ts';
 import type { Project } from '../core/project.ts';
@@ -48,6 +49,12 @@ const taskListMapping: Handler = (event, { capabilities }) => {
 	if (event.name !== 'section.close' || !capabilities.has('task-list')) return undefined;
 	return { context: `Task list: mark the item for "${event.section.title}" completed.` };
 };
+
+/** What the Core does on a harness without each Capability; `kalfa doctor` lists it like a Module's `needs`. */
+export const coreNeeds: ModuleManifest['needs'] = [
+	{ capability: 'context-injection', without: 'no session report; the agent runs kalfa plan list and kalfa task list itself' },
+	{ capability: 'task-list', without: 'a closed Section stays in the Task Record only' },
+];
 
 export const coreModule: ModuleDefinition = {
 	name: CORE_MODULE,

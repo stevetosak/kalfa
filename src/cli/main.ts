@@ -1,26 +1,31 @@
-import pkg from '../../package.json' with { type: 'json' };
 import { KalfaError } from '../core/errors.ts';
-import { modulesRoot } from '../core/package-root.ts';
+import { modulesRoot, packageRoot } from '../core/package-root.ts';
 import { type Command, UsageError } from './command.ts';
 import { adapters } from '../adapters/index.ts';
 import { modules } from '../modules/index.ts';
 import { buildCommand } from './commands/build.ts';
-import { doctor } from './commands/doctor.ts';
+import { doctorCommand } from './commands/doctor.ts';
+import { initCommand } from './commands/init.ts';
+import { linkCommand, unlinkCommand } from './commands/link.ts';
 import { hookCommand } from './commands/hook.ts';
 import { planCommand } from './commands/plan.ts';
 import { sectionCommand, taskCommand } from './commands/task.ts';
 import type { Io } from './io.ts';
+import { version } from './version.ts';
 
 const commands: Record<string, Command> = {
+	init: initCommand(adapters, modulesRoot),
 	build: buildCommand(adapters, modulesRoot),
-	doctor,
+	doctor: doctorCommand(adapters, modulesRoot, () => packageRoot()),
+	link: linkCommand(() => packageRoot()),
+	unlink: unlinkCommand(() => packageRoot()),
 	hook: hookCommand(adapters, modules),
 	task: taskCommand(adapters, modules),
 	section: sectionCommand(adapters, modules),
 	plan: planCommand,
 };
 
-export const version = pkg.version;
+export { version };
 
 function usage(): string {
 	const width = Math.max(...Object.keys(commands).map((name) => name.length));
