@@ -158,7 +158,7 @@ test('kalfa herdr continue: the Module must be on, the Task open; exit 3 at a ne
 	const command = herdrCommand(adapters, { launcher: () => (l) => (launches.push(l), 'Started agent x'), limits: () => (verdict.ok ? { ok: true, note: verdict.note } : { ok: false, reason: verdict.reason }) });
 
 	await assert.rejects(command.run(['continue'], captureIo(root, env)), /no Task Record 'feat-x'/);
-	await taskCommand(adapters, registry(coreModule)).run(['start', 'Build herdr'], captureIo(root, env));
+	await taskCommand(adapters, registry(coreModule)).run(['start', '--done-when', 'it works', 'Build herdr'], captureIo(root, env));
 	await sectionCommand(adapters, registry(coreModule)).run(['close', 'first'], captureIo(root, env, '**Done:** a.\n\n**Next:** b.\n'));
 
 	let io = captureIo(root, env);

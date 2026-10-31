@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { sectionCommand, taskCommand } from '../src/cli/commands/task.ts';
 import { main } from '../src/cli/main.ts';
+import { writeRecord } from '../src/core/task-record.ts';
 import { coreModule } from '../src/modules/core.ts';
 import { fakeAdapter, registry } from './fakes.ts';
 import { captureIo, gitRepo, tempDir } from './helpers.ts';
@@ -28,7 +29,7 @@ const inHarness = { HOME: tempDir(), KALFA_FAKE_HARNESS: '1' };
 test('start, close Sections, close: the whole Task in one record', async () => {
 	const root = repo();
 	let io = captureIo(root, inHarness);
-	assert.equal(await task.run(['start', 'Build', 'the', 'monitoring', '--plan', 'docs/plan.md'], io), 0);
+	assert.equal(await task.run(['start', '--done-when', 'it works', 'Build', 'the', 'monitoring', '--plan', 'docs/plan.md'], io), 0);
 	const path = join(root, '.kalfa', 'tasks', 'feat-monitoring.md');
 	assert.deepEqual(io.stdout, [`Task feat-monitoring started: ${path}`]);
 
@@ -36,20 +37,23 @@ test('start, close Sections, close: the whole Task in one record', async () => {
 	assert.equal(await section.run(['close', 'platforms proven'], io), 0);
 	assert.deepEqual(io.stdout, [`Section "platforms proven" recorded in ${path}`, 'Task list: mark the item for "platforms proven" completed.', 'docs saw it']);
 
-	io = captureIo(root, inHarness, '**Done:** all done.\n');
+	await assert.rejects(task.run(['close'], captureIo(root, inHarness, '**Done:** all done.\n')), /the Task has a finish line:\n {2}Done when: it works\nCheck it, ask the Operator/);
+	await assert.rejects(task.run(['close'], captureIo(root, inHarness, '**Done when:** yes\n')), /starts with "holds — " or "not met — "/);
+	assert.match(readFileSync(path, 'utf8'), /status: open\n/);
+	io = captureIo(root, inHarness, '**Done:** all done.\n\n**Done when:** holds — the test reads it back.\n');
 	assert.equal(await task.run(['close'], io), 0);
 	assert.deepEqual(io.stdout, [`Task feat-monitoring closed: ${path}`, 'docs closes']);
 	const text = readFileSync(path, 'utf8');
-	assert.match(text, /status: closed\n/);
+	assert.match(text, /done-when: it works\nstatus: closed\n/);
 	assert.match(text, /## Section: platforms proven\n\n\*\*Done:\*\* proved\.\n\n\*\*docs\.pages:\*\* runbook/);
-	assert.match(text, /## Close\n\n\*\*Done:\*\* all done\.\n$/);
+	assert.match(text, /## Close\n\n\*\*Done:\*\* all done\.\n\n\*\*Done when:\*\* holds — the test reads it back\.\n$/);
 
 	await assert.rejects(section.run(['close', 'late'], captureIo(root, inHarness, '**Done:** x\n')), /Task 'feat-monitoring' is closed/);
 });
 
 test('without a task list the Section is not mapped', async () => {
 	const root = repo();
-	await task.run(['start', 'goal'], captureIo(root));
+	await task.run(['start', '--done-when', 'it works', 'goal'], captureIo(root));
 	const io = captureIo(root, { HOME: tempDir() }, '**Done:** x\n');
 	await section.run(['close', 's'], io);
 	assert.deepEqual(io.stdout.slice(1), ['docs saw it']);
@@ -57,15 +61,23 @@ test('without a task list the Section is not mapped', async () => {
 
 test('kalfa refuses to start a Task where git would commit the record', async () => {
 	const root = repo('schema: 1\n', '');
-	await assert.rejects(task.run(['start', 'goal'], captureIo(root)), /git does not ignore it/);
+	await assert.rejects(task.run(['start', '--done-when', 'it works', 'goal'], captureIo(root)), /git does not ignore it/);
 	assert.equal(existsSync(join(root, '.kalfa')), false);
+});
+
+test('a new Task needs a finish line; an old record without one still reads and closes', async () => {
+	const root = repo();
+	await assert.rejects(task.run(['start', 'goal'], captureIo(root)), /give --done-when/);
+	writeRecord(root, { id: 'feat-monitoring', header: { schema: 1, goal: 'old', status: 'open', started: '2026-10-01' }, sections: [] });
+	assert.equal(await task.run(['close'], captureIo(root)), 0);
+	assert.match(readFileSync(join(root, '.kalfa', 'tasks', 'feat-monitoring.md'), 'utf8'), /status: closed/);
 });
 
 test('a second start on the same branch is refused, --task names another', async () => {
 	const root = repo();
-	await task.run(['start', 'one'], captureIo(root));
-	await assert.rejects(task.run(['start', 'two'], captureIo(root)), /already exists \(open\)/);
-	assert.equal(await task.run(['start', 'two', '--task', 'side/quest'], captureIo(root)), 0);
+	await task.run(['start', '--done-when', 'it works', 'one'], captureIo(root));
+	await assert.rejects(task.run(['start', '--done-when', 'it works', 'two'], captureIo(root)), /already exists \(open\)/);
+	assert.equal(await task.run(['start', '--done-when', 'it works', 'two', '--task', 'side/quest'], captureIo(root)), 0);
 	const io = captureIo(root);
 	await task.run(['list'], io);
 	assert.deepEqual(io.stdout, ['feat-monitoring  open  0 Section(s)  one', 'side-quest  open  0 Section(s)  two']);
@@ -73,14 +85,14 @@ test('a second start on the same branch is refused, --task names another', async
 
 test('--plan must name a Plan page from the repository root', async () => {
 	const root = repo();
-	await assert.rejects(task.run(['start', 'goal', '--plan', 'plan.md'], captureIo(root)), /--plan: no file 'plan\.md'/);
-	await assert.rejects(task.run(['start', 'goal', '--plan', 'docs/log.md'], captureIo(root)), /is not a Plan/);
+	await assert.rejects(task.run(['start', '--done-when', 'it works', 'goal', '--plan', 'plan.md'], captureIo(root)), /--plan: no file 'plan\.md'/);
+	await assert.rejects(task.run(['start', '--done-when', 'it works', 'goal', '--plan', 'docs/log.md'], captureIo(root)), /is not a Plan/);
 	assert.equal(existsSync(join(root, '.kalfa')), false);
 });
 
 test('a Section for a Module that is off is refused through main, with exit 1', async () => {
 	const root = repo('schema: 1\n');
-	await task.run(['start', 'goal'], captureIo(root));
+	await task.run(['start', '--done-when', 'it works', 'goal'], captureIo(root));
 	const io = captureIo(root, { HOME: tempDir() }, '**Done:** x\n**docs.pages:** y\n');
 	assert.equal(await main(['section', 'close', 's'], io), 1);
 	assert.match(io.stderr.join('\n'), /Module docs is not enabled/);
@@ -88,21 +100,21 @@ test('a Section for a Module that is off is refused through main, with exit 1', 
 
 test('the session report lists open Tasks, and after /clear gives the Handoff', async () => {
 	const root = repo();
-	await task.run(['start', 'Build the monitoring'], captureIo(root));
+	await task.run(['start', '--done-when', 'it works', 'Build the monitoring'], captureIo(root));
 	await section.run(['close', 'proven'], captureIo(root, { HOME: tempDir() }, '**Done:** x\n**Next:** render it.\n'));
 	const context = { project: { root, file: undefined }, settings: { schema: 1 as const, modules: [] }, env: { HOME: tempDir() }, capabilities: new Set<never>() };
 	const base = { harness: 'fake', cwd: root, name: 'session.start' as const };
 	const startup = await coreModule.handlers['session.start']!({ ...base, source: 'startup' }, context);
-	assert.match(startup?.context ?? '', /- feat-monitoring: Build the monitoring \(1 Section\(s\)\)\n  Next: render it\./);
+	assert.match(startup?.context ?? '', /- feat-monitoring: Build the monitoring \(1 Section\(s\)\)\n  Done when: it works\n  Next: render it\./);
 	assert.equal(startup?.notice, 'kalfa: Task feat-monitoring open on this branch (its Handoff comes after /clear)');
 	const clear = await coreModule.handlers['session.start']!({ ...base, source: 'clear' }, context);
-	assert.match(clear?.context ?? '', /^Continue the Task[\s\S]*Next: render it\.$/);
+	assert.match(clear?.context ?? '', /^Continue the Task[\s\S]*\nDone when: it works\n[\s\S]*Next: render it\.$/);
 	assert.equal(clear?.notice, 'kalfa: continuing Task feat-monitoring from its Handoff');
 });
 
 test('the session report puts the open Plans before the Tasks, and a broken glob is a notice', async () => {
 	const root = repo("schema: 1\nplans: ['docs/**/*.md', 'nowhere/*.md']\n");
-	await task.run(['start', 'Build the monitoring', '--plan', 'docs/plan.md'], captureIo(root));
+	await task.run(['start', '--done-when', 'it works', 'Build the monitoring', '--plan', 'docs/plan.md'], captureIo(root));
 	const context = { project: { root, file: { schema: 1 as const, modules: [], plans: ['docs/**/*.md', 'nowhere/*.md'], settings: {} } }, settings: { schema: 1 as const, modules: [] }, env: { HOME: tempDir() }, capabilities: new Set<never>() };
 	const result = await coreModule.handlers['session.start']!({ harness: 'fake', cwd: root, name: 'session.start', source: 'startup' }, context);
 	assert.match(

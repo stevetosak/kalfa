@@ -26,7 +26,7 @@ export function docsCommand(today = () => new Date().toISOString().slice(0, 10))
 				requireModule(project, 'docs', io.env);
 				const id = taskId(project, values.task);
 				const record = readRecord(project.root, id);
-				if (!record) throw new KalfaError(`no Task Record '${id}'; start one with: kalfa task start "<goal>"`);
+				if (!record) throw new KalfaError(`no Task Record '${id}'; start one with: kalfa task start "<goal>" --done-when "<finish line>"`);
 				const draft = logDraft(record, today());
 				if (!values.out) {
 					io.out(draft.trimEnd());

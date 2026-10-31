@@ -65,7 +65,7 @@ const memory = (cwd: string, env: NodeJS.ProcessEnv, args: string[], stdin = '')
 const homeLog = (env: NodeJS.ProcessEnv) => execFileSync('git', ['-C', memoryHome(env), 'log', '--format=%s'], { encoding: 'utf8' }).trim().split('\n');
 
 async function startTask(repo: string, env: NodeJS.ProcessEnv, candidates: string) {
-	await run(taskCommand(adapters, modules), repo, env, ['start', 'Rotate the database password']);
+	await run(taskCommand(adapters, modules), repo, env, ['start', '--done-when', 'it works', 'Rotate the database password']);
 	const parts = `**Done:** Wrote the rotation.\n\n**Memory candidates:** ${candidates}\n\n**Next:** Rotate the database password with kluster.`;
 	const section = await run(sectionCommand(adapters, modules), repo, env, ['close', 'Rotation'], parts);
 	assert.equal(section.code, 0, section.error ?? section.err);
@@ -166,7 +166,7 @@ test('search keeps a closed record and marks it', async () => {
 test('task close copies the record into the Memory home and puts the candidates into the inbox in one commit', async () => {
 	const { repo, env } = machine();
 	await startTask(repo, env, '- The rotation needs kluster.\n- Envoy times out at 15 s.');
-	const close = await run(taskCommand(adapters, modules), repo, env, ['close']);
+	const close = await run(taskCommand(adapters, modules), repo, env, ['close'], '**Done when:** holds — the test ran.\n');
 	assert.equal(close.code, 0, close.error ?? close.err);
 	const home = memoryHome(env);
 	assert.ok(existsSync(join(home, 'projects', ...KEY.split('/'), 'tasks', 'feat-rotation.md')));
@@ -213,7 +213,7 @@ test('recall on each prompt is off by default: the shim does not run for it, and
 test('inbox accept writes the record into the layer of the candidate project and removes the candidate in one commit', async () => {
 	const { repo, env } = machine();
 	await startTask(repo, env, '- The rotation needs kluster.\n- A wrong idea.');
-	await run(taskCommand(adapters, modules), repo, env, ['close']);
+	await run(taskCommand(adapters, modules), repo, env, ['close'], '**Done when:** holds — the test ran.\n');
 	// Run from outside the repository: the project layer still is the candidate's.
 	const elsewhere = gitRepo();
 	const accept = await memory(elsewhere, env, ['inbox', 'accept', 'project-feat-rotation-1', '--type', 'fact', '--layer', 'project', '--summary', 'Rotating a password needs kluster.']);

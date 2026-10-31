@@ -139,7 +139,7 @@ test('the draft puts the Task Record in page order: Sections, then Memory candid
 	const env = { HOME: tempDir() };
 	const adapters = new Map([['fake', fakeAdapter]]);
 	const reg = registry(coreModule, docsModule);
-	await taskCommand(adapters, reg).run(['start', 'Build the docs Module'], captureIo(root, env));
+	await taskCommand(adapters, reg).run(['start', '--done-when', 'it works', 'Build the docs Module'], captureIo(root, env));
 	await sectionCommand(adapters, reg).run(['close', 'The gate'], captureIo(root, env, '**Done:** The gate refuses a PR without a Log.\n\n**Found:** git diff base...head holds the PR.\n\n**Lesson candidates:** A test proves only the inputs it runs.\n\n**Next:** the draft.\n'));
 	await sectionCommand(adapters, reg).run(['close', 'The draft'], captureIo(root, env, '**Done:** The draft.\n\n**Decisions:** No overwrite.\n\n**Next:** open the PR.\n'));
 	const record = readRecord(root, 'feat-x')!;
@@ -185,7 +185,7 @@ test('kalfa docs draft writes into a folder, never over a page; kalfa docs check
 	const env = { HOME: tempDir() };
 	const adapters = new Map([['fake', fakeAdapter]]);
 	const command = docsCommand(() => '2026-10-27');
-	await taskCommand(adapters, registry(coreModule)).run(['start', 'Build the docs Module'], captureIo(root, env));
+	await taskCommand(adapters, registry(coreModule)).run(['start', '--done-when', 'it works', 'Build the docs Module'], captureIo(root, env));
 	await sectionCommand(adapters, registry(coreModule)).run(['close', 'The gate'], captureIo(root, env, '**Done:** a.\n'));
 
 	let io = captureIo(root, env);
