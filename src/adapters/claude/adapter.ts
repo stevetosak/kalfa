@@ -6,17 +6,13 @@ import type { Capability } from '../../core/capabilities.ts';
 import { KalfaError } from '../../core/errors.ts';
 import type { CoreEvent, CoreEventName, DispatchResult } from '../../core/events.ts';
 import type { Adapter, HookOutput, SessionStart } from '../adapter.ts';
+import { CLAUDE_HOOKS } from './hooks.ts';
 import { claudeProject } from './project.ts';
 import { claudeSkills } from './skills.ts';
 import { claudeUsage } from './transcript.ts';
+import { claudeUser } from './user.ts';
 
-/** The Claude Code hook (and tool matcher) that raises each Core event. */
-export const CLAUDE_HOOKS: Partial<Record<CoreEventName, { hook: string; matcher?: string }>> = {
-	'session.start': { hook: 'SessionStart' },
-	'prompt.submit': { hook: 'UserPromptSubmit' },
-	'command.before': { hook: 'PreToolUse', matcher: 'Bash' },
-	'tool.after': { hook: 'PostToolUse' },
-};
+export { CLAUDE_HOOKS };
 
 const SHELL_TOOL = 'Bash';
 
@@ -99,6 +95,7 @@ export const claudeAdapter: Adapter = {
 	toEvent,
 	render,
 	project: claudeProject,
+	user: claudeUser,
 	skills: claudeSkills,
 	session: { program: 'claude', interactive: sessionArgs, background: (start) => ['--bg', ...sessionArgs(start)] },
 	usage: claudeUsage,
