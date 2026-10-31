@@ -46,9 +46,10 @@ function taskReport(project: Project, source: string | undefined): ReportPart {
 
 	const lines = open.map((r) => {
 		const next = r.sections.at(-1)?.parts.get('Next');
-		return `- ${r.id}: ${r.header.goal} (${r.sections.length} Section(s))${next ? `\n  Next: ${next.split('\n')[0]}` : ''}`;
+		const doneWhen = r.header['done-when'];
+		return `- ${r.id}: ${r.header.goal} (${r.sections.length} Section(s))${doneWhen ? `\n  Done when: ${doneWhen}` : ''}${next ? `\n  Next: ${next.split('\n')[0]}` : ''}`;
 	});
-	const hint = 'Record each closed Section with `kalfa section close "<title>"` (parts on stdin); close the Task with `kalfa task close`.';
+	const hint = 'Record each closed Section with `kalfa section close "<title>"` (parts on stdin); close the Task with `kalfa task close` once its Done when line holds.';
 	const others = open.length - (own ? 1 : 0);
 	const summary = [own ? `Task ${own.id} open on this branch (its Handoff comes after /clear)` : undefined, others ? plural(others, own ? 'other open Task' : 'open Task') : undefined]
 		.filter(Boolean)

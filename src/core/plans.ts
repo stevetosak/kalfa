@@ -8,6 +8,9 @@
 //   step whose text starts with ~~struck~~ text is dropped. A `##` heading
 //   above a step names its group. Task items nested in a step are its
 //   sub-items. Plain list items are prose, not steps.
+// - A part is a `##` group, or the steps above the first `##` heading. Its
+//   finish line is a paragraph that opens with `**Done when:**`, under the
+//   heading and above the steps. An open part of an open Plan needs one.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { List, ListItem, Paragraph, PhrasingContent, RootContent } from 'mdast';
@@ -39,8 +42,21 @@ export interface PlanStep {
 	subItems: PlanStep[];
 }
 
+/** A `##` group of steps, or the steps above the first `##` heading. */
+export interface PlanPart {
+	/** The `##` heading; none for the steps above the first one. */
+	group?: string;
+	/** The heading's line, or the first step's for the part above the first heading. */
+	line: number;
+	/** The text after `**Done when:**`; none when the part has no finish line. */
+	doneWhen?: string;
+	steps: PlanStep[];
+}
+
 export interface PlanSteps {
 	steps: PlanStep[];
+	/** The parts in page order; a heading without steps makes no part. */
+	parts: PlanPart[];
 	/** List items that look like a step but carry a mark the format does not know. */
 	unknownMarks: { mark: string; line: number }[];
 }
@@ -70,6 +86,15 @@ function stateOf(item: ListItem, paragraph: Paragraph | undefined): StepState {
 	return item.checked ? 'done' : 'open';
 }
 
+const DONE_WHEN = 'Done when:';
+
+/** The finish line in a paragraph that opens with `**Done when:**`. */
+function doneWhenOf(paragraph: Paragraph): string | undefined {
+	const [lead, ...rest] = paragraph.children;
+	if (lead?.type !== 'strong' || toString(lead).trim() !== DONE_WHEN) return undefined;
+	return rest.map((node) => toString(node)).join('').replace(/\s+/g, ' ').trim() || undefined;
+}
+
 function labelOf(paragraph: Paragraph | undefined, text: string): string {
 	const lead: PhrasingContent | undefined = paragraph?.children[0];
 	return lead?.type === 'strong' ? toString(lead).trim() : text;
@@ -96,12 +121,30 @@ function readItem(item: ListItem, group: string | undefined, lineOffset: number,
  */
 export function readPlanSteps(body: string, lineOffset = 0): PlanSteps {
 	const tree = fromMarkdown(body, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
-	const out: PlanSteps = { steps: [], unknownMarks: [] };
-	let group: string | undefined;
+	const out: PlanSteps = { steps: [], parts: [], unknownMarks: [] };
+	const lineOf = (node: RootContent) => (node.position?.start.line ?? 0) + lineOffset;
+	let part: PlanPart | undefined;
+	const parts: PlanPart[] = [];
 	for (const node of tree.children as RootContent[]) {
-		if (node.type === 'heading' && node.depth === 2) group = toString(node).trim();
-		if (node.type === 'list') out.steps.push(...node.children.flatMap((item) => readItem(item, group, lineOffset, out) ?? []));
+		if (node.type === 'heading' && node.depth === 2) {
+			part = { group: toString(node).trim(), line: lineOf(node), steps: [] };
+			parts.push(part);
+		}
+		if (node.type === 'paragraph') {
+			const doneWhen = doneWhenOf(node);
+			if (doneWhen) {
+				if (!part) parts.push((part = { line: lineOf(node), steps: [] }));
+				part.doneWhen ??= doneWhen;
+			}
+		}
+		if (node.type === 'list') {
+			const steps = node.children.flatMap((item) => readItem(item, part?.group, lineOffset, out) ?? []);
+			if (steps.length && !part) parts.push((part = { line: steps[0]!.line, steps: [] }));
+			part?.steps.push(...steps);
+			out.steps.push(...steps);
+		}
 	}
+	out.parts = parts.filter((p) => p.steps.length);
 	return out;
 }
 
@@ -123,6 +166,12 @@ export function planStepProblems(plan: Plan): string[] {
 		({ mark, line }) => `line ${line}: "${mark}" is not a step mark; use "- [ ]" or "- [x]", and strike a dropped step's text with ~~ ~~.`,
 	);
 	if (isOpenPlan(plan) && plan.steps.length === 0) problems.push('an open Plan needs at least one step (a "- [ ]" task item).');
+	if (isOpenPlan(plan)) {
+		for (const part of plan.parts.filter((p) => !p.doneWhen && openAnywhere(p.steps).length)) {
+			const name = part.group ? `the part "${part.group}"` : 'the part above the first ## heading';
+			problems.push(`line ${part.line}: ${name} has open steps and no finish line; add a "**Done when:** …" paragraph above its steps.`);
+		}
+	}
 	if (plan.status === 'done') {
 		const open = openAnywhere(plan.steps);
 		if (open.length) problems.push(`a done Plan has ${open.length} open step(s), first at line ${open[0]!.line}; tick or strike them, or set another status.`);

@@ -15,6 +15,10 @@ export const CORE_PARTS = ['Done', 'Found', 'Decisions', 'Memory candidates', 'N
 /** Old part names, read and written as their new name, so older records and habits still work. */
 const RENAMED_PARTS: Readonly<Record<string, (typeof CORE_PARTS)[number]>> = { 'Lesson candidates': 'Memory candidates' };
 export const CANDIDATES_PART = 'Memory candidates';
+/** The close part that answers the Task's finish line: `holds — <proof>` or `not met — <why>`. */
+export const DONE_WHEN_PART = 'Done when';
+const CLOSE_PARTS: readonly string[] = [...CORE_PARTS, DONE_WHEN_PART];
+const DONE_WHEN_ANSWER = /^(holds|not met)\s*[—–:-]\s*\S/i;
 const REQUIRED_PART = 'Done';
 const PART_LINE = /^\*\*([^*:]+):\*\*[ \t]*(.*)$/;
 const MODULE_PART = /^([a-z][a-z0-9-]*)\.([a-z][a-z0-9-]*)$/;
@@ -26,6 +30,13 @@ const headerSchema = z.strictObject({
 	goal: z.string().min(1),
 	branch: z.string().optional(),
 	plan: z.string().optional(),
+	/** The finish line, set at start; a record from before Plan 8 has none. */
+	'done-when': z
+		.string()
+		.trim()
+		.min(1)
+		.refine((s) => !s.includes('\n'), 'the Done when line is one line')
+		.optional(),
 	status: z.enum(['open', 'closed']),
 	started: z.iso.date(),
 	closed: z.iso.date().optional(),
@@ -58,10 +69,11 @@ export function taskIdOf(branch: string): string {
 }
 
 /**
- * Splits Markdown into parts and checks their names: Core parts, or parts of
- * the enabled Modules. Text before the first part is refused.
+ * Splits Markdown into parts and checks their names: `known` parts (the Core
+ * parts by default), or parts of the enabled Modules. Text before the first
+ * part is refused.
  */
-export function parseParts(text: string, isEnabled: (module: string) => boolean, where: string): Parts {
+export function parseParts(text: string, isEnabled: (module: string) => boolean, where: string, known: readonly string[] = CORE_PARTS): Parts {
 	const parts: Parts = new Map();
 	let current: string | undefined;
 	const lines: Record<string, string[]> = {};
@@ -70,7 +82,7 @@ export function parseParts(text: string, isEnabled: (module: string) => boolean,
 		if (match) {
 			const given = match[1]!.trim();
 			const name = Object.hasOwn(RENAMED_PARTS, given) ? RENAMED_PARTS[given]! : given;
-			checkPartName(name, isEnabled, where);
+			checkPartName(name, isEnabled, where, known);
 			if (parts.has(name)) throw new KalfaError(`${where}: the part **${name}:** is given twice`);
 			parts.set(name, '');
 			lines[name] = [match[2]!];
@@ -78,7 +90,7 @@ export function parseParts(text: string, isEnabled: (module: string) => boolean,
 		} else if (current) {
 			lines[current]!.push(line);
 		} else if (line.trim()) {
-			throw new KalfaError(`${where}: text before the first part; start each part with **<Part>:** (${CORE_PARTS.join(', ')})`);
+			throw new KalfaError(`${where}: text before the first part; start each part with **<Part>:** (${known.join(', ')})`);
 		}
 	}
 	for (const name of parts.keys()) {
@@ -89,11 +101,11 @@ export function parseParts(text: string, isEnabled: (module: string) => boolean,
 	return parts;
 }
 
-function checkPartName(name: string, isEnabled: (module: string) => boolean, where: string): void {
-	if ((CORE_PARTS as readonly string[]).includes(name)) return;
+function checkPartName(name: string, isEnabled: (module: string) => boolean, where: string, known: readonly string[]): void {
+	if (known.includes(name)) return;
 	const module = MODULE_PART.exec(name)?.[1];
 	if (module && isEnabled(module)) return;
-	const hint = module ? `the Module ${module} is not enabled in kalfa.yaml` : `use ${CORE_PARTS.join(', ')}, or <module>.<part> for an enabled Module`;
+	const hint = module ? `the Module ${module} is not enabled in kalfa.yaml` : `use ${known.join(', ')}, or <module>.<part> for an enabled Module`;
 	throw new KalfaError(`${where}: unknown part **${name}:**; ${hint}`);
 }
 
@@ -101,6 +113,32 @@ export function sectionParts(text: string, modules: readonly string[]): Parts {
 	const parts = parseParts(text, (module) => modules.includes(module), 'the Section');
 	if (!parts.has(REQUIRED_PART)) throw new KalfaError(`the Section needs a **${REQUIRED_PART}:** part`);
 	return parts;
+}
+
+/** The closing parts of a Task, which may answer its finish line. */
+export function closeParts(text: string, modules: readonly string[]): Parts {
+	return parseParts(text, (module) => modules.includes(module), 'the Task close', CLOSE_PARTS);
+}
+
+/**
+ * A Task with a finish line closes only when the close answers it, so the
+ * agent checks the line and asks the Operator first. A Task from before the
+ * line existed closes as it did.
+ */
+export function checkDoneWhen(header: TaskHeader, close: Parts | undefined): void {
+	const line = header['done-when'];
+	if (!line) return;
+	const answer = close?.get(DONE_WHEN_PART);
+	const how = [
+		'Check it, ask the Operator whether it holds, then close again with a part:',
+		`  **${DONE_WHEN_PART}:** holds — <proof>`,
+		`  **${DONE_WHEN_PART}:** not met — <why, and the open record or Plan that takes the rest>`,
+	].join('\n');
+	if (!answer) throw new KalfaError(`the Task has a finish line:\n  Done when: ${line}\n${how}`);
+	if (!DONE_WHEN_ANSWER.test(answer)) {
+		const given = answer.split('\n')[0];
+		throw new KalfaError(`the **${DONE_WHEN_PART}:** part starts with "holds — " or "not met — " and the reason, not "${given}".\n${how}`);
+	}
 }
 
 function renderParts(parts: Parts): string {
@@ -129,7 +167,7 @@ export function parseRecord(text: string, path: string, id: string): TaskRecord 
 		if (heading.startsWith(SECTION_HEADING)) {
 			record.sections.push({ title: heading.slice(SECTION_HEADING.length).trim(), parts: parseParts(body, anyModule, path) });
 		} else if (heading.trim() === CLOSE_HEADING) {
-			record.close = parseParts(body, anyModule, path);
+			record.close = parseParts(body, anyModule, path, CLOSE_PARTS);
 		} else {
 			throw new KalfaError(`${path}: unexpected heading '${heading.trim()}'`);
 		}
@@ -173,7 +211,9 @@ export function listRecords(root: string): TaskRecord[] {
 export function handoffView(record: TaskRecord): string {
 	const { header, sections } = record;
 	const last = sections.at(-1);
-	const lines = [`Task ${record.id}: ${header.goal} (${header.status}${header.plan ? `; Plan ${header.plan}` : ''})`, `Record: ${record.path}`];
+	const lines = [`Task ${record.id}: ${header.goal} (${header.status}${header.plan ? `; Plan ${header.plan}` : ''})`];
+	if (header['done-when']) lines.push(`Done when: ${header['done-when']}`);
+	lines.push(`Record: ${record.path}`);
 	if (sections.length) lines.push(`Sections closed: ${sections.map((s) => s.title).join('; ')}`);
 	if (last?.parts.get('Found')) lines.push('', `Found in "${last.title}":`, last.parts.get('Found')!);
 	const candidates = sections.flatMap((s) => (s.parts.get(CANDIDATES_PART) ? [s.parts.get(CANDIDATES_PART)!] : []));

@@ -2,7 +2,7 @@
 title: "kalfa — build and migration"
 description: "The steps that build kalfa beside the old agent setup and move every project onto it, one Core event at a time."
 type: plan
-status: active
+status: done
 topics: [agents, tooling]
 ---
 
@@ -105,6 +105,6 @@ it becomes an `open` Memory record or a new Plan, not a new step.
 `kalfa task close` shows the line and asks whether it holds; the tests cover
 all three.
 
-- [ ] The Plan format: where the `Done when` line goes (a Plan page, and each numbered part of a phased page like this one), and `kalfa plan check` reports one that has none.
-- [ ] Tasks: `kalfa task start --done-when "<line>"` writes it into the Task Record header; a new Task needs it, an old record without it still reads.
-- [ ] `kalfa task close` prints the line and asks whether it holds; the session report and the Handoff view show it for the open Task.
+- [x] The Plan format: where the `Done when` line goes (a Plan page, and each numbered part of a phased page like this one), and `kalfa plan check` reports one that has none. (A `**Done when:**` paragraph above the steps; only the open parts of an open Plan need one.)
+- [x] Tasks: `kalfa task start --done-when "<line>"` writes it into the Task Record header; a new Task needs it, an old record without it still reads.
+- [x] `kalfa task close` prints the line and asks whether it holds; the session report and the Handoff view show it for the open Task. (Without a `**Done when:** holds — <proof>` or `not met — <why>` close part, the close is refused.)

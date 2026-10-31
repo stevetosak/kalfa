@@ -9,7 +9,7 @@ import { parsePlan } from '../../core/plans.ts';
 import { currentBranch } from '../../core/git.ts';
 import type { ModuleDefinition } from '../../core/modules.ts';
 import type { Project } from '../../core/project.ts';
-import { handoffView, listRecords, parseParts, readRecord, sectionParts, type TaskRecord, taskIdOf, writeRecord } from '../../core/task-record.ts';
+import { checkDoneWhen, closeParts, handoffView, listRecords, readRecord, sectionParts, type TaskRecord, taskIdOf, writeRecord } from '../../core/task-record.ts';
 import { type Command, parseCommandArgs, UsageError } from '../command.ts';
 import type { Io } from '../io.ts';
 import { requireProject } from '../project.ts';
@@ -27,7 +27,7 @@ export function taskId(project: Project, flag: string | undefined): string {
 
 export function openRecord(project: Project, id: string): TaskRecord {
 	const record = readRecord(project.root, id);
-	if (!record) throw new KalfaError(`no Task Record '${id}'; start one with: kalfa task start "<goal>"`);
+	if (!record) throw new KalfaError(`no Task Record '${id}'; start one with: kalfa task start "<goal>" --done-when "<finish line>"`);
 	if (record.header.status !== 'open') throw new KalfaError(`Task '${id}' is closed`);
 	return record;
 }
@@ -44,9 +44,11 @@ const today = () => new Date().toLocaleDateString('sv-SE');
 export function taskCommand(adapters: ReadonlyMap<string, Adapter>, registry: ReadonlyMap<string, ModuleDefinition>): Command {
 	const subcommands: Record<string, (args: string[], io: Io) => Promise<number>> = {
 		async start(args, io) {
-			const { values, positionals } = parseCommandArgs(args, { ...taskOption, plan: { type: 'string' } }, true);
+			const { values, positionals } = parseCommandArgs(args, { ...taskOption, plan: { type: 'string' }, 'done-when': { type: 'string' } }, true);
 			const goal = positionals.join(' ').trim();
 			if (!goal) throw new UsageError('give the Task goal');
+			const doneWhen = values['done-when']?.replace(/\s+/g, ' ').trim();
+			if (!doneWhen) throw new UsageError('give --done-when "<what is true when the Task is done>"; work found after it becomes an open record or a new Plan');
 			const project = requireProject(io);
 			const id = taskId(project, values.task);
 			if (values.plan) requirePlan(project, values.plan);
@@ -54,7 +56,7 @@ export function taskCommand(adapters: ReadonlyMap<string, Adapter>, registry: Re
 			if (existing) throw new KalfaError(`Task '${id}' already exists (${existing.header.status}); name another with --task <id>`);
 			const path = writeRecord(project.root, {
 				id,
-				header: { schema: 1, goal, branch: currentBranch(project.root), plan: values.plan, status: 'open', started: today() },
+				header: { schema: 1, goal, branch: currentBranch(project.root), plan: values.plan, 'done-when': doneWhen, status: 'open', started: today() },
 				sections: [],
 			});
 			io.out(`Task ${id} started: ${path}`);
@@ -65,8 +67,8 @@ export function taskCommand(adapters: ReadonlyMap<string, Adapter>, registry: Re
 			const project = requireProject(io);
 			const record = openRecord(project, taskId(project, values.task));
 			const text = await io.stdin();
-			const modules = project.file?.modules ?? [];
-			const close = text.trim() ? parseParts(text, (m) => modules.includes(m), 'the Task close') : undefined;
+			const close = text.trim() ? closeParts(text, project.file?.modules ?? []) : undefined;
+			checkDoneWhen(record.header, close);
 			const path = writeRecord(project.root, { ...record, header: { ...record.header, status: 'closed', closed: today() }, close });
 			io.out(`Task ${record.id} closed: ${path}`);
 			report(await raise({ name: 'task.close', task: record.id, record: path }, project, io, adapters, registry), io);
@@ -92,7 +94,7 @@ export function taskCommand(adapters: ReadonlyMap<string, Adapter>, registry: Re
 
 	return {
 		summary: 'Start, close, show or list the Task Records of this repository',
-		usage: 'kalfa task start "<goal>" [--plan <path>] [--task <id>]\n       kalfa task close [--task <id>]   (optional closing parts on stdin)\n       kalfa task show [--handoff] [--task <id>]\n       kalfa task list',
+		usage: 'kalfa task start "<goal>" --done-when "<finish line>" [--plan <path>] [--task <id>]\n       kalfa task close [--task <id>]   (closing parts on stdin; **Done when:** holds — <proof> | not met — <why>)\n       kalfa task show [--handoff] [--task <id>]\n       kalfa task list',
 		async run(args, io) {
 			const [sub, ...rest] = args;
 			const run = sub && Object.hasOwn(subcommands, sub) ? subcommands[sub] : undefined;

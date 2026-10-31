@@ -20,7 +20,7 @@ export type Launcher = (launch: Launch) => string;
 export function successorPrompt(task: string): string {
 	return [
 		`Continue the kalfa Task ${task}: run \`kalfa task show --handoff --task ${task}\` and do the work its Next part gives, under its rules.`,
-		'Record each logical Section with `kalfa section close`; close the Task with `kalfa task close` when its goal holds.',
+		'Record each logical Section with `kalfa section close`; close the Task with `kalfa task close` when its Done when line holds.',
 	].join(' ');
 }
 

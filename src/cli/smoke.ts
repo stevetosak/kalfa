@@ -171,7 +171,7 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 	{
 		name: 'the private folder is refused until git ignores it',
 		run(world) {
-			const out = exec(world, 'kalfa', ['task', 'start', GOAL]);
+			const out = exec(world, 'kalfa', ['task', 'start', GOAL, '--done-when', 'it works']);
 			expect(out.status === 1 && out.stderr.includes('git does not ignore it'), `kalfa task start was not refused: ${out.stderr.trim()}`);
 			expect(!existsSync(join(world.repo, '.kalfa')), '.kalfa/ was created');
 		},
@@ -183,7 +183,7 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			expect(isDeepStrictEqual(parse(read(world, 'kalfa.yaml')), { schema: 1, modules: ['smoke'], plans: ['docs/**/*.md'] }), 'kalfa.yaml is not as expected');
 			expect(read(world, '.gitignore').split('\n').includes('.kalfa/'), '.gitignore does not ignore .kalfa/');
 			expect(read(world, 'CLAUDE.md').startsWith('@AGENTS.md\n'), 'CLAUDE.md does not import AGENTS.md');
-			kalfa(world, ['task', 'start', GOAL]);
+			kalfa(world, ['task', 'start', GOAL, '--done-when', 'it works']);
 			world.afterInit = snapshot(world.repo, ['.git', '.kalfa']);
 		},
 	},
@@ -249,7 +249,11 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			const parts = `**Done:** smoke work.\n\n**Memory candidates:**\n- ${CANDIDATE}\n\n**Next:** nothing.`;
 			const section = exec(world, 'kalfa', ['section', 'close', 'Smoke section'], { input: parts });
 			expect(section.status === 0, `kalfa section close exited ${section.status}: ${section.stderr.trim()}`);
-			const close = kalfa(world, ['task', 'close']);
+			const refused = exec(world, 'kalfa', ['task', 'close']);
+			expect(refused.status === 1 && refused.stderr.includes('Done when: it works'), `task close without an answer to the Done when line was not refused: ${refused.stderr.trim()}`);
+			const ran = exec(world, 'kalfa', ['task', 'close'], { input: '**Done when:** holds — the smoke ran.\n' });
+			expect(ran.status === 0, `kalfa task close exited ${ran.status}: ${ran.stderr.trim()}`);
+			const close = ran.stdout;
 			expect(close.includes('Ask the Operator ONE question') && close.includes(CANDIDATE), `task close does not ask about the candidate: ${close.trim()}`);
 			const home = join(world.home, MEMORY_HOME);
 			const copies = readdirSync(join(home, 'projects', 'local', 'repo', 'tasks'));

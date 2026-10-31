@@ -12,6 +12,9 @@ const BODY = [
 	'',
 	'## Phase 1',
 	'',
+	'**Done when:** the monitoring',
+	'stack renders.',
+	'',
 	'- [x] **Rotate** the token.',
 	'- [ ] **Monitoring** (ADR 0011):',
 	'  - [x] prove Access',
@@ -23,6 +26,8 @@ const BODY = [
 	'```',
 	'',
 	'## Phase 2',
+	'',
+	'**Done when:** v1 is tagged.',
 	'',
 	'- [ ] Tag the release.',
 	'',
@@ -63,11 +68,37 @@ test('a Plan with a bad status or no title is refused', () => {
 });
 
 test('the format rules: unknown marks, an open Plan without steps, a done Plan with open steps', () => {
-	const unknown = parsePlan(page('active', '- [~] half done\n- [ ] real\n'), 'p.md')!;
-	assert.deepEqual(planStepProblems(unknown), ['line 8: "[~]" is not a step mark; use "- [ ]" or "- [x]", and strike a dropped step\'s text with ~~ ~~.']);
+	const unknown = parsePlan(page('active', '**Done when:** x.\n\n- [~] half done\n- [ ] real\n'), 'p.md')!;
+	assert.deepEqual(planStepProblems(unknown), ['line 10: "[~]" is not a step mark; use "- [ ]" or "- [x]", and strike a dropped step\'s text with ~~ ~~.']);
 	assert.deepEqual(planStepProblems(parsePlan(page('proposed', 'No steps yet.\n'), 'p.md')!), ['an open Plan needs at least one step (a "- [ ]" task item).']);
-	assert.match(planStepProblems(parsePlan(page('done', BODY), 'p.md')!)[0]!, /a done Plan has 3 open step\(s\), first at line 15/);
+	assert.match(planStepProblems(parsePlan(page('done', BODY), 'p.md')!)[0]!, /a done Plan has 3 open step\(s\), first at line 18/);
 	assert.deepEqual(planStepProblems(parsePlan(page('abandoned', BODY), 'p.md')!), []);
+});
+
+test('each part keeps its finish line: a ## group, or the steps above the first heading', () => {
+	assert.deepEqual(
+		readPlanSteps(BODY).parts.map((p) => [p.group, p.line, p.doneWhen, p.steps.length]),
+		[
+			['Phase 1', 5, 'the monitoring stack renders.', 3],
+			['Phase 2', 20, 'v1 is tagged.', 1],
+		],
+	);
+	const flat = readPlanSteps('Intro.\n\n**Done when:** it ships.\n\n- [ ] Ship it.\n');
+	assert.deepEqual(flat.parts.map((p) => [p.group, p.line, p.doneWhen]), [[undefined, 3, 'it ships.']]);
+	// A bold word that is not the label, or a heading with no steps, makes no finish line or part.
+	assert.deepEqual(readPlanSteps('## Notes\n\nProse.\n\n## Work\n\n**Done** when it ships.\n\n- [ ] Ship.\n').parts.map((p) => [p.group, p.doneWhen]), [['Work', undefined]]);
+});
+
+test('an open part of an open Plan needs a finish line; a finished part or a closed Plan does not', () => {
+	const body = '## Old\n\n- [x] Done long ago.\n\n## New\n\n- [ ] Open work.\n- [x] Done work.\n';
+	assert.deepEqual(planStepProblems(parsePlan(page('active', body), 'p.md')!), [
+		'line 12: the part "New" has open steps and no finish line; add a "**Done when:** …" paragraph above its steps.',
+	]);
+	assert.deepEqual(planStepProblems(parsePlan(page('proposed', '- [ ] Open.\n'), 'p.md')!), [
+		'line 8: the part above the first ## heading has open steps and no finish line; add a "**Done when:** …" paragraph above its steps.',
+	]);
+	assert.deepEqual(planStepProblems(parsePlan(page('abandoned', body), 'p.md')!), []);
+	assert.deepEqual(planStepProblems(parsePlan(page('active', BODY), 'p.md')!), []);
 });
 
 test('the summary gives progress and the next step with its first open sub-item', () => {
