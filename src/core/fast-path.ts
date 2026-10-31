@@ -11,21 +11,21 @@
 import { mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CORE_EVENTS, type CoreEventName } from './events.ts';
-import type { ModuleDefinition } from './modules.ts';
+import { type GateContext, handlesEvent, type ModuleDefinition } from './modules.ts';
 import { machineCacheDir } from './machine-paths.ts';
 import { privateDir } from './private-dir.ts';
 
 export const EVENT_TABLE = 'events';
 
-export function handledEvents(modules: Iterable<ModuleDefinition>): CoreEventName[] {
-	const handled = new Set<CoreEventName>();
-	for (const module of modules) for (const name of Object.keys(module.handlers) as CoreEventName[]) handled.add(name);
-	return CORE_EVENTS.filter((name) => handled.has(name));
+/** The events a handler runs for here; `context` applies the Modules' `when` gates. */
+export function handledEvents(modules: Iterable<ModuleDefinition>, context?: GateContext): CoreEventName[] {
+	const list = [...modules];
+	return CORE_EVENTS.filter((name) => list.some((m) => handlesEvent(m, name, context)));
 }
 
 /** One event table line: the event, and its conditions unless a Module that handles it has none. */
-function tableLine(name: CoreEventName, modules: ModuleDefinition[]): string {
-	const handling = modules.filter((m) => m.handlers[name]);
+function tableLine(name: CoreEventName, modules: ModuleDefinition[], context: GateContext | undefined): string {
+	const handling = modules.filter((m) => handlesEvent(m, name, context));
 	if (handling.some((m) => m.filters?.[name] === undefined && m.minContext?.[name] === undefined)) return name;
 	const filters = handling.flatMap((m) => (m.filters?.[name] === undefined ? [] : [`(${m.filters[name]})`]));
 	const sizes = handling.flatMap((m) => (m.minContext?.[name] === undefined ? [] : [m.minContext[name]]));
@@ -33,15 +33,15 @@ function tableLine(name: CoreEventName, modules: ModuleDefinition[]): string {
 	return sizes.length ? `${line}\t${Math.min(...sizes)}` : line;
 }
 
-function writeTable(path: string, modules: Iterable<ModuleDefinition>): string {
+function writeTable(path: string, modules: Iterable<ModuleDefinition>, context: GateContext | undefined): string {
 	const list = [...modules];
-	writeFileSync(path, handledEvents(list).map((name) => `${tableLine(name, list)}\n`).join(''));
+	writeFileSync(path, handledEvents(list, context).map((name) => `${tableLine(name, list, context)}\n`).join(''));
 	return path;
 }
 
 /** Writes the repository's event table; returns its path. */
-export function writeEventTable(root: string, modules: Iterable<ModuleDefinition>): string {
-	return writeTable(join(privateDir(root), EVENT_TABLE), modules);
+export function writeEventTable(root: string, modules: Iterable<ModuleDefinition>, context?: GateContext): string {
+	return writeTable(join(privateDir(root), EVENT_TABLE), modules, context);
 }
 
 export function machineEventTablePath(env: NodeJS.ProcessEnv): string {
@@ -49,10 +49,10 @@ export function machineEventTablePath(env: NodeJS.ProcessEnv): string {
 }
 
 /** Writes the machine's event table (the machine's Modules alone); returns its path. */
-export function writeMachineEventTable(env: NodeJS.ProcessEnv, modules: Iterable<ModuleDefinition>): string {
+export function writeMachineEventTable(env: NodeJS.ProcessEnv, modules: Iterable<ModuleDefinition>, context?: GateContext): string {
 	const path = machineEventTablePath(env);
 	mkdirSync(join(path, '..'), { recursive: true });
-	return writeTable(path, modules);
+	return writeTable(path, modules, context);
 }
 
 /** The shim's rule: a table counts only when it exists and is newer than every source that exists. */

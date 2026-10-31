@@ -3,7 +3,7 @@
 import { join } from 'node:path';
 import { z } from 'zod';
 import { machineConfigDir } from './machine-paths.ts';
-import { moduleList } from './project.ts';
+import { moduleList, moduleName } from './project.ts';
 import { readVersioned, type VersionedFormat } from './versioned-file.ts';
 
 /** A Memory layer's budget for Standing memory: rules by count, index lines by bytes. */
@@ -29,6 +29,11 @@ const settingsSchema = z.strictObject({
 	modules: moduleList,
 	/** The Standing memory budgets; each value left out takes its default. */
 	memory: memorySettings.optional(),
+	/**
+	 * Per Module, the Operator's own settings on this machine. Each Module
+	 * checks its part; a key in `kalfa.yaml` overrides the same key here.
+	 */
+	settings: z.record(moduleName, z.unknown()).optional(),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;

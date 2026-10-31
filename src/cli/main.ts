@@ -2,7 +2,7 @@ import { KalfaError } from '../core/errors.ts';
 import { modulesRoot, packageRoot } from '../core/package-root.ts';
 import { type Command, UsageError } from './command.ts';
 import { adapters } from '../adapters/index.ts';
-import { moduleCommands, modules, withFolderModules } from '../modules/index.ts';
+import { memoryExtensions, moduleCommands, modules, withFolderModules } from '../modules/index.ts';
 import { buildCommand } from './commands/build.ts';
 import { doctorCommand } from './commands/doctor.ts';
 import { initCommand } from './commands/init.ts';
@@ -29,7 +29,7 @@ const commands: Record<string, Command> = {
 	task: taskCommand(adapters, registry),
 	section: sectionCommand(adapters, registry),
 	plan: planCommand,
-	memory: memoryCommand,
+	memory: memoryCommand(memoryExtensions),
 	...Object.fromEntries(Object.entries(moduleCommands).map(([name, command]) => [name, command(adapters)])),
 };
 

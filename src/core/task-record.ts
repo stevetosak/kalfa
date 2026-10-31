@@ -1,5 +1,5 @@
 // The Task Record: one Task's Sections with what was done, found with proof,
-// decided, the Lesson candidates and the next step. It lives in
+// decided, the Memory candidates and the next step. It lives in
 // `<repo>/.kalfa/tasks/<task>.md`: a YAML header, then one `## Section:`
 // block per closed Section, each made of `**Part:** text` parts.
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -11,7 +11,10 @@ import { PRIVATE_DIR, privateDir } from './private-dir.ts';
 import { parseVersioned, type VersionedFormat } from './versioned-file.ts';
 
 /** The Core's parts, in the order a Section prints them. Module parts are `<module>.<part>`. */
-export const CORE_PARTS = ['Done', 'Found', 'Decisions', 'Lesson candidates', 'Next'] as const;
+export const CORE_PARTS = ['Done', 'Found', 'Decisions', 'Memory candidates', 'Next'] as const;
+/** Old part names, read and written as their new name, so older records and habits still work. */
+const RENAMED_PARTS: Readonly<Record<string, (typeof CORE_PARTS)[number]>> = { 'Lesson candidates': 'Memory candidates' };
+export const CANDIDATES_PART = 'Memory candidates';
 const REQUIRED_PART = 'Done';
 const PART_LINE = /^\*\*([^*:]+):\*\*[ \t]*(.*)$/;
 const MODULE_PART = /^([a-z][a-z0-9-]*)\.([a-z][a-z0-9-]*)$/;
@@ -65,7 +68,8 @@ export function parseParts(text: string, isEnabled: (module: string) => boolean,
 	for (const line of text.replace(/\r\n/g, '\n').split('\n')) {
 		const match = PART_LINE.exec(line);
 		if (match) {
-			const name = match[1]!.trim();
+			const given = match[1]!.trim();
+			const name = Object.hasOwn(RENAMED_PARTS, given) ? RENAMED_PARTS[given]! : given;
 			checkPartName(name, isEnabled, where);
 			if (parts.has(name)) throw new KalfaError(`${where}: the part **${name}:** is given twice`);
 			parts.set(name, '');
@@ -172,8 +176,8 @@ export function handoffView(record: TaskRecord): string {
 	const lines = [`Task ${record.id}: ${header.goal} (${header.status}${header.plan ? `; Plan ${header.plan}` : ''})`, `Record: ${record.path}`];
 	if (sections.length) lines.push(`Sections closed: ${sections.map((s) => s.title).join('; ')}`);
 	if (last?.parts.get('Found')) lines.push('', `Found in "${last.title}":`, last.parts.get('Found')!);
-	const candidates = sections.flatMap((s) => (s.parts.get('Lesson candidates') ? [s.parts.get('Lesson candidates')!] : []));
-	if (candidates.length) lines.push('', 'Lesson candidates:', ...candidates);
+	const candidates = sections.flatMap((s) => (s.parts.get(CANDIDATES_PART) ? [s.parts.get(CANDIDATES_PART)!] : []));
+	if (candidates.length) lines.push('', 'Memory candidates:', ...candidates);
 	const next = record.close?.get('Next') ?? last?.parts.get('Next');
 	lines.push('', `Next: ${next ?? 'not recorded'}`);
 	return lines.join('\n');

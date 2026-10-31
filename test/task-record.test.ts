@@ -30,7 +30,7 @@ for (const [what, text, message] of refusals) {
 const record: Omit<TaskRecord, 'id' | 'path'> = {
 	header: { schema: 1, goal: 'Build the monitoring', branch: 'feat/monitoring', status: 'open', started: '2026-10-27' },
 	sections: [
-		{ title: 'platforms proven', parts: new Map([['Done', 'proved.'], ['Found', '- probes pass. Proof: 200.'], ['Lesson candidates', '- a check needs a clean state.'], ['Next', 'render.']]) },
+		{ title: 'platforms proven', parts: new Map([['Done', 'proved.'], ['Found', '- probes pass. Proof: 200.'], ['Memory candidates', '- a check needs a clean state.'], ['Next', 'render.']]) },
 		{ title: 'render', parts: new Map([['Done', 'rendered.'], ['Next', 'apply it.']]) },
 	],
 };
@@ -48,7 +48,12 @@ test('a record of a newer schema is refused', () => {
 test('the Handoff view holds the goal, the Sections, the last findings, the candidates and the next step', () => {
 	const view = handoffView({ ...record, id: 'feat-monitoring', path: '/r.md' });
 	assert.match(view, /^Task feat-monitoring: Build the monitoring \(open\)\nRecord: \/r\.md\nSections closed: platforms proven; render/);
-	assert.match(view, /Lesson candidates:\n- a check needs a clean state\./);
+	assert.match(view, /Memory candidates:\n- a check needs a clean state\./);
 	assert.match(view, /Next: apply it\.$/);
 	assert.doesNotMatch(view, /probes pass/, 'Found comes from the last Section only');
+});
+
+test('an old record with Lesson candidates reads them as Memory candidates', () => {
+	const old = renderRecord(record).replace('**Memory candidates:**', '**Lesson candidates:**');
+	assert.equal(parseRecord(old, '/r.md', 'x').sections[0]!.parts.get('Memory candidates'), '- a check needs a clean state.');
 });

@@ -6,6 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { KalfaError } from '../../core/errors.ts';
 import {
+	type HomeChange,
 	type Layer,
 	type LayerName,
 	memoryHome,
@@ -28,7 +29,8 @@ const today = () => new Date().toLocaleDateString('sv-SE');
 
 const layerOption = { layer: { type: 'string' } } as const;
 
-function layerName(value: string | undefined): LayerName | undefined {
+/** Parses a --layer value. */
+export function layerName(value: string | undefined): LayerName | undefined {
 	if (value === undefined) return undefined;
 	if (value !== 'personal' && value !== 'project') throw new UsageError(`--layer is personal or project, not '${value}'`);
 	return value;
@@ -78,13 +80,52 @@ function checkBudget(io: Io, layer: Layer, records: readonly MemoryRecord[]): vo
 
 const replace = (records: readonly MemoryRecord[], next: MemoryRecord) => [...records.filter((r) => r.id !== next.id), next];
 
-function recordType(value: string | undefined): RecordType {
+/** Parses a --type value. */
+export function recordType(value: string | undefined): RecordType {
 	if (!value) throw new UsageError(`give --type (${RECORD_TYPES.join(', ')})`);
 	if (!(RECORD_TYPES as readonly string[]).includes(value)) throw new UsageError(`--type is one of ${RECORD_TYPES.join(', ')}, not '${value}'`);
 	return value as RecordType;
 }
 
-const subcommands: Record<string, (args: string[], io: Io) => Promise<number>> = {
+export interface NewRecord {
+	type: RecordType;
+	summary: string | undefined;
+	source?: string;
+	id?: string;
+	proposed?: boolean;
+	body?: string;
+}
+
+/**
+ * Checks and writes one new record in `layer` as one commit, with any other
+ * change of the Memory home (`also`, e.g. the inbox file it came from).
+ * Refused over the rule length or the layer's budget.
+ */
+export function addRecord(io: Io, layer: Layer, input: NewRecord, also: HomeChange = {}): MemoryRecord & { layer: Layer; path: string } {
+	if (!input.summary?.trim()) throw new UsageError('give --summary "<one line>"');
+	const records = readLayer(layer);
+	if (input.id && records.some((r) => r.id === input.id)) throw new KalfaError(`'${input.id}' already exists in the ${layer.label} layer`);
+	const date = today();
+	const header: RecordHeader = checkHeader({
+		schema: 1,
+		type: input.type,
+		status: input.proposed ? 'proposed' : 'active',
+		summary: input.summary,
+		created: date,
+		confirmed: date,
+		...(input.source ? { source: input.source } : {}),
+	});
+	const record: MemoryRecord = { id: input.id ?? uniqueId(records, slugOf(header.summary)), header, body: (input.body ?? '').trim() };
+	checkRule(record, io);
+	checkBudget(io, layer, [...records, record]);
+	const [path] = writeRecords(memoryHome(io.env), [{ layer, record }], `add ${input.type} ${record.id} (${layer.label})`, also);
+	return { ...record, layer, path: path! };
+}
+
+/** A subcommand of `kalfa memory`; a Module can add its own (the `memory` Module adds search, lint, inbox). */
+export type MemorySubcommand = (args: string[], io: Io) => Promise<number>;
+
+const subcommands: Record<string, MemorySubcommand> = {
 	async add(args, io) {
 		const { values } = parseCommandArgs(args, {
 			...layerOption,
@@ -97,25 +138,8 @@ const subcommands: Record<string, (args: string[], io: Io) => Promise<number>> =
 		const type = recordType(values.type);
 		const name = layerName(values.layer);
 		if (!name) throw new UsageError('give --layer personal or --layer project');
-		if (!values.summary?.trim()) throw new UsageError('give --summary "<one line>"');
-		const layer = layerFor(io, name);
-		const records = readLayer(layer);
-		if (values.id && records.some((r) => r.id === values.id)) throw new KalfaError(`'${values.id}' already exists in the ${layer.label} layer`);
-		const date = today();
-		const header: RecordHeader = checkHeader({
-			schema: 1,
-			type,
-			status: values.proposed ? 'proposed' : 'active',
-			summary: values.summary,
-			created: date,
-			confirmed: date,
-			...(values.source ? { source: values.source } : {}),
-		});
-		const record: MemoryRecord = { id: values.id ?? uniqueId(records, slugOf(header.summary)), header, body: (await io.stdin()).trim() };
-		checkRule(record, io);
-		checkBudget(io, layer, [...records, record]);
-		const [path] = writeRecords(memoryHome(io.env), [{ layer, record }], `add ${type} ${record.id} (${layer.label})`);
-		io.out(`${header.status === 'proposed' ? 'Proposed' : 'Added'} ${type} ${record.id} in the ${layer.label} layer: ${path}`);
+		const record = addRecord(io, layerFor(io, name), { type, summary: values.summary, source: values.source, id: values.id, proposed: values.proposed, body: await io.stdin() });
+		io.out(`${record.header.status === 'proposed' ? 'Proposed' : 'Added'} ${type} ${record.id} in the ${record.layer.label} layer: ${record.path}`);
 		return 0;
 	},
 
@@ -197,19 +221,37 @@ const subcommands: Record<string, (args: string[], io: Io) => Promise<number>> =
 	},
 };
 
-export const memoryCommand: Command = {
-	summary: 'Add, supersede, confirm, show or list the Memory records of Standing memory',
-	usage: [
-		'kalfa memory add --type rule|fact|decision|open --layer personal|project --summary "<one line>" [--source <link>] [--id <id>] [--proposed]   (body on stdin, optional)',
-		'       kalfa memory supersede <id> --summary "<one line>" [--layer …] [--id <id>]   (body on stdin, optional)',
-		'       kalfa memory confirm <id> "<how you checked it>" [--layer …]',
-		'       kalfa memory show <id> [--layer …]',
-		'       kalfa memory list [--layer personal|project] [--status active|proposed|superseded|all]',
-	].join('\n'),
-	async run(args, io) {
-		const [sub, ...rest] = args;
-		const run = sub && Object.hasOwn(subcommands, sub) ? subcommands[sub] : undefined;
-		if (!run) throw new UsageError(sub ? `unknown subcommand '${sub}'` : 'give a subcommand');
-		return run(rest, io);
-	},
-};
+const CORE_USAGE = [
+	'kalfa memory add --type rule|fact|decision|open --layer personal|project --summary "<one line>" [--source <link>] [--id <id>] [--proposed]   (body on stdin, optional)',
+	'       kalfa memory supersede <id> --summary "<one line>" [--layer …] [--id <id>]   (body on stdin, optional)',
+	'       kalfa memory confirm <id> "<how you checked it>" [--layer …]',
+	'       kalfa memory show <id> [--layer …]',
+	'       kalfa memory list [--layer personal|project] [--status active|proposed|superseded|all]',
+];
+
+/** A Module's additions to `kalfa memory`: its subcommands and their usage lines. */
+export interface MemoryExtension {
+	subcommands: Record<string, MemorySubcommand>;
+	usage: string[];
+}
+
+/** `kalfa memory`: the Core's subcommands, and those the Modules add (a Core name cannot be taken). */
+export function memoryCommand(extensions: readonly MemoryExtension[] = []): Command {
+	const all: Record<string, MemorySubcommand> = { ...subcommands };
+	for (const extension of extensions) {
+		for (const [name, run] of Object.entries(extension.subcommands)) {
+			if (Object.hasOwn(all, name)) throw new KalfaError(`kalfa memory ${name} is defined twice`);
+			all[name] = run;
+		}
+	}
+	return {
+		summary: 'Add, supersede, confirm, show or list the Memory records of Standing memory',
+		usage: [...CORE_USAGE, ...extensions.flatMap((e) => e.usage.map((line) => `       ${line}`))].join('\n'),
+		async run(args, io) {
+			const [sub, ...rest] = args;
+			const run = sub && Object.hasOwn(all, sub) ? all[sub] : undefined;
+			if (!run) throw new UsageError(sub ? `unknown subcommand '${sub}'` : 'give a subcommand');
+			return run(rest, io);
+		},
+	};
+}

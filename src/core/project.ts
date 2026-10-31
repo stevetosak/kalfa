@@ -9,7 +9,7 @@ export const PROJECT_FILE = 'kalfa.yaml';
 /** The instruction file every harness can read (some only through an import). */
 export const AGENTS_FILE = 'AGENTS.md';
 
-const moduleName = z.string().regex(/^[a-z][a-z0-9-]*$/, 'a Module name is lower-case letters, digits and dashes');
+export const moduleName = z.string().regex(/^[a-z][a-z0-9-]*$/, 'a Module name is lower-case letters, digits and dashes');
 
 /** A list of Module names to turn on (in `kalfa.yaml`, or in the machine settings). */
 export const moduleList = z

@@ -18,6 +18,9 @@ export interface HandlerContext {
 	usage?: UsageSource;
 }
 
+/** What decides whether a handler runs here: the project and the machine settings, nothing from the event. */
+export type GateContext = Pick<HandlerContext, 'project' | 'settings'>;
+
 export type Handler = (event: CoreEvent, context: HandlerContext) => Promise<HandlerResult | undefined> | HandlerResult | undefined;
 
 export interface ModuleDefinition {
@@ -40,15 +43,47 @@ export interface ModuleDefinition {
 	 * filter, either one is enough.
 	 */
 	minContext?: Partial<Record<CoreEventName, number>>;
+	/**
+	 * Per event, whether the handler runs here at all (a setting turns it on).
+	 * When it says no, the shim does not start Node for this Module and the
+	 * Dispatcher skips the handler, so a feature that is off costs nothing.
+	 */
+	when?: Partial<Record<CoreEventName, (context: GateContext) => boolean>>;
 	/** The schema of the Module's part of `settings:` in `kalfa.yaml`. */
 	settings?: z.ZodType;
 }
 
-/** The Module's settings from `kalfa.yaml`, checked against its schema (defaults filled in). */
-export function moduleSettings<S extends z.ZodType>(module: ModuleDefinition & { settings: S }, project: Project | undefined): z.infer<S> {
-	const result = module.settings.safeParse(project?.file?.settings[module.name] ?? {});
-	if (!result.success) throw new KalfaError(`kalfa.yaml settings.${module.name}: ${result.error.issues.map((i) => `${i.path.join('.') || '(top)'}: ${i.message}`).join('; ')}`);
+const settingsObject = (value: unknown): Record<string, unknown> => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
+
+/**
+ * The Module's settings, checked against its schema (defaults filled in): the
+ * machine settings' part, then `kalfa.yaml`'s part over it, key by key.
+ */
+export function moduleSettings<S extends z.ZodType>(module: ModuleDefinition & { settings: S }, project: Project | undefined, machine?: Settings): z.infer<S> {
+	const merged = { ...settingsObject(machine?.settings?.[module.name]), ...settingsObject(project?.file?.settings[module.name]) };
+	const result = module.settings.safeParse(merged);
+	if (!result.success) throw new KalfaError(`settings.${module.name} (kalfa.yaml or the machine settings): ${result.error.issues.map((i) => `${i.path.join('.') || '(top)'}: ${i.message}`).join('; ')}`);
 	return result.data;
+}
+
+/**
+ * The Module has a handler for the event that runs here. A gate that fails
+ * (a broken setting) counts as yes, so the handler runs and reports the error.
+ */
+export function handlesEvent(module: ModuleDefinition, name: CoreEventName, context: GateContext | undefined): boolean {
+	if (!module.handlers[name]) return false;
+	const gate = module.when?.[name];
+	if (!gate || !context) return true;
+	try {
+		return gate(context);
+	} catch {
+		return true;
+	}
+}
+
+/** The Module runs here: the machine settings or the project file turn it on. */
+export function isModuleOn(name: string, project: Project | undefined, machine: Settings): boolean {
+	return machine.modules.includes(name) || (project?.file?.modules.includes(name) ?? false);
 }
 
 /** The Core's own handlers; they run in every repository, first. */

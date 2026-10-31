@@ -6,7 +6,7 @@
 // outside the smoke folder changes; on a failure the folder is kept for a look.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, relative } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -22,6 +22,8 @@ const PERSONAL_RULE = 'Smoke personal rule.';
 const PROJECT_FACT = 'Smoke project fact.';
 /** The Memory home kalfa memory creates, the Operator's data: kalfa uninstall keeps it. */
 const MEMORY_HOME = '.local/share/kalfa/memory';
+const CANDIDATE = 'Smoke candidate from the Task.';
+const ACCEPTED = 'Smoke accepted candidate.';
 const GOAL = 'smoke goal';
 
 /** The Operator's own settings: an approval and a hook that kalfa must keep. */
@@ -235,6 +237,28 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			const context = String(output.hookSpecificOutput?.additionalContext ?? '');
 			expect(context.includes(PERSONAL_RULE) && context.includes(`[fact] ${PROJECT_FACT}`), 'session.start does not inject both layers');
 			expect(String(output.systemMessage ?? '').includes('memory: 1 rule, 1 index line'), `the summary does not count the records: ${output.systemMessage}`);
+		},
+	},
+	{
+		name: 'memory Module: Task close puts the candidates into the inbox, accept writes a record, search finds it',
+		run(world) {
+			cpSync(join(world.packageRoot, 'modules', 'memory'), join(world.root, 'modules', 'memory'), { recursive: true });
+			const project = parse(read(world, 'kalfa.yaml'));
+			writeFileSync(join(world.repo, 'kalfa.yaml'), stringify({ ...project, modules: [...project.modules, 'memory'] }));
+			kalfa(world, ['build']);
+			const parts = `**Done:** smoke work.\n\n**Memory candidates:**\n- ${CANDIDATE}\n\n**Next:** nothing.`;
+			const section = exec(world, 'kalfa', ['section', 'close', 'Smoke section'], { input: parts });
+			expect(section.status === 0, `kalfa section close exited ${section.status}: ${section.stderr.trim()}`);
+			const close = kalfa(world, ['task', 'close']);
+			expect(close.includes('Ask the Operator ONE question') && close.includes(CANDIDATE), `task close does not ask about the candidate: ${close.trim()}`);
+			const home = join(world.home, MEMORY_HOME);
+			const copies = readdirSync(join(home, 'projects', 'local', 'repo', 'tasks'));
+			expect(copies.length === 1, `the Task Record is not copied into the Memory home: ${copies.join(', ')}`);
+			const id = kalfa(world, ['memory', 'inbox']).split(/\s/)[0]!;
+			kalfa(world, ['memory', 'inbox', 'accept', id, '--type', 'fact', '--layer', 'project', '--summary', ACCEPTED]);
+			expect(kalfa(world, ['memory', 'inbox']).includes('the inbox is empty'), 'accept left the candidate in the inbox');
+			expect(kalfa(world, ['memory', 'search', 'accepted candidate']).includes(`[memory] fact: ${ACCEPTED}`), 'search does not find the accepted record');
+			expect(kalfa(world, ['memory', 'lint']).trim() === 'no findings', 'the lint has findings on fresh records');
 		},
 	},
 	{

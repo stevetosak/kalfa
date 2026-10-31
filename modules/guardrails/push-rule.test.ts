@@ -75,5 +75,5 @@ test('the Module blocks through the Dispatcher, reads its protected branches fro
 	assert.equal((await dispatch(event('git push origin trunk'), registry, context({ guardrails: { 'protected-branches': ['trunk'] } }))).block.length, 1);
 
 	const broken = await dispatch(event('git push origin x'), registry, context({ guardrails: { 'protected-branches': 'trunk' } }));
-	assert.match(broken.block[0]!, /Module guardrails failed on command\.before: kalfa\.yaml settings\.guardrails[\s\S]*could not run/);
+	assert.match(broken.block[0]!, /Module guardrails failed on command\.before: settings\.guardrails \(kalfa\.yaml or the machine settings\)[\s\S]*could not run/);
 });

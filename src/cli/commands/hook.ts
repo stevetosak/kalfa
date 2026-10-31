@@ -38,14 +38,14 @@ function refreshEventTables(force: boolean, context: HandlerContext, registry: R
 	const config = settingsPath(context.env);
 	// Without machine settings the shim needs no machine table (it exits at once).
 	if (existsSync(config) && (force || !isTableFresh(machineEventTablePath(context.env), [config]))) {
-		const machine = activeModules(registry, { project: undefined, settings: context.settings }).modules;
-		orNotice(() => writeMachineEventTable(context.env, machine), '', notices);
+		const machineOnly = { project: undefined, settings: context.settings };
+		orNotice(() => writeMachineEventTable(context.env, activeModules(registry, machineOnly).modules, machineOnly), '', notices);
 	}
 	const project = context.project;
 	if (!project?.file) return;
 	const sources = [join(project.root, PROJECT_FILE), config];
 	if (force || !isTableFresh(join(project.root, PRIVATE_DIR, EVENT_TABLE), sources)) {
-		orNotice(() => writeEventTable(project.root, activeModules(registry, context).modules), '', notices);
+		orNotice(() => writeEventTable(project.root, activeModules(registry, context).modules, context), '', notices);
 	}
 }
 

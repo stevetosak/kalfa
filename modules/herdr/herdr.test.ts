@@ -173,7 +173,7 @@ test('kalfa herdr continue: the Module must be on, the Task open; exit 3 at a ne
 	assert.equal(await command.run(['continue', '--force'], captureIo(root, env)), 0);
 
 	const off = gitRepo({ 'kalfa.yaml': 'schema: 1\nmodules: []\n' });
-	await assert.rejects(command.run(['continue'], captureIo(off, env)), /the herdr Module is not on in this repository/);
+	await assert.rejects(command.run(['continue'], captureIo(off, env)), /the herdr Module is not on here/);
 	await assert.rejects(command.run(['continue'], captureIo(root, { HOME: env.HOME })), /cannot tell which harness/);
 });
 

@@ -23,7 +23,7 @@ function machine(config = 'schema: 1\nmodules: []\n') {
 async function memory(env: NodeJS.ProcessEnv, cwd: string, args: string[], stdin = '') {
 	const io = captureIo(cwd, env, stdin);
 	try {
-		const code = await memoryCommand.run(args, io);
+		const code = await memoryCommand().run(args, io);
 		return { code, out: io.stdout.join('\n'), error: undefined };
 	} catch (error) {
 		if (error instanceof KalfaError) return { code: 1, out: io.stdout.join('\n'), error: error.message };

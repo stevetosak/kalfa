@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { moduleSettings } from '../src/core/modules.ts';
+import { isModuleOn, moduleSettings } from '../src/core/modules.ts';
 import { loadProject, repoRootOf } from '../src/core/project.ts';
 import { tempDir, tempRepo } from './helpers.ts';
 
@@ -61,5 +61,16 @@ test('a Module reads its own settings, with defaults, and a wrong value names th
 	const project = (settings: Record<string, unknown>) => ({ root: '/r', file: { schema: 1 as const, modules: ['gate'], plans: [], settings } });
 	assert.deepEqual(moduleSettings(module, project({})), { branches: ['main'] });
 	assert.deepEqual(moduleSettings(module, project({ gate: { branches: ['trunk'] } })), { branches: ['trunk'] });
-	assert.throws(() => moduleSettings(module, project({ gate: { branches: 'trunk' } })), /kalfa\.yaml settings\.gate: branches: /);
+	assert.throws(() => moduleSettings(module, project({ gate: { branches: 'trunk' } })), /settings\.gate \(kalfa\.yaml or the machine settings\): branches: /);
+});
+
+test('a Module setting from the machine settings applies, and kalfa.yaml overrides it key by key', () => {
+	const schema = z.object({ branches: z.array(z.string()).default(['main']), strict: z.boolean().default(false) });
+	const module = { name: 'gate', handlers: {}, settings: schema };
+	const project = (settings: Record<string, unknown>) => ({ root: '/r', file: { schema: 1 as const, modules: [], plans: [], settings } });
+	const machine = { schema: 1 as const, modules: ['gate'], settings: { gate: { branches: ['trunk'], strict: true } } };
+	assert.deepEqual(moduleSettings(module, undefined, machine), { branches: ['trunk'], strict: true });
+	assert.deepEqual(moduleSettings(module, project({ gate: { strict: false } }), machine), { branches: ['trunk'], strict: false });
+	assert.equal(isModuleOn('gate', project({}), machine), true);
+	assert.equal(isModuleOn('gate', project({}), { schema: 1, modules: [] }), false);
 });
