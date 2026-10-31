@@ -81,10 +81,10 @@ each project starts on kalfa with its Project layer already sorted.
 
 ## 6. Projects
 
-- [ ] cloud-infra: `kalfa.yaml` with `infra` and the platform Module, build, a full Task closed through kalfa. The doctrine's table of deployed projects moves to a Reference page here; the generator list stays its source.
-- [ ] doma: the `AGENTS.md` bridge, Modules without `docs` (the platform Module on).
-- [ ] Authos: `kalfa.yaml` with the platform Module.
-- [ ] symbiosis: the Core alone.
+- [x] cloud-infra: `kalfa.yaml` with `infra` and the platform Module, build, a full Task closed through kalfa. The doctrine's table of deployed projects moves to a Reference page here; the generator list stays its source.
+- [x] doma: Modules without `docs` (the platform Module on). No bridge: doma has no `CLAUDE.md` and no Claude-only lines, so Claude Code reads `AGENTS.md` itself.
+- [x] Authos: `kalfa.yaml` with the platform Module.
+- [x] symbiosis: the Core alone.
 
 ## 7. Retire the old setup
 
