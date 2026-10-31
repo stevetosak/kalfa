@@ -69,18 +69,24 @@ function moduleFolderLines(dirs: readonly string[], env: NodeJS.ProcessEnv): str
 	return [`${dirs.length}`, ...lines, ...twice.map((name) => `problem: Module '${name}' is in more than one folder`)];
 }
 
-/** Per harness: the skill references in the instruction files it reads that none of its skills answers. */
-function skillRefLines(root: string, env: NodeJS.ProcessEnv, adapters: ReadonlyMap<string, Adapter>): string[] {
+/**
+ * Per harness: the skill references in the instruction files it reads that
+ * none of its skills answers, without the names `kalfa.yaml` ignores.
+ */
+function skillRefLines(root: string, env: NodeJS.ProcessEnv, adapters: ReadonlyMap<string, Adapter>, ignored: ReadonlySet<string>): string[] {
 	if (!env.HOME) throw new KalfaError('HOME is not set; kalfa cannot find the installed skills');
 	const lines: string[] = [];
 	for (const adapter of adapters.values()) {
 		if (!adapter.skills) continue;
 		const known = new Set([...installedSkills(adapter.skills.sources(env.HOME, root)), ...adapter.skills.builtins]);
 		const files = [...new Set([AGENTS_FILE, adapter.project?.instructions?.file ?? AGENTS_FILE])].filter((file) => existsSync(join(root, file)));
-		const refs = files.flatMap((file) => skillRefs(readFileSync(join(root, file), 'utf8')).map((ref) => ({ file, ...ref })));
+		const all = files.flatMap((file) => skillRefs(readFileSync(join(root, file), 'utf8')).map((ref) => ({ file, ...ref })));
+		const refs = all.filter((ref) => !ignored.has(ref.name));
 		const missing = refs.filter((ref) => !known.has(ref.name));
-		lines.push(missing.length ? `${adapter.name}: ${missing.length} of ${refs.length} not found` : `${adapter.name}: ${refs.length} found`);
+		const skipped = all.length - refs.length ? ` (${all.length - refs.length} ignored)` : '';
+		lines.push(`${adapter.name}: ${missing.length ? `${missing.length} of ${refs.length} not found` : `${refs.length} found`}${skipped}`);
 		for (const ref of missing) lines.push(`  ${ref.file}:${ref.line}: ${ref.name}`);
+		if (missing.length) lines.push(`  (not a skill? add it to skill-refs: {ignore: [...]} in ${PROJECT_FILE})`);
 	}
 	return ['', ...lines];
 }
@@ -119,7 +125,7 @@ export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs
 				}
 			}
 			part(io, 'Capabilities', () => capabilityLines(project, adapters, moduleDirs(io.env)));
-			part(io, 'skill references', () => skillRefLines(project.root, io.env, adapters));
+			part(io, 'skill references', () => skillRefLines(project.root, io.env, adapters, new Set(project.file?.['skill-refs']?.ignore)));
 			if (project.file) {
 				part(io, 'build', () => {
 					const run = buildProject(project, adapters, moduleDirs(io.env), io.env, { dryRun: true, offline: true });

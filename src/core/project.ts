@@ -30,6 +30,8 @@ const projectFileSchema = z.strictObject({
 	plans: z.array(repoGlob).default([]),
 	/** Per Module, its own settings; each Module checks its part. */
 	settings: z.record(moduleName, z.unknown()).default({}),
+	/** `kalfa doctor`'s skill references: `ignore` names the ones that are not skills, e.g. a URL path like `/callback`. */
+	'skill-refs': z.strictObject({ ignore: z.array(z.string().min(1)).default([]) }).optional(),
 });
 
 export type ProjectFile = z.infer<typeof projectFileSchema>;

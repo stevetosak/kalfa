@@ -115,7 +115,14 @@ test('doctor names the skill references that no installed skill answers', async 
 	const home = tempRepo({ '.claude/skills/present/SKILL.md': 'x' });
 	const root = gitRepo({ 'AGENTS.md': 'Use the `present` skill.\n', 'CLAUDE.md': '@AGENTS.md\n\nRun `/compact`, then `/gone`.\n' });
 	const doctor = doctorCommand(adapters, () => [modulesDir], () => checkout());
-	assert.match((await run(doctor, root, [], { HOME: home })).out, /skill references:\n {2}claude: 1 of 3 not found\n {4}CLAUDE\.md:3: gone$/m);
+	assert.match((await run(doctor, root, [], { HOME: home })).out, /skill references:\n {2}claude: 1 of 3 not found\n {4}CLAUDE\.md:3: gone\n {4}\(not a skill\? add it to skill-refs/);
+});
+
+test('doctor leaves out the skill references that kalfa.yaml ignores, and counts them', async () => {
+	const home = tempRepo({});
+	const root = gitRepo({ 'kalfa.yaml': 'schema: 1\nskill-refs:\n  ignore: [callback]\n', 'CLAUDE.md': 'The redirect goes to `/callback`.\n' });
+	const doctor = doctorCommand(adapters, () => [modulesDir], () => checkout());
+	assert.match((await run(doctor, root, [], { HOME: home })).out, /skill references:\n {2}claude: 0 found \(1 ignored\)$/m);
 });
 
 test('doctor lists the Module folders and flags a missing one and a Module in two', async () => {
