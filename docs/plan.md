@@ -52,15 +52,21 @@ The old hooks keep running while these are built.
 
 ## 4. Switch, one event at a time
 
-Each switch is proven in a real session before the old entry is removed. The
-settings backup is the rollback.
+Each switch is proven in a real session. The settings backup is the rollback.
+The Operator chose a working prototype first: the hooks are wired by hand in
+one change, and the `docs` Module stays unwired until later. The old
+documentation gate before a pull request is removed; the old session report
+stays beside kalfa's, because it reports the documentation site's Plans and
+handoffs.
 
+- [x] Machine-level Modules: `modules:` in the machine settings run in every session, in every repository and outside one; `kalfa.yaml` adds the project's. Personal Modules (the meter) never go in a committed file. Outside a kalfa project the shim reads a machine event table.
 - [ ] `session.start`
-- [ ] `command.before` (the push gate)
-- [ ] The meter (`prompt.submit`, `tool.after`)
-- [ ] The status line
-- [ ] Remove the dead stop hook.
-- [ ] The smoke also installs the harness hooks at user scope and checks that a foreign hook stays.
+- [x] `command.before` (the push rule; the guardrails approvals as user-level `permissions.ask`)
+- [ ] The meter (`prompt.submit`, `tool.after`): the quiet block and the turn stop still need proof.
+- [x] The status line
+- [x] Remove the dead stop hook.
+- [ ] Later: `kalfa install` writes the harness hooks at user scope, and the smoke checks that a foreign hook stays.
+- [ ] Later: wire the `docs` Module.
 
 ## 5. Projects
 
