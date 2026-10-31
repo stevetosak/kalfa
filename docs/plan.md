@@ -62,7 +62,7 @@ handoffs.
 - [x] Machine-level Modules: `modules:` in the machine settings run in every session, in every repository and outside one; `kalfa.yaml` adds the project's. Personal Modules (the meter) never go in a committed file. Outside a kalfa project the shim reads a machine event table.
 - [x] `session.start`
 - [x] `command.before` (the push rule; the guardrails approvals as user-level `permissions.ask`)
-- [ ] The meter (`prompt.submit`, `tool.after`): the quiet block is proven; the turn stop still needs proof.
+- [x] The meter (`prompt.submit`, `tool.after`)
 - [x] The status line
 - [x] Remove the dead stop hook.
 - [ ] Later: `kalfa install` writes the harness hooks at user scope, and the smoke checks that a foreign hook stays.
