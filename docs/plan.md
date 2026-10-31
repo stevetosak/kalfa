@@ -77,15 +77,17 @@ each project starts on kalfa with its Project layer already sorted.
 - [x] The `memory` Module: MiniSearch over the Memory home, the Task Records, the project documentation and the old archives; recall at `session.start` from the open Task; `recall-on-prompt` as a setting, off; Memory candidates (the Section part replaces Lesson candidates), the question at Task close and the inbox; the lint; the Task Record copied into the Memory home at close. (Built 2026-10-31; the clean-state smoke proves it. Turned on per machine or per repository.)
 - [x] Sort the current memory into the three layers as proposed records; the Operator reviews the sort one layer at a time before anything moves. (Reviewed 2026-10-31: 79 proposed records in the Personal layer and four Project layers; the generic infrastructure rules wait for the Rule pack. Measured: Personal 26 rules and 7.4 KB in all, the largest Project layer 5.1 KB, against about 44 KB of memory files today.)
 - [x] The switch: the proposed records become active, the old memory files go to a backup, `kalfa install` turns off the harness's own automatic memory, and the Operator changes the machine policy to write memory through `kalfa memory`. Set the budgets from the measured size. (Switched 2026-10-31: 80 active records; a new session in the kalfa repository receives 28 rules and 18 index lines at `session.start`, and the harness's own memory section is gone from its system prompt.)
-- [ ] Move the workspace deployment doctrine and the generic infrastructure rules into the `infra` Module's Rule pack.
+- [x] Move the generic infrastructure rules into the `infra` Module's Rule pack, and the workspace deployment doctrine into a platform Module of its own, with path-scoped parts ([ADR 0002](adr/0002-memory.md), amendment). The platform Module lives in the cloud-infra repository; the machine setting `module-dirs` finds it ([ADR 0001](adr/0001-kalfa-shape.md), amendment). (Proven 2026-10-31 in a scratch repository: the unscoped rules load at the session start, the Docker part only when a Dockerfile is read.)
 
 ## 6. Projects
 
-- [ ] cloud-infra: `kalfa.yaml`, build, a full Task closed through kalfa.
-- [ ] doma: the `AGENTS.md` bridge, Modules without `docs`.
+- [ ] cloud-infra: `kalfa.yaml` with `infra` and the platform Module, build, a full Task closed through kalfa. The doctrine's table of deployed projects moves to a Reference page here; the generator list stays its source.
+- [ ] doma: the `AGENTS.md` bridge, Modules without `docs` (the platform Module on).
+- [ ] Authos: `kalfa.yaml` with the platform Module.
 - [ ] symbiosis: the Core alone.
 
 ## 7. Retire the old setup
 
 - [ ] Remove the agent folder from the documentation-site repository; the site stays.
+- [ ] Remove the workspace doctrine `~/Projects/Active/CLAUDE.md` once cloud-infra, doma and Authos build with the platform Module on.
 - [ ] Tag the first release.

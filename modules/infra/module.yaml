@@ -1,5 +1,5 @@
 schema: 1
-description: Commands that change infrastructure ask first; every terraform command and the kubectl verbs that write.
+description: Commands that change infrastructure ask first (every terraform command and the kubectl verbs that write), and a Rule pack of generic Kubernetes, Helm and CloudNativePG rules.
 commands:
   ask:
     - terraform *

@@ -102,3 +102,21 @@ prompt is a setting, off by default, for a trial against this default.
 - **Embeddings and hybrid search.** Deferred until keyword search is shown to
   miss; the search sits behind one function of the Module, so a library with
   vectors can replace MiniSearch later.
+
+## Amendment 2026-10-31: a generic Rule pack and a platform Module
+
+The workspace deployment doctrine was one 22 KB file that loaded in every
+repository of the workspace, including those that deploy nothing. It describes
+one Operator's cluster, so it does not fit a Rule pack, which is generic and
+publishable. It became a platform Module of its own, which only the deploying
+repositories turn on; the generic infrastructure rules from the memory sort
+became the Rule pack of `infra`, and the rules about one cloud provider went
+with the platform. Most of the doctrine is a template or a checklist that
+matters only while one kind of file is written, so those parts are path-scoped
+rules, and one short rule that always loads names them. A path-scoped rule
+arrives only with the result of the first read or write of a matching file, so
+that short rule tells the agent to read the matching rule before it creates
+such a file. The scoping is Claude Code's; a harness without it loads every
+part. The platform Module is not part of the kalfa package: it lives in the
+infrastructure repository it describes, and kalfa finds it through the machine
+setting `module-dirs` (ADR 0001, amendment of the same day).
