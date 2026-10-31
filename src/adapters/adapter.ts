@@ -59,6 +59,12 @@ export interface UserFiles {
 	 */
 	statusLine?(data: Record<string, unknown>, tap: string | undefined): Record<string, unknown>;
 	approvals: ApprovalLayout;
+	/**
+	 * The top-level setting that turns off the harness's own automatic memory,
+	 * and its value for off. kalfa's Standing memory replaces it (ADR 0002), so
+	 * `kalfa install` sets it and `uninstall` puts the earlier value back.
+	 */
+	nativeMemory?: { key: string; off: unknown };
 }
 
 /** A new session: its name and the prompt it starts on. */

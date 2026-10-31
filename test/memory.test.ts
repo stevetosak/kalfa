@@ -122,6 +122,36 @@ test('confirm needs a proof, dates the record and writes the proof into the hist
 	assert.match(show.out, /History:\n- \d{4}-\d\d-\d\d confirm a-fact: read it back\n- \d{4}-\d\d-\d\d add fact a-fact/);
 });
 
+test('activate makes proposed records active, one commit per layer, and checks every budget first', async () => {
+	const { repo, env } = machine('schema: 1\nmodules: []\nmemory:\n  personal: {rules: 2}\n');
+	for (const summary of ['Rule one.', 'Rule two.']) await memory(env, repo, ['add', '--type', 'rule', '--layer', 'personal', '--summary', summary, '--proposed']);
+	await memory(env, repo, ['add', '--type', 'fact', '--layer', 'project', '--summary', 'A fact.', '--proposed']);
+	assert.match((await memory(env, repo, ['activate', 'no-such'])).error ?? '', /no proposed record 'no-such'/);
+
+	const one = await memory(env, repo, ['activate', 'rule-one']);
+	assert.equal(one.code, 0, one.error);
+	const status = () => readLayer(personalLayer(memoryHome(env))).map((r) => [r.id, r.header.status]);
+	assert.deepEqual(status(), [
+		['rule-one', 'active'],
+		['rule-two', 'proposed'],
+	]);
+
+	const all = await memory(env, repo, ['activate']);
+	assert.equal(all.code, 0, all.error);
+	assert.match(all.out, /Activated 1 record\(s\) in the personal layer\nActivated 1 record\(s\) in the github.com\/someone\/project layer/);
+	assert.deepEqual(gitLog(env).slice(0, 3), [
+		'activate 1 proposed record(s) (github.com/someone/project)',
+		'activate 1 proposed record(s) (personal)',
+		'activate 1 proposed record(s) (personal)',
+	]);
+	assert.equal((await memory(env, repo, ['activate'])).out, 'no proposed records here');
+
+	await memory(env, repo, ['add', '--type', 'rule', '--layer', 'personal', '--summary', 'Rule three.', '--proposed']);
+	const over = await memory(env, repo, ['activate']);
+	assert.match(over.error ?? '', /3 active rules \(limit 2\)/);
+	assert.equal(readLayer(personalLayer(memoryHome(env))).find((r) => r.id === 'rule-three')?.header.status, 'proposed', 'nothing is written over budget');
+});
+
 test('an id in two layers needs --layer; hand edits are committed on their own first', async () => {
 	const { repo, env } = machine();
 	await memory(env, repo, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'Same.']);

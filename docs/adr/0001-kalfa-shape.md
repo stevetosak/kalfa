@@ -93,4 +93,6 @@ user settings through the Adapter, the same way `kalfa build` writes a
 repository: it keeps every entry of the Operator and of other tools, backs the
 file up before it changes it, and `kalfa uninstall` removes only what is
 kalfa's. A hook or status line is kalfa's by the program it runs; an approval
-only when kalfa recorded adding it. APM keeps only the personal skills.
+only when kalfa recorded adding it. APM keeps only the personal skills. Since
+ADR 0002, install also turns off the harness's own automatic memory, and
+uninstall gives back the value it had, unless the Operator changed it since.

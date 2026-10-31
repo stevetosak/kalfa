@@ -32,13 +32,13 @@ function built(path: string): string {
 function run(adapters: ReadonlyMap<string, Adapter>, io: Io, wants: (adapter: Adapter) => UserWants, dryRun: boolean, remove: boolean): number {
 	const state = readInstallState(io.env);
 	const users = [...adapters.values()].filter((adapter) => adapter.user);
-	for (const adapter of users) applyUser(home(io.env), adapter.user!, wants(adapter), state.harnesses[adapter.name]?.approvals, { dryRun: true });
+	for (const adapter of users) applyUser(home(io.env), adapter.user!, wants(adapter), state.harnesses[adapter.name], { dryRun: true });
 	for (const adapter of users) {
-		const result = applyUser(home(io.env), adapter.user!, wants(adapter), state.harnesses[adapter.name]?.approvals, { dryRun });
+		const result = applyUser(home(io.env), adapter.user!, wants(adapter), state.harnesses[adapter.name], { dryRun });
 		io.out(`${adapter.name}: ${result.path}`);
 		for (const line of result.report) io.out(`  ${line}`);
 		if (remove) delete state.harnesses[adapter.name];
-		else state.harnesses[adapter.name] = { approvals: result.approvals };
+		else state.harnesses[adapter.name] = result.owned;
 	}
 	if (!users.length) io.out('no harness has user settings kalfa can write');
 	if (dryRun) io.out('dry run: nothing was written');
@@ -48,7 +48,7 @@ function run(adapters: ReadonlyMap<string, Adapter>, io: Io, wants: (adapter: Ad
 
 export function installCommand(adapters: ReadonlyMap<string, Adapter>, modulesRoot: () => string, packageRoot: () => string): Command {
 	return {
-		summary: "Write kalfa's hooks, the status-line tap and the machine Modules' approvals into the harnesses' user settings",
+		summary: "Write kalfa's hooks, the status-line tap and the machine Modules' approvals into the harnesses' user settings, and turn off their own memory",
 		usage: 'kalfa install [--dry-run]',
 		async run(args, io) {
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' } });
@@ -61,6 +61,7 @@ export function installCommand(adapters: ReadonlyMap<string, Adapter>, modulesRo
 					hook: (event) => `${shim} ${adapter.name} ${event}`,
 					tap: quote([built(join(packageRoot(), 'dist', 'adapters', adapter.name, 'status-tap'))]),
 					approvals: planApprovals(sources, adapter.user!.approvals),
+					nativeMemoryOff: true,
 				}),
 				values['dry-run'] ?? false,
 				false,
