@@ -81,3 +81,16 @@ what lives at user scope: the Core, the hook plugin and the personal skills.
 Nested `AGENTS.md` files for other harnesses are not written while Claude Code
 is the only one; once they are, each goes in `.git/info/exclude`, so a public
 repository never carries them.
+
+## Amendment 2026-10-31: kalfa writes the user settings itself
+
+APM was never installed on the Operator's machine, and it cannot write the two
+other entries kalfa needs at user scope: the status line, which the usage-limit
+tap must wrap, and the machine Modules' command approvals. A hook package from
+APM would leave a second writer for the same file. So `kalfa install` writes
+the Core event hooks, the status-line tap and the approvals into the harness's
+user settings through the Adapter, the same way `kalfa build` writes a
+repository: it keeps every entry of the Operator and of other tools, backs the
+file up before it changes it, and `kalfa uninstall` removes only what is
+kalfa's. A hook or status line is kalfa's by the program it runs; an approval
+only when kalfa recorded adding it. APM keeps only the personal skills.

@@ -11,8 +11,9 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, st
 import { dirname, join, relative } from 'node:path';
 import { z } from 'zod';
 import type { ProjectFiles } from '../adapters/adapter.ts';
+import { mergeApprovals, planApprovals } from './approvals.ts';
 import { KalfaError } from './errors.ts';
-import { APPROVAL_KINDS, type Approvals, type ModuleSource } from './module-source.ts';
+import type { Approvals, ModuleSource } from './module-source.ts';
 import { PRIVATE_DIR, privateDir } from './private-dir.ts';
 import { readVersioned, type VersionedFormat } from './versioned-file.ts';
 
@@ -83,7 +84,6 @@ export function planHarness(sources: ModuleSource[], project: ProjectFiles, skil
 		owner.set(path, module);
 		files.set(path, content);
 	};
-	const approvals: Approvals = { allow: [], ask: [], deny: [] };
 	for (const source of sources) {
 		for (const skill of skills(source)) {
 			for (const [path, content] of skill.files) add(`${project.skillDir(skill.name)}/${path}`, content, source.name);
@@ -92,14 +92,8 @@ export function planHarness(sources: ModuleSource[], project: ProjectFiles, skil
 			const { path, text } = project.rule(source.name, rule);
 			add(path, Buffer.from(text), source.name);
 		}
-		for (const kind of APPROVAL_KINDS) {
-			for (const pattern of source.manifest.commands[kind]) {
-				const entry = project.approvals.entry(pattern);
-				if (!approvals[kind].includes(entry)) approvals[kind].push(entry);
-			}
-		}
 	}
-	return { files, approvals };
+	return { files, approvals: planApprovals(sources, project.approvals) };
 }
 
 const sha256 = (content: Buffer) => createHash('sha256').update(content).digest('hex');
@@ -172,19 +166,9 @@ export function applyHarness(root: string, project: ProjectFiles, planned: Plann
 	// Approvals: add what the Modules want, remove only what kalfa added before.
 	const approvalPath = project.approvals.path;
 	const before = readApprovalFile(root, approvalPath, problems);
-	let after = before;
-	const ownedApprovals: Approvals = { allow: [], ask: [], deny: [] };
-	for (const kind of APPROVAL_KINDS) {
-		const present = project.approvals.read(before, kind);
-		const want = planned.approvals[kind];
-		const added = previous?.approvals[kind] ?? [];
-		const kept = present.filter((entry) => want.includes(entry) || !added.includes(entry));
-		const fresh = want.filter((entry) => !present.includes(entry));
-		ownedApprovals[kind] = [...added.filter((entry) => want.includes(entry) && present.includes(entry)), ...fresh];
-		for (const entry of present.filter((e) => !kept.includes(e))) report.push(`approvals: remove ${kind} ${entry}`);
-		for (const entry of fresh) report.push(`approvals: add ${kind} ${entry}`);
-		if (kept.length !== present.length || fresh.length) after = project.approvals.write(after, kind, [...kept, ...fresh]);
-	}
+	const merged = mergeApprovals(before, project.approvals, planned.approvals, previous?.approvals);
+	const { after, owned: ownedApprovals } = merged;
+	report.push(...merged.report);
 	const approvalsChange = after !== before;
 
 	const targets = [...planned.files.keys(), ...(approvalsChange ? [approvalPath] : [])];

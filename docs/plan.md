@@ -65,7 +65,7 @@ handoffs.
 - [x] The meter (`prompt.submit`, `tool.after`)
 - [x] The status line
 - [x] Remove the dead stop hook.
-- [ ] Later: `kalfa install` writes the harness hooks at user scope, and the smoke checks that a foreign hook stays.
+- [x] Later: `kalfa install` writes the harness hooks at user scope, and the smoke checks that a foreign hook stays. (Proven live 2026-10-31: a session started through `dist/kalfa-hook`.)
 - [ ] Later: wire the `docs` Module.
 
 ## 5. Projects

@@ -6,6 +6,7 @@ import { moduleCommands, modules, withFolderModules } from '../modules/index.ts'
 import { buildCommand } from './commands/build.ts';
 import { doctorCommand } from './commands/doctor.ts';
 import { initCommand } from './commands/init.ts';
+import { installCommand, uninstallCommand } from './commands/install.ts';
 import { linkCommand, unlinkCommand } from './commands/link.ts';
 import { hookCommand } from './commands/hook.ts';
 import { planCommand } from './commands/plan.ts';
@@ -19,6 +20,8 @@ const commands: Record<string, Command> = {
 	init: initCommand(adapters, modulesRoot),
 	build: buildCommand(adapters, modulesRoot),
 	doctor: doctorCommand(adapters, modulesRoot, () => packageRoot()),
+	install: installCommand(adapters, modulesRoot, () => packageRoot()),
+	uninstall: uninstallCommand(adapters),
 	link: linkCommand(() => packageRoot()),
 	unlink: unlinkCommand(() => packageRoot()),
 	hook: hookCommand(adapters, registry),

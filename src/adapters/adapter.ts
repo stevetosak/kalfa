@@ -24,6 +24,8 @@ export interface Adapter {
 	render(event: CoreEvent, result: DispatchResult): HookOutput;
 	/** Where `kalfa build` writes a Module's files for this harness; `undefined` when it has none. */
 	project?: ProjectFiles;
+	/** What `kalfa install` writes into the harness's user settings; `undefined` when kalfa cannot install there. */
+	user?: UserFiles;
 	/** Where this harness finds skills and commands, for `kalfa doctor`; `undefined` when kalfa cannot tell. */
 	skills?: SkillLookup;
 	/** How a new session of this harness starts; `undefined` when kalfa cannot start one. */
@@ -34,6 +36,29 @@ export interface Adapter {
 	 * size of the session in a hook payload without starting Node.
 	 */
 	usage?: UsageSource;
+}
+
+/**
+ * The harness's user settings, which kalfa shares with the Operator and other
+ * tools. Each function takes the parsed file and returns it changed, or the
+ * same object when nothing changes; it touches only what is kalfa's.
+ */
+export interface UserFiles {
+	/** The settings file, relative to HOME. */
+	settings: string;
+	/**
+	 * One hook per Core event the harness raises, each running `command(event)`;
+	 * `undefined` removes kalfa's hooks. A hook is kalfa's when it runs a program
+	 * named `kalfa-hook`, wherever it is.
+	 */
+	hooks(data: Record<string, unknown>, command: ((event: CoreEventName) => string) | undefined): Record<string, unknown>;
+	/**
+	 * The status line wrapped in `tap` (the Adapter's status-tap), which hands
+	 * the input on to the Operator's own command; `undefined` unwraps it. Throws
+	 * a KalfaError when the Operator's command cannot be wrapped.
+	 */
+	statusLine?(data: Record<string, unknown>, tap: string | undefined): Record<string, unknown>;
+	approvals: ApprovalLayout;
 }
 
 /** A new session: its name and the prompt it starts on. */
@@ -71,8 +96,12 @@ export interface ProjectFiles {
 }
 
 /** The harness's own file of command approvals, which kalfa shares with the Operator's entries. */
-export interface ApprovalFile {
+export interface ApprovalFile extends ApprovalLayout {
 	path: string;
+}
+
+/** How the harness keeps command approvals in a parsed settings file. */
+export interface ApprovalLayout {
 	/** One command pattern in the harness's form. */
 	entry(pattern: string): string;
 	/** The entries of one kind in the parsed file. */

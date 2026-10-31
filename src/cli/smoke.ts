@@ -29,6 +29,20 @@ const OPERATOR_SETTINGS = {
 	hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'operator-own-hook' }] }] },
 };
 
+/** The Operator's own user settings: a hook of another tool, a status line and a key that kalfa install must keep. */
+const USER_SETTINGS = '.claude/settings.json';
+const OPERATOR_USER_SETTINGS = {
+	model: 'smoke-model',
+	statusLine: { type: 'command', command: 'operator-status-line --short' },
+	hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'other-tool-hook' }] }] },
+};
+
+const HOME_FILES: Record<string, string> = {
+	[USER_SETTINGS]: `${JSON.stringify(OPERATOR_USER_SETTINGS)}\n`,
+	// The machine's own Modules: their approvals go into the user settings.
+	'.config/kalfa/config.yaml': 'schema: 1\nmodules: [smoke]\n',
+};
+
 const SMOKE_MODULE: Record<string, string> = {
 	'smoke/module.yaml': "schema: 1\ndescription: The smoke test's Module.\ncommands:\n  allow: ['smoke-check *']\n",
 	'smoke/skills/smoke-skill/SKILL.md': '---\nname: smoke-skill\ndescription: The smoke test skill.\n---\nBody.\n',
@@ -50,6 +64,8 @@ interface World {
 	bin: string;
 	repo: string;
 	env: NodeJS.ProcessEnv;
+	/** HOME's files before kalfa ran. */
+	homeBefore?: Map<string, string>;
 	/** The repository's files right after `kalfa init`, outside `.git/` and `.kalfa/`. */
 	afterInit?: Map<string, string>;
 }
@@ -109,6 +125,15 @@ function kalfa(world: World, args: string[], cwd?: string): string {
 }
 
 const read = (world: World, path: string) => readFileSync(join(world.repo, path), 'utf8');
+const userSettings = (world: World) => JSON.parse(readFileSync(join(world.home, USER_SETTINGS), 'utf8'));
+
+/** The command kalfa install wrote for `hook`. */
+function installedHook(world: World, hook: string): string {
+	const groups: Array<{ hooks: Array<{ command: string }> }> = userSettings(world).hooks?.[hook] ?? [];
+	const command = groups.flatMap((group) => group.hooks.map((h) => h.command)).find((c) => c.includes('kalfa-hook'));
+	expect(command, `kalfa install wrote no ${hook} hook`);
+	return command;
+}
 
 function hookPayload(world: World, hook: string, extra: Record<string, unknown>): string {
 	return JSON.stringify({ session_id: '00000000-0000-4000-8000-000000000000', transcript_path: join(world.home, 'transcript.jsonl'), cwd: world.repo, hook_event_name: hook, ...extra });
@@ -122,6 +147,19 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			expect(linked.status === 0, `kalfa link exited ${linked.status}: ${linked.stderr.trim()}`);
 			expect(kalfa(world, ['--version'], world.home).trim() === version, 'kalfa on PATH is not this version');
 			expect(kalfa(world, ['doctor'], world.home).includes(`install: linked to this checkout (${join(world.bin, 'kalfa')})`), 'kalfa doctor does not see the link');
+		},
+	},
+	{
+		name: "install: kalfa install writes its hooks, the status-line tap and the approvals next to the Operator's own",
+		run(world) {
+			kalfa(world, ['install'], world.home);
+			const settings = userSettings(world);
+			expect(settings.model === OPERATOR_USER_SETTINGS.model, 'the Operator key is not kept');
+			expect(settings.hooks.SessionStart[0].hooks[0].command === 'other-tool-hook', "the other tool's hook is not kept first");
+			for (const hook of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse']) installedHook(world, hook);
+			expect(/status-tap operator-status-line --short$/.test(settings.statusLine.command), `the status line is ${settings.statusLine.command}`);
+			expect(isDeepStrictEqual(settings.permissions, { allow: ['Bash(smoke-check *)'] }), `the user approvals are ${JSON.stringify(settings.permissions)}`);
+			expect(kalfa(world, ['install'], world.home).includes('nothing to change'), 'a second kalfa install changed something');
 		},
 	},
 	{
@@ -158,7 +196,8 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 	{
 		name: 'hooks fire through kalfa-hook, and the fast path skips Node',
 		run(world) {
-			const start = exec(world, 'kalfa-hook', ['claude', 'session.start'], { input: hookPayload(world, 'SessionStart', { source: 'startup' }) });
+			// The command that kalfa install wrote, run the way the harness runs it.
+			const start = exec(world, 'sh', ['-c', installedHook(world, 'SessionStart')], { input: hookPayload(world, 'SessionStart', { source: 'startup' }) });
 			expect(start.status === 0, `session.start exited ${start.status}: ${start.stderr.trim()}`);
 			const output = JSON.parse(start.stdout || '{}');
 			// The one-line summary for the Operator is expected; any other notice is a fault.
@@ -174,7 +213,7 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 		},
 	},
 	{
-		name: 'uninstall: no Modules, then kalfa unlink, leave nothing behind',
+		name: 'uninstall: no Modules, kalfa uninstall, then kalfa unlink, leave nothing behind',
 		run(world) {
 			const project = parse(read(world, 'kalfa.yaml'));
 			writeFileSync(join(world.repo, 'kalfa.yaml'), stringify({ ...project, modules: [] }));
@@ -183,9 +222,13 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			expect(isDeepStrictEqual(JSON.parse(read(world, SETTINGS)), OPERATOR_SETTINGS), "the settings file is not the Operator's own again");
 			const left = differences(world.afterInit!, snapshot(world.repo, ['.git', '.kalfa'])).filter((d) => d !== `${SETTINGS} changed` && d !== 'kalfa.yaml changed');
 			expect(!left.length, `the repository differs from right after init: ${left.join('; ')}`);
+			kalfa(world, ['uninstall'], world.home);
+			expect(isDeepStrictEqual(userSettings(world), OPERATOR_USER_SETTINGS), "the user settings are not the Operator's own again");
 			kalfa(world, ['unlink'], world.home);
-			// The bin folder is the user's own place for programs; kalfa leaves it, empty.
-			const home = [...snapshot(world.home).keys()].filter((path) => path !== '.local' && path !== relative(world.home, world.bin));
+			// The bin and cache folders are the user's own; kalfa leaves them, empty. Its backups stay.
+			const backup = new RegExp(`^${USER_SETTINGS.replace(/\./g, '\\.')}\\.bak-kalfa-\\S+ is new$`);
+			const userFolders = ['.local', relative(world.home, world.bin), '.cache'].map((path) => `${path} is new`);
+			const home = differences(world.homeBefore!, snapshot(world.home)).filter((d) => !userFolders.includes(d) && d !== `${USER_SETTINGS} changed` && !backup.test(d));
 			expect(!home.length, `left in HOME: ${home.join(', ')}`);
 		},
 	},
@@ -203,11 +246,12 @@ function setUp(packageRoot: string): World {
 	const modules = join(root, 'modules');
 	const bin = join(home, '.local', 'bin');
 	mkdirSync(home);
+	writeFiles(home, HOME_FILES);
 	writeFiles(modules, SMOKE_MODULE);
 	writeFiles(repo, REPO_FILES);
 	const env: NodeJS.ProcessEnv = { HOME: home, PATH: [bin, dirname(process.execPath), ...cleanPath(process.env.PATH)].join(delimiter), KALFA_MODULES_DIR: modules, GIT_CONFIG_NOSYSTEM: '1' };
 	if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR;
-	const world: World = { packageRoot, root, home, bin, repo, env };
+	const world: World = { packageRoot, root, home, bin, repo, env, homeBefore: snapshot(home) };
 	const init = exec(world, 'git', ['init', '-q', repo], { cwd: root });
 	expect(init.status === 0, `git init failed: ${init.stderr.trim()}`);
 	return world;
@@ -231,6 +275,5 @@ export function runSmoke(packageRoot: string, io: Io): number {
 	}
 	rmSync(world.root, { recursive: true, force: true });
 	io.out(`smoke: all ${steps.length} steps passed`);
-	io.out('not yet in the smoke: the harness hooks at user scope (Plan step 4 wires them)');
 	return 0;
 }
