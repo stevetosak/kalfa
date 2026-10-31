@@ -3,6 +3,7 @@ import { CAPABILITIES, type Capability } from '../src/core/capabilities.ts';
 import type { CoreEvent, CoreEventName } from '../src/core/events.ts';
 import type { HandlerContext, ModuleDefinition } from '../src/core/modules.ts';
 import { DEFAULT_SETTINGS } from '../src/core/settings.ts';
+import { tempDir } from './helpers.ts';
 
 /** An Adapter whose payload is `{ cwd, ...fields }` and whose output is the merged result as JSON. */
 export const fakeAdapter: Adapter = {
@@ -27,7 +28,8 @@ export function handlerContext(modules: string[] | undefined, root = '/repo', pl
 	return {
 		project: { root, file: modules ? { schema: 1, modules, plans, settings: {} } : undefined },
 		settings: DEFAULT_SETTINGS,
-		env: {},
+		// An empty HOME: with none, the machine paths fall back to the real home folder.
+		env: { HOME: tempDir() },
 		capabilities: fakeAdapter.capabilities,
 	};
 }
