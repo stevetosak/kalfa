@@ -8,7 +8,7 @@ const plan = (title: string, status: string, body: string) => `---\ntitle: ${tit
 function repo(globs = "['docs/**/*.md']") {
 	return tempRepo({
 		'kalfa.yaml': `schema: 1\nplans: ${globs}\n`,
-		'docs/rebuild.md': plan('Rebuild', 'active', '- [x] **Rotate** keys.\n  - [ ] check the old key is gone\n- [ ] **Monitoring**\n'),
+		'docs/rebuild.md': plan('Rebuild', 'active', '**Done when:** monitoring runs.\n\n- [x] **Rotate** keys.\n  - [ ] check the old key is gone\n- [ ] **Monitoring**\n'),
 		'docs/old.md': plan('Old', 'done', '- [x] all\n'),
 	});
 }
@@ -28,7 +28,7 @@ test('plan list shows the open Plans, --all every Plan', async () => {
 test('plan show lists the open steps with their lines, under a done parent too', async () => {
 	const { code, stdout } = await run(repo(), 'show', 'docs/rebuild.md');
 	assert.equal(code, 0);
-	assert.match(stdout, /Open steps:\n- line 6 \(done\): Rotate\n {2}- line 7: check the old key is gone\n- line 8: Monitoring$/);
+	assert.match(stdout, /Open steps:\n- line 8 \(done\): Rotate\n {2}- line 9: check the old key is gone\n- line 10: Monitoring$/);
 	assert.equal((await run(repo(), 'show', 'docs/nope.md')).code, 1);
 });
 
