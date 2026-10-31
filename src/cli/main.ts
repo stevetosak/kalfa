@@ -9,6 +9,7 @@ import { initCommand } from './commands/init.ts';
 import { installCommand, uninstallCommand } from './commands/install.ts';
 import { linkCommand, unlinkCommand } from './commands/link.ts';
 import { hookCommand } from './commands/hook.ts';
+import { memoryCommand } from './commands/memory.ts';
 import { planCommand } from './commands/plan.ts';
 import { sectionCommand, taskCommand } from './commands/task.ts';
 import type { Io } from './io.ts';
@@ -28,6 +29,7 @@ const commands: Record<string, Command> = {
 	task: taskCommand(adapters, registry),
 	section: sectionCommand(adapters, registry),
 	plan: planCommand,
+	memory: memoryCommand,
 	...Object.fromEntries(Object.entries(moduleCommands).map(([name, command]) => [name, command(adapters)])),
 };
 

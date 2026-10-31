@@ -6,6 +6,19 @@ import { machineConfigDir } from './machine-paths.ts';
 import { moduleList } from './project.ts';
 import { readVersioned, type VersionedFormat } from './versioned-file.ts';
 
+/** A Memory layer's budget for Standing memory: rules by count, index lines by bytes. */
+const layerBudget = z.strictObject({
+	rules: z.int().positive(),
+	'index-bytes': z.int().positive(),
+});
+
+const memorySettings = z.strictObject({
+	personal: layerBudget.partial().optional(),
+	project: layerBudget.partial().optional(),
+	/** The longest rule (summary and body), in characters: a rule is short and exact. */
+	'rule-chars': z.int().positive().optional(),
+});
+
 const settingsSchema = z.strictObject({
 	schema: z.literal(1),
 	/**
@@ -14,6 +27,8 @@ const settingsSchema = z.strictObject({
 	 * its Modules on top; personal ones (the meter) belong here, not there.
 	 */
 	modules: moduleList,
+	/** The Standing memory budgets; each value left out takes its default. */
+	memory: memorySettings.optional(),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
@@ -32,4 +47,32 @@ export function settingsPath(env: NodeJS.ProcessEnv = process.env): string {
 
 export function loadSettings(env: NodeJS.ProcessEnv = process.env): Settings {
 	return readVersioned(settingsPath(env), settingsFormat) ?? DEFAULT_SETTINGS;
+}
+
+export type LayerBudget = z.infer<typeof layerBudget>;
+
+export interface MemoryBudgets {
+	personal: LayerBudget;
+	project: LayerBudget;
+	ruleChars: number;
+}
+
+/**
+ * First values only: Plan step 5 sets them from the measured size of the
+ * sorted memory. The rule count limits how many instructions load; the
+ * index bytes limit what the index lines cost in context.
+ */
+export const DEFAULT_MEMORY_BUDGETS: MemoryBudgets = {
+	personal: { rules: 25, 'index-bytes': 4096 },
+	project: { rules: 15, 'index-bytes': 4096 },
+	ruleChars: 600,
+};
+
+export function memoryBudgets(settings: Settings): MemoryBudgets {
+	const memory = settings.memory ?? {};
+	return {
+		personal: { ...DEFAULT_MEMORY_BUDGETS.personal, ...memory.personal },
+		project: { ...DEFAULT_MEMORY_BUDGETS.project, ...memory.project },
+		ruleChars: memory['rule-chars'] ?? DEFAULT_MEMORY_BUDGETS.ruleChars,
+	};
 }
