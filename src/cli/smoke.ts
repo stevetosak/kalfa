@@ -18,11 +18,15 @@ import { version } from './version.ts';
 
 const SETTINGS = '.claude/settings.local.json';
 const PLAN_TITLE = 'Smoke plan';
+const PERSONAL_RULE = 'Smoke personal rule.';
+const PROJECT_FACT = 'Smoke project fact.';
+/** The Memory home kalfa memory creates, the Operator's data: kalfa uninstall keeps it. */
+const MEMORY_HOME = '.local/share/kalfa/memory';
 const GOAL = 'smoke goal';
 
 /** The Operator's own settings: an approval and a hook that kalfa must keep. */
 /** The session report's summary line (src/modules/core.ts). */
-const SUMMARY = /^kalfa: (\d+ open Plans?|Task \S+ open|\d+ (other )?open Tasks?|continuing Task)/;
+const SUMMARY = /^kalfa: (memory: \d+ rules?|\d+ open Plans?|Task \S+ open|\d+ (other )?open Tasks?|continuing Task)/;
 
 const OPERATOR_SETTINGS = {
 	permissions: { allow: ['Bash(git status)'] },
@@ -213,6 +217,27 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 		},
 	},
 	{
+		name: 'memory: kalfa memory writes records in the Memory home, and session.start injects both layers',
+		run(world) {
+			kalfa(world, ['memory', 'add', '--type', 'rule', '--layer', 'personal', '--summary', PERSONAL_RULE]);
+			kalfa(world, ['memory', 'add', '--type', 'fact', '--layer', 'project', '--summary', PROJECT_FACT]);
+			const home = join(world.home, MEMORY_HOME);
+			expect(existsSync(join(home, 'personal', 'smoke-personal-rule.md')), 'the personal record is not in the Memory home');
+			// The smoke repository has no origin, so its layer is keyed by the folder name.
+			expect(existsSync(join(home, 'projects', 'local', 'repo', 'smoke-project-fact.md')), 'the project record is not keyed local/repo');
+			const log = exec(world, 'git', ['log', '--format=%s'], { cwd: home });
+			expect(log.status === 0 && log.stdout.trim().split('\n').length === 2, `the Memory home does not hold one commit per write: ${log.stdout.trim()}`);
+			kalfa(world, ['memory', 'confirm', 'smoke-personal-rule', 'read back in the smoke']);
+			expect(kalfa(world, ['memory', 'show', 'smoke-personal-rule']).includes('confirm smoke-personal-rule: read back in the smoke'), 'show does not list the proof of the confirm');
+			const start = exec(world, 'sh', ['-c', installedHook(world, 'SessionStart')], { input: hookPayload(world, 'SessionStart', { source: 'startup' }) });
+			expect(start.status === 0, `session.start exited ${start.status}: ${start.stderr.trim()}`);
+			const output = JSON.parse(start.stdout || '{}');
+			const context = String(output.hookSpecificOutput?.additionalContext ?? '');
+			expect(context.includes(PERSONAL_RULE) && context.includes(`[fact] ${PROJECT_FACT}`), 'session.start does not inject both layers');
+			expect(String(output.systemMessage ?? '').includes('memory: 1 rule, 1 index line'), `the summary does not count the records: ${output.systemMessage}`);
+		},
+	},
+	{
 		name: 'uninstall: no Modules, kalfa uninstall, then kalfa unlink, leave nothing behind',
 		run(world) {
 			const project = parse(read(world, 'kalfa.yaml'));
@@ -228,7 +253,9 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			// The bin and cache folders are the user's own; kalfa leaves them, empty. Its backups stay.
 			const backup = new RegExp(`^${USER_SETTINGS.replace(/\./g, '\\.')}\\.bak-kalfa-\\S+ is new$`);
 			const userFolders = ['.local', relative(world.home, world.bin), '.cache'].map((path) => `${path} is new`);
-			const home = differences(world.homeBefore!, snapshot(world.home)).filter((d) => !userFolders.includes(d) && d !== `${USER_SETTINGS} changed` && !backup.test(d));
+			// The Memory home holds the Operator's records, not kalfa's install: it stays.
+			const memory = (d: string) => MEMORY_HOME.split('/').some((_, i, parts) => d === `${parts.slice(0, i + 1).join('/')} is new`) || d.startsWith(`${MEMORY_HOME}/`);
+			const home = differences(world.homeBefore!, snapshot(world.home)).filter((d) => !userFolders.includes(d) && d !== `${USER_SETTINGS} changed` && !backup.test(d) && !memory(d));
 			expect(!home.length, `left in HOME: ${home.join(', ')}`);
 		},
 	},

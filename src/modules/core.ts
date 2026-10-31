@@ -1,7 +1,11 @@
 // The Core's own handlers: the session report (open Plans; open Tasks, or
 // after a /clear the Handoff of the branch's Task) and the task-list mapping.
-// A later section adds memory budgets to the report.
+// Standing memory: the Personal layer in every session, and the project's
+// layer inside a repository, under their budgets (ADR 0002).
 import { currentBranch } from '../core/git.ts';
+import { memoryHome, readLayer, sessionLayers } from '../core/memory/home.ts';
+import { budgetOf, layerView, overBudgetNotice, renderLayer } from '../core/memory/standing.ts';
+import { memoryBudgets, type Settings } from '../core/settings.ts';
 import type { HandlerResult } from '../core/events.ts';
 import type { ModuleManifest } from '../core/module-source.ts';
 import { CORE_MODULE, type Handler, type ModuleDefinition } from '../core/modules.ts';
@@ -52,13 +56,29 @@ function taskReport(project: Project, source: string | undefined): ReportPart {
 	return { context: [`Open Tasks in this repository (kalfa task show --task <id>):`, ...lines, hint].join('\n'), summary };
 }
 
+function memoryReport(project: Project | undefined, settings: Settings, env: NodeJS.ProcessEnv): ReportPart {
+	const budgets = memoryBudgets(settings);
+	const views = sessionLayers(memoryHome(env), project).map((layer) => layerView(layer, readLayer(layer), budgetOf(layer, budgets)));
+	const blocks = views.map(renderLayer).filter(Boolean);
+	const notices = views.map((v) => overBudgetNotice(v, budgetOf(v.layer, budgets))).filter(Boolean);
+	const rules = views.reduce((n, v) => n + v.rules.length, 0);
+	const lines = views.reduce((n, v) => n + v.index.length, 0);
+	return {
+		context: blocks.length
+			? ['Standing memory (kalfa memory). Write a record only through `kalfa memory add|supersede|confirm`; what you find yourself is a Memory candidate first.', ...blocks].join('\n\n')
+			: undefined,
+		summary: blocks.length ? `memory: ${plural(rules, 'rule')}, ${plural(lines, 'index line')}` : undefined,
+		notice: notices.length ? notices.join('\n') : undefined,
+	};
+}
+
 /**
  * The agent gets the full report; the Operator sees one line of what it
  * holds (harnesses show a notice to the Operator, not the context).
  */
-const sessionReport: Handler = (event, { project }) => {
-	if (event.name !== 'session.start' || !project) return undefined;
-	const parts = [planReport(project), taskReport(project, event.source)];
+const sessionReport: Handler = (event, { project, settings, env }) => {
+	if (event.name !== 'session.start') return undefined;
+	const parts = [memoryReport(project, settings, env), ...(project ? [planReport(project), taskReport(project, event.source)] : [])];
 	const context = parts.map((p) => p.context).filter(Boolean).join('\n\n');
 	const summary = parts.map((p) => p.summary).filter(Boolean).join(' · ');
 	const notice = [summary ? `kalfa: ${summary}` : undefined, ...parts.map((p) => p.notice)].filter(Boolean).join('\n');

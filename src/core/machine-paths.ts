@@ -11,3 +11,8 @@ export function machineConfigDir(env: NodeJS.ProcessEnv = process.env): string {
 export function machineCacheDir(env: NodeJS.ProcessEnv = process.env): string {
 	return join(env.XDG_CACHE_HOME || join(env.HOME || homedir(), '.cache'), 'kalfa');
 }
+
+/** `$XDG_DATA_HOME/kalfa`, else `~/.local/share/kalfa`: the Operator's data that kalfa keeps (the Memory home). */
+export function machineDataDir(env: NodeJS.ProcessEnv = process.env): string {
+	return join(env.XDG_DATA_HOME || join(env.HOME || homedir(), '.local', 'share'), 'kalfa');
+}
