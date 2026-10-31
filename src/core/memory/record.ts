@@ -10,8 +10,12 @@ import { parseVersioned, type VersionedFormat } from '../versioned-file.ts';
 export const RECORD_TYPES = ['rule', 'fact', 'decision', 'open'] as const;
 export type RecordType = (typeof RECORD_TYPES)[number];
 
-/** `proposed` records never load: they wait for the Operator's review of a sort. */
-export const RECORD_STATUSES = ['proposed', 'active', 'superseded'] as const;
+/**
+ * Only `active` records load. `proposed` ones wait for the Operator's review of
+ * a sort; `superseded` ones name their successor; `closed` ones are done or no
+ * longer apply (an open item that was finished), and search still finds them.
+ */
+export const RECORD_STATUSES = ['proposed', 'active', 'superseded', 'closed'] as const;
 export type RecordStatus = (typeof RECORD_STATUSES)[number];
 
 const ID = /^[a-z0-9][a-z0-9-]{0,79}$/;

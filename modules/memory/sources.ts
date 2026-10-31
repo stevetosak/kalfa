@@ -162,12 +162,13 @@ function memoryChunks(file: SourceFile, text: string): Chunk[] {
 	const id = basename(file.path, '.md');
 	const record = parseMemoryRecord(text, file.path, id);
 	if (record.header.status === 'superseded') return [];
-	const proposed = record.header.status === 'proposed' ? ' (proposed)' : '';
+	const { status } = record.header;
+	const mark = status === 'proposed' || status === 'closed' ? ` (${status})` : '';
 	return [
 		{
 			id: `${file.path}#0`,
 			kind: 'memory',
-			title: `${record.header.type}${proposed}: ${record.header.summary}`,
+			title: `${record.header.type}${mark}: ${record.header.summary}`,
 			text: record.body,
 			ref: `kalfa memory show ${id} (${file.label})`,
 		},

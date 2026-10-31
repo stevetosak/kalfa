@@ -122,6 +122,23 @@ test('confirm needs a proof, dates the record and writes the proof into the hist
 	assert.match(show.out, /History:\n- \d{4}-\d\d-\d\d confirm a-fact: read it back\n- \d{4}-\d\d-\d\d add fact a-fact/);
 });
 
+test('close needs a reason, takes the record out of the session start and keeps it in list and history', async () => {
+	const { repo, env } = machine();
+	await memory(env, repo, ['add', '--type', 'open', '--layer', 'personal', '--summary', 'An open item.']);
+	assert.match((await memory(env, repo, ['close', 'an-open-item'])).error ?? '', /reason/);
+	assert.equal((await memory(env, repo, ['close', 'an-open-item', 'the', 'work', 'is', 'done'])).code, 0);
+	const layer = personalLayer(memoryHome(env));
+	const records = readLayer(layer);
+	assert.deepEqual(records.map((r) => r.header.status), ['closed']);
+	assert.deepEqual(layerView(layer, records, { rules: 10, 'index-bytes': 1000 }).index, []);
+	assert.match((await memory(env, repo, ['list'])).out, /no active Memory records/);
+	assert.match((await memory(env, repo, ['list', '--status', 'closed'])).out, /an-open-item {2}open {2}closed/);
+	assert.match((await memory(env, repo, ['show', 'an-open-item'])).out, /History:\n- \d{4}-\d\d-\d\d close an-open-item: the work is done/);
+	for (const args of [['close', 'an-open-item', 'again'], ['confirm', 'an-open-item', 'looked'], ['supersede', 'an-open-item', '--summary', 'New.']]) {
+		assert.match((await memory(env, repo, args)).error ?? '', /is closed/);
+	}
+});
+
 test('activate makes proposed records active, one commit per layer, and checks every budget first', async () => {
 	const { repo, env } = machine('schema: 1\nmodules: []\nmemory:\n  personal: {rules: 2}\n');
 	for (const summary of ['Rule one.', 'Rule two.']) await memory(env, repo, ['add', '--type', 'rule', '--layer', 'personal', '--summary', summary, '--proposed']);
