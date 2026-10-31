@@ -2,13 +2,14 @@
 // Modules' approvals in the user settings of every harness whose Adapter has
 // them. The hooks and the tap run the built files of the kalfa that installs
 // them, so run `kalfa install` again after the package moves.
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { quote } from 'shell-quote';
 import type { Adapter } from '../../adapters/adapter.ts';
 import { planApprovals } from '../../core/approvals.ts';
 import { KalfaError } from '../../core/errors.ts';
 import { applyUser, NOTHING, readInstallState, type UserWants, writeInstallState } from '../../core/install.ts';
+import { machineCacheDir } from '../../core/machine-paths.ts';
 import { loadModuleSource } from '../../core/module-source.ts';
 import { loadSettings } from '../../core/settings.ts';
 import { type Command, parseCommandArgs } from '../command.ts';
@@ -70,11 +71,19 @@ export function installCommand(adapters: ReadonlyMap<string, Adapter>, modulesRo
 
 export function uninstallCommand(adapters: ReadonlyMap<string, Adapter>): Command {
 	return {
-		summary: "Remove what kalfa install wrote; the Operator's own entries stay",
+		summary: "Remove what kalfa install wrote, and kalfa's cache; the Operator's own entries stay",
 		usage: 'kalfa uninstall [--dry-run]',
 		async run(args, io) {
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' } });
-			return run(adapters, io, () => NOTHING, values['dry-run'] ?? false, true);
+			const dryRun = values['dry-run'] ?? false;
+			const code = run(adapters, io, () => NOTHING, dryRun, true);
+			// Everything in the cache folder is written again on use (event table, usage limits, pinned skills).
+			const cache = machineCacheDir(io.env);
+			if (existsSync(cache)) {
+				io.out(`remove ${cache} (kalfa's cache)`);
+				if (!dryRun) rmSync(cache, { recursive: true, force: true });
+			}
+			return code;
 		},
 	};
 }
