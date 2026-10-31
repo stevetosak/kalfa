@@ -75,8 +75,12 @@ _Avoid_: summary, context dump
 A tracked list of the steps of a larger piece of work, with the state of each step.
 _Avoid_: roadmap, backlog, todo
 
-**Lesson candidate**:
-A fault from a Task that may become a lasting rule, kept until the operator accepts or drops it.
+**Memory candidate**:
+A finding from a Task (a possible rule, fact, decision or open item), with its proof, kept until the Operator accepts or drops it. Candidates not yet answered wait in the inbox of the Memory home.
+_Avoid_: Lesson candidate, learning, takeaway
+
+**Lesson**:
+An accepted rule that came from a fault, with a link to the proof of that fault.
 _Avoid_: learning, takeaway
 
 ### Memory
@@ -94,5 +98,21 @@ The generic, publishable domain rules a Module carries, loaded only where that M
 _Avoid_: domain memory, guidelines
 
 **Project layer**:
-The private, git-ignored memory of one repository: its sessions, decisions and environment facts.
+The private memory of one repository: its sessions, decisions and environment facts. It is kept outside the repository, in the Memory home, and every work tree and clone of the repository shares it.
 _Avoid_: local memory, repo notes
+
+**Memory home**:
+The one private place, with its own history, that holds the Personal layer and every Project layer. It is never inside a project repository.
+_Avoid_: memory store, memory dir
+
+**Standing memory**:
+The memory that must be in every session where it applies: the in-scope part of the three Memory layers, under their budgets. The Core owns it, so it never depends on a Module being on.
+_Avoid_: always-on memory, context
+
+**Memory record**:
+One piece of memory in one file, of one type: a rule (how to act; a Lesson is a rule), a fact (how something is), a decision (what was chosen and why) or an open item (left open on purpose). It has a status and the date it was last confirmed, and a newer record can supersede it. Its layer is its scope.
+_Avoid_: memory entry, note, memory file
+
+**Recall memory**:
+The memory that is captured, searched, promoted and checked on demand rather than loaded every time. A replaceable Module owns it.
+_Avoid_: long-term memory, archive
