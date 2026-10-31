@@ -11,6 +11,12 @@ export const AGENTS_FILE = 'AGENTS.md';
 
 const moduleName = z.string().regex(/^[a-z][a-z0-9-]*$/, 'a Module name is lower-case letters, digits and dashes');
 
+/** A list of Module names to turn on (in `kalfa.yaml`, or in the machine settings). */
+export const moduleList = z
+	.array(moduleName)
+	.default([])
+	.refine((names) => new Set(names).size === names.length, 'a Module is listed twice');
+
 // A glob relative to the repository root that cannot leave it.
 const repoGlob = z
 	.string()
@@ -19,10 +25,7 @@ const repoGlob = z
 
 const projectFileSchema = z.strictObject({
 	schema: z.literal(1),
-	modules: z
-		.array(moduleName)
-		.default([])
-		.refine((names) => new Set(names).size === names.length, 'a Module is listed twice'),
+	modules: moduleList,
 	/** Where the Plans are: globs over Markdown files; only pages with `type: plan` count. */
 	plans: z.array(repoGlob).default([]),
 	/** Per Module, its own settings; each Module checks its part. */

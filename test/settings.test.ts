@@ -11,7 +11,7 @@ test('the settings live under XDG_CONFIG_HOME when it is set, else under ~/.conf
 });
 
 test('missing settings give the defaults', () => {
-	assert.deepEqual(loadSettings({ HOME: tempDir() }), { schema: 1 });
+	assert.deepEqual(loadSettings({ HOME: tempDir() }), { schema: 1, modules: [] });
 });
 
 test('a settings file is read and checked', () => {
@@ -19,4 +19,13 @@ test('a settings file is read and checked', () => {
 	mkdirSync(join(home, '.config', 'kalfa'), { recursive: true });
 	writeFileSync(join(home, '.config', 'kalfa', 'config.yaml'), 'schema: 1\ncolour: red\n');
 	assert.throws(() => loadSettings({ HOME: home }), { name: 'KalfaError', message: /machine settings is not valid/ });
+});
+
+test('the machine settings name the Operator\'s own Modules', () => {
+	const home = tempDir();
+	mkdirSync(join(home, '.config', 'kalfa'), { recursive: true });
+	writeFileSync(join(home, '.config', 'kalfa', 'config.yaml'), 'schema: 1\nmodules: [meter, guardrails]\n');
+	assert.deepEqual(loadSettings({ HOME: home }).modules, ['meter', 'guardrails']);
+	writeFileSync(join(home, '.config', 'kalfa', 'config.yaml'), 'schema: 1\nmodules: [meter, meter]\n');
+	assert.throws(() => loadSettings({ HOME: home }), { message: /listed twice/ });
 });

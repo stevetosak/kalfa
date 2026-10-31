@@ -14,8 +14,12 @@ const stub = join(bin, 'node-stub');
 writeFileSync(stub, '#!/usr/bin/env bash\necho "ran $*"; cat\n');
 chmodSync(stub, 0o755);
 
-function shimRuns(cwd: string, event: string): boolean {
-	const out = execFileSync('bash', [shim, 'fake', event], { cwd, input: '{"x":1}', env: { ...process.env, KALFA_NODE: stub } }).toString();
+// No machine settings unless a test makes them: the Operator's own must not leak in.
+const machine = { XDG_CONFIG_HOME: join(tempDir(), 'config'), XDG_CACHE_HOME: join(tempDir(), 'cache') };
+const env = { ...process.env, ...machine, KALFA_NODE: stub };
+
+function shimRuns(cwd: string, event: string, extra: NodeJS.ProcessEnv = {}): boolean {
+	const out = execFileSync('bash', [shim, 'fake', event], { cwd, input: '{"x":1}', env: { ...env, ...extra } }).toString();
 	if (out) assert.equal(out, `ran ${join(bin, 'kalfa.mjs')} hook fake ${event}\n{"x":1}`);
 	return out !== '';
 }
@@ -55,7 +59,7 @@ test('a filtered event starts Node only when the payload matches the filter', ()
 	mkdirSync(join(root, '.kalfa'));
 	writeFileSync(join(root, '.kalfa', 'events'), 'session.start\ncommand.before\t(git[[:space:]]+push)|(gh[[:space:]]+pr)\n');
 	utimesSync(join(root, 'kalfa.yaml'), new Date(2000, 0), new Date(2000, 0));
-	const runs = (input: string) => execFileSync('bash', [shim, 'fake', 'command.before'], { cwd: root, input, env: { ...process.env, KALFA_NODE: stub } }).toString() !== '';
+	const runs = (input: string) => execFileSync('bash', [shim, 'fake', 'command.before'], { cwd: root, input, env }).toString() !== '';
 	assert.equal(runs('{"command":"git push origin x"}'), true);
 	assert.equal(runs('{"command":"gh  pr create"}'), true);
 	assert.equal(runs('{"command":"git status"}'), false);
@@ -70,10 +74,47 @@ test('an event with a context size starts Node from that size, as the Adapter pr
 	mkdirSync(join(bin, 'adapters', 'fake'), { recursive: true });
 	writeFileSync(join(bin, 'adapters', 'fake', 'context-probe'), '#!/usr/bin/env bash\ngrep -o "[0-9]*" | head -n 1\n');
 	chmodSync(join(bin, 'adapters', 'fake', 'context-probe'), 0o755);
-	const runs = (event: string, input: string) => execFileSync('bash', [shim, 'fake', event], { cwd: root, input, env: { ...process.env, KALFA_NODE: stub } }).toString() !== '';
+	const runs = (event: string, input: string) => execFileSync('bash', [shim, 'fake', event], { cwd: root, input, env }).toString() !== '';
 	assert.equal(runs('tool.after', '{"size":99999}'), false);
 	assert.equal(runs('tool.after', '{"size":100000}'), true);
 	assert.equal(runs('tool.after', '{"no":"size"}'), true, 'the probe cannot tell: Node decides');
 	assert.equal(runs('prompt.submit', '{"prompt":"/meter","size":5}'), true, 'the filter alone is enough');
 	assert.equal(runs('prompt.submit', '{"prompt":"hi","size":5}'), false);
+});
+
+function machineSettings(table?: string): NodeJS.ProcessEnv {
+	const dirs = { XDG_CONFIG_HOME: join(tempDir(), 'config'), XDG_CACHE_HOME: join(tempDir(), 'cache') };
+	mkdirSync(join(dirs.XDG_CONFIG_HOME, 'kalfa'), { recursive: true });
+	writeFileSync(join(dirs.XDG_CONFIG_HOME, 'kalfa', 'config.yaml'), 'schema: 1\nmodules: [guardrails]\n');
+	utimesSync(join(dirs.XDG_CONFIG_HOME, 'kalfa', 'config.yaml'), new Date(2000, 0), new Date(2000, 0));
+	if (table !== undefined) {
+		mkdirSync(join(dirs.XDG_CACHE_HOME, 'kalfa'), { recursive: true });
+		writeFileSync(join(dirs.XDG_CACHE_HOME, 'kalfa', 'events'), table);
+	}
+	return dirs;
+}
+
+test('with machine settings, the machine table decides outside a kalfa project', () => {
+	const dirs = machineSettings('command.before\n');
+	assert.equal(shimRuns(tempDir(), 'command.before', dirs), true);
+	assert.equal(shimRuns(tempRepo(), 'command.before', dirs), true);
+	assert.equal(shimRuns(tempRepo(), 'tool.after', dirs), false);
+});
+
+test('a missing machine table, or one older than the machine settings, starts Node', () => {
+	assert.equal(shimRuns(tempDir(), 'tool.after', machineSettings()), true);
+	const dirs = machineSettings('command.before\n');
+	utimesSync(join(dirs.XDG_CONFIG_HOME!, 'kalfa', 'config.yaml'), new Date(), new Date(Date.now() + 60_000));
+	assert.equal(shimRuns(tempDir(), 'tool.after', dirs), true);
+});
+
+test('a project table older than the machine settings starts Node', () => {
+	const dirs = machineSettings('');
+	const root = tempRepo({ 'kalfa.yaml': 'schema: 1\n' });
+	mkdirSync(join(root, '.kalfa'));
+	writeFileSync(join(root, '.kalfa', 'events'), '');
+	utimesSync(join(root, 'kalfa.yaml'), new Date(2000, 0), new Date(2000, 0));
+	assert.equal(shimRuns(root, 'tool.after', dirs), false);
+	utimesSync(join(dirs.XDG_CONFIG_HOME!, 'kalfa', 'config.yaml'), new Date(), new Date(Date.now() + 60_000));
+	assert.equal(shimRuns(root, 'tool.after', dirs), true);
 });

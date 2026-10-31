@@ -3,9 +3,9 @@
 // reads them first, because a chain of sessions spends the limit with no one
 // watching. Without a tap the limits are unknown, and that is not a refusal.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
+import { machineCacheDir } from './machine-paths.ts';
 
 /** At this share of a window, a new session is refused unless forced. */
 export const LIMIT_PERCENT = 85;
@@ -21,8 +21,7 @@ export type SavedLimits = z.infer<typeof savedSchema>;
 export type LimitVerdict = { ok: true; note: string } | { ok: false; reason: string };
 
 export function limitsPath(env: NodeJS.ProcessEnv = process.env): string {
-	const cache = env.XDG_CACHE_HOME || join(env.HOME || homedir(), '.cache');
-	return join(cache, 'kalfa', 'usage-limits.json');
+	return join(machineCacheDir(env), 'usage-limits.json');
 }
 
 /** Saves the windows by name (e.g. `five_hour`); written whole, so a reader never sees half a file. */

@@ -1,15 +1,14 @@
 // The meter's state per session, in the machine's cache: a session belongs
 // to the Operator, not to the repository. Old states are pruned.
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { machineCacheDir } from '../../src/core/machine-paths.ts';
 import type { MeterState } from './guard.ts';
 
 const STATE_DAYS = 14;
 
 export function stateDir(env: NodeJS.ProcessEnv): string {
-	const cache = env.XDG_CACHE_HOME || join(env.HOME || homedir(), '.cache');
-	return join(cache, 'kalfa', 'meter');
+	return join(machineCacheDir(env), 'meter');
 }
 
 const statePath = (dir: string, sessionId: string) => join(dir, `${sessionId.replace(/[^\w-]/g, '_')}.json`);
