@@ -21,6 +21,9 @@ const PLAN_TITLE = 'Smoke plan';
 const GOAL = 'smoke goal';
 
 /** The Operator's own settings: an approval and a hook that kalfa must keep. */
+/** The session report's summary line (src/modules/core.ts). */
+const SUMMARY = /^kalfa: (\d+ open Plans?|Task \S+ open|\d+ (other )?open Tasks?|continuing Task)/;
+
 const OPERATOR_SETTINGS = {
 	permissions: { allow: ['Bash(git status)'] },
 	hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'operator-own-hook' }] }] },
@@ -158,7 +161,9 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			const start = exec(world, 'kalfa-hook', ['claude', 'session.start'], { input: hookPayload(world, 'SessionStart', { source: 'startup' }) });
 			expect(start.status === 0, `session.start exited ${start.status}: ${start.stderr.trim()}`);
 			const output = JSON.parse(start.stdout || '{}');
-			expect(output.systemMessage === undefined, `session.start gave a notice: ${output.systemMessage}`);
+			// The one-line summary for the Operator is expected; any other notice is a fault.
+			const faults = String(output.systemMessage ?? '').split('\n').filter((line) => line && !SUMMARY.test(line));
+			expect(!faults.length, `session.start gave a notice: ${faults.join(' / ')}`);
 			const context = String(output.hookSpecificOutput?.additionalContext ?? '');
 			expect(context.includes(PLAN_TITLE) && context.includes(GOAL), 'the session report does not name the Plan and the Task');
 			expect(existsSync(join(world.repo, '.kalfa/events')), 'session.start did not write the event table');
