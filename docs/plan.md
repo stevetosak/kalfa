@@ -73,7 +73,7 @@ handoffs.
 The design is [ADR 0002](adr/0002-memory.md). It comes before the projects, so
 each project starts on kalfa with its Project layer already sorted.
 
-- [ ] Core: the Memory home (one private folder with its own git history), Memory records, `kalfa memory add|supersede|confirm|show|list`, and the injection of the Personal and Project layers at `session.start` under a rule count and a byte budget (settings).
+- [x] Core: the Memory home (one private folder with its own git history), Memory records, `kalfa memory add|supersede|confirm|show|list`, and the injection of the Personal and Project layers at `session.start` under a rule count and a byte budget (settings). (Built 2026-10-31; the clean-state smoke proves it. Not live until the sort writes records.)
 - [ ] The `memory` Module: MiniSearch over the Memory home, the Task Records, the project documentation and the old archives; recall at `session.start` from the open Task; `recall-on-prompt` as a setting, off; Memory candidates (the Section part replaces Lesson candidates), the question at Task close and the inbox; the lint; the Task Record copied into the Memory home at close.
 - [ ] Sort the current memory into the three layers as proposed records; the Operator reviews the sort one layer at a time before anything moves.
 - [ ] The switch: the proposed records become active, the old memory files go to a backup, `kalfa install` turns off the harness's own automatic memory, and the Operator changes the machine policy to write memory through `kalfa memory`. Set the budgets from the measured size.
