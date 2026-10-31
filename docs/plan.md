@@ -2,7 +2,7 @@
 title: "kalfa — build and migration"
 description: "The steps that build kalfa beside the old agent setup and move every project onto it, one Core event at a time."
 type: plan
-status: active
+status: done
 topics: [agents, tooling]
 ---
 
