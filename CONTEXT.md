@@ -110,7 +110,7 @@ The memory that must be in every session where it applies: the in-scope part of 
 _Avoid_: always-on memory, context
 
 **Memory record**:
-One piece of memory in one file, of one type: a rule (how to act; a Lesson is a rule), a fact (how something is), a decision (what was chosen and why) or an open item (left open on purpose). It has a status and the date it was last confirmed, and a newer record can supersede it. Its layer is its scope.
+One piece of memory in one file, of one type: a rule (how to act; a Lesson is a rule), a fact (how something is), a decision (what was chosen and why) or an open item (left open on purpose). It has a status and the date it was last confirmed, a newer record can supersede it, and a record whose work is done, or that no longer applies, is closed: it stops loading, and search still finds it. Its layer is its scope.
 _Avoid_: memory entry, note, memory file
 
 **Recall memory**:

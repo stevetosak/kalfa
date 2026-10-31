@@ -154,6 +154,15 @@ test('search finds docs, archives, records and Task Records, and reads the cache
 	assert.match(out.out, /\[doc\] docs\/other\.md › Gateway\n {4}docs\/other\.md:1/);
 });
 
+test('search keeps a closed record and marks it', async () => {
+	const { repo, env } = machine();
+	await memory(repo, env, ['add', '--type', 'open', '--layer', 'project', '--summary', 'Wire the zeppelin gateway.']);
+	assert.equal((await memory(repo, env, ['close', 'wire-the-zeppelin-gateway', 'wired'])).code, 0);
+	const scope = { project: loadProject(repo), env, archives: memorySettings.parse({}).archives };
+	const titles = openIndex(scope).search('zeppelin', 5).map((h) => h.title);
+	assert.deepEqual(titles, ['open (closed): Wire the zeppelin gateway.']);
+});
+
 test('task close copies the record into the Memory home and puts the candidates into the inbox in one commit', async () => {
 	const { repo, env } = machine();
 	await startTask(repo, env, '- The rotation needs kluster.\n- Envoy times out at 15 s.');

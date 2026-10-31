@@ -78,6 +78,13 @@ function checkBudget(io: Io, layer: Layer, records: readonly MemoryRecord[]): vo
 	if (problem) throw new KalfaError(`refused: ${problem}. Supersede or merge records first (kalfa memory list --layer ${layer.name})`);
 }
 
+/** Refuses a write to a record that no longer counts: superseded or closed. */
+function refuseRetired(record: MemoryRecord, action: string): void {
+	const { status } = record.header;
+	if (status === 'superseded') throw new KalfaError(`'${record.id}' is already superseded by '${record.header['superseded-by']}'; ${action} that one`);
+	if (status === 'closed') throw new KalfaError(`'${record.id}' is closed; add a new record instead`);
+}
+
 const replace = (records: readonly MemoryRecord[], next: MemoryRecord) => [...records.filter((r) => r.id !== next.id), next];
 
 /** Parses a --type value. */
@@ -149,7 +156,7 @@ const subcommands: Record<string, MemorySubcommand> = {
 		if (!oldId || extra.length) throw new UsageError('give the id of the record to supersede');
 		if (!values.summary?.trim()) throw new UsageError('give --summary "<one line>" for the new record');
 		const { layer, record: old, records } = findRecord(io, oldId, layerName(values.layer));
-		if (old.header.status === 'superseded') throw new KalfaError(`'${oldId}' is already superseded by '${old.header['superseded-by']}'`);
+		refuseRetired(old, 'supersede');
 		const date = today();
 		const next: MemoryRecord = {
 			id: values.id ?? uniqueId(records, slugOf(values.summary)),
@@ -186,10 +193,28 @@ const subcommands: Record<string, MemorySubcommand> = {
 		const proof = proofWords.join(' ').trim();
 		if (!id || !proof) throw new UsageError('give the id and the proof: kalfa memory confirm <id> "<how you checked it>"');
 		const { layer, record } = findRecord(io, id, layerName(values.layer));
-		if (record.header.status === 'superseded') throw new KalfaError(`'${id}' is superseded by '${record.header['superseded-by']}'; confirm that one`);
+		refuseRetired(record, 'confirm');
 		const confirmed: MemoryRecord = { ...record, header: { ...record.header, confirmed: today() } };
 		writeRecords(memoryHome(io.env), [{ layer, record: confirmed }], `confirm ${id}: ${proof.replace(/\s+/g, ' ')}`);
 		io.out(`Confirmed ${id} (${layer.label}) on ${confirmed.header.confirmed}`);
+		return 0;
+	},
+
+	/**
+	 * A record whose work is done, or that no longer applies, is closed: it
+	 * leaves the session start; its file, history and search hit stay. The
+	 * reason goes into the history, as a confirm's proof does.
+	 */
+	async close(args, io) {
+		const { values, positionals } = parseCommandArgs(args, layerOption, true);
+		const [id, ...reasonWords] = positionals;
+		const reason = reasonWords.join(' ').trim();
+		if (!id || !reason) throw new UsageError('give the id and the reason: kalfa memory close <id> "<why it is done>"');
+		const { layer, record } = findRecord(io, id, layerName(values.layer));
+		refuseRetired(record, 'close');
+		const closed: MemoryRecord = { ...record, header: checkHeader({ ...record.header, status: 'closed' }) };
+		writeRecords(memoryHome(io.env), [{ layer, record: closed }], `close ${id}: ${reason.replace(/\s+/g, ' ')}`);
+		io.out(`Closed ${id} (${layer.label})`);
 		return 0;
 	},
 
@@ -262,9 +287,10 @@ const CORE_USAGE = [
 	'kalfa memory add --type rule|fact|decision|open --layer personal|project --summary "<one line>" [--source <link>] [--id <id>] [--proposed]   (body on stdin, optional)',
 	'       kalfa memory supersede <id> --summary "<one line>" [--layer …] [--id <id>]   (body on stdin, optional)',
 	'       kalfa memory confirm <id> "<how you checked it>" [--layer …]',
+	'       kalfa memory close <id> "<why it is done>" [--layer …]   (it leaves the session start; search keeps it)',
 	'       kalfa memory activate [<id>…] [--layer …]   (proposed records become active; no id: all of them)',
 	'       kalfa memory show <id> [--layer …]',
-	'       kalfa memory list [--layer personal|project] [--status active|proposed|superseded|all]',
+	'       kalfa memory list [--layer personal|project] [--status active|proposed|superseded|closed|all]',
 ];
 
 /** A Module's additions to `kalfa memory`: its subcommands and their usage lines. */
@@ -283,7 +309,7 @@ export function memoryCommand(extensions: readonly MemoryExtension[] = []): Comm
 		}
 	}
 	return {
-		summary: 'Add, supersede, confirm, show or list the Memory records of Standing memory',
+		summary: 'Add, supersede, confirm, close, show or list the Memory records of Standing memory',
 		usage: [...CORE_USAGE, ...extensions.flatMap((e) => e.usage.map((line) => `       ${line}`))].join('\n'),
 		async run(args, io) {
 			const [sub, ...rest] = args;
