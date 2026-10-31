@@ -61,7 +61,12 @@ export function personalLayer(home: string): Layer {
 }
 
 export function projectLayer(home: string, project: Project): Layer {
-	const key = projectKey(project.root);
+	return projectLayerOfKey(home, projectKey(project.root));
+}
+
+/** A project's layer from its key (e.g. one a Memory candidate names), wherever the command runs. */
+export function projectLayerOfKey(home: string, key: string): Layer {
+	if (!key.split('/').every((s) => /^[a-z0-9._-]+$/.test(s) && s !== '.' && s !== '..')) throw new KalfaError(`'${key}' is not a project key`);
 	return { name: 'project', dir: join(home, 'projects', ...key.split('/')), label: key };
 }
 

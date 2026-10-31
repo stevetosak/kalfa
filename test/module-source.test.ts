@@ -67,6 +67,6 @@ test('KALFA_MODULES_DIR moves the Module folders', () => {
 
 test('every Module folder this kalfa ships loads', () => {
 	const names = moduleFolders(modulesRoot({}));
-	assert.deepEqual(names, ['docs', 'guardrails', 'herdr', 'infra', 'meter']);
+	assert.deepEqual(names, ['docs', 'guardrails', 'herdr', 'infra', 'memory', 'meter']);
 	for (const name of names) assert.equal(loadModuleSource(modulesRoot({}), name).name, name);
 });

@@ -1,0 +1,13 @@
+schema: 1
+description: Recall memory. Keyword search over the Memory records, the Task Records, the project's documentation and the old archives; recall at session start from the open Task; Memory candidates from the Task Record go to an inbox at Task close, for the Operator to accept or reject; a lint that reports stale, broken and duplicate records.
+needs:
+  - capability: context-injection
+    without: no recall at session start and no question at Task close; kalfa memory search and kalfa memory inbox still work on demand
+commands:
+  allow:
+    - kalfa memory search *
+    - kalfa memory lint
+    - kalfa memory inbox
+    - kalfa memory inbox list
+    - kalfa memory list*
+    - kalfa memory show *

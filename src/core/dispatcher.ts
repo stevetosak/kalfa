@@ -2,7 +2,7 @@
 // one Core event, in that order, and merges their results.
 import type { CoreEvent, DispatchResult } from './events.ts';
 import { BLOCKING_EVENTS, STOPPING_EVENTS } from './events.ts';
-import { CORE_MODULE, type HandlerContext, type ModuleDefinition } from './modules.ts';
+import { CORE_MODULE, type HandlerContext, handlesEvent, type ModuleDefinition } from './modules.ts';
 
 /**
  * The Modules that run in this context, each once: the Core, then the
@@ -30,7 +30,7 @@ export async function dispatch(event: CoreEvent, registry: ReadonlyMap<string, M
 
 	for (const module of modules) {
 		const handler = module.handlers[event.name];
-		if (!handler) continue;
+		if (!handler || !handlesEvent(module, event.name, context)) continue;
 		try {
 			const out = await handler(event, context);
 			if (out?.context) result.context.push(out.context);
