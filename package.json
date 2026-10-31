@@ -1,6 +1,6 @@
 {
   "name": "kalfa",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A method and a toolset for working with coding agents across many projects.",
   "type": "module",
   "private": true,

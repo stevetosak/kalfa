@@ -66,7 +66,7 @@ handoffs.
 - [x] The status line
 - [x] Remove the dead stop hook.
 - [x] Later: `kalfa install` writes the harness hooks at user scope, and the smoke checks that a foreign hook stays. (Proven live 2026-10-31: a session started through `dist/kalfa-hook`.)
-- [ ] Later: design the human `docs` Module in its own grill. The current `docs` Module is parked, not wired: memory takes over the agent's need for Logs ([ADR 0002](adr/0002-memory.md)), and the existing Logs stay as search corpus.
+- ~~Later: design the human `docs` Module in its own grill.~~ Moved to the open Memory record `human-docs-module` on 2026-10-31: it came after this step's finish line. The current `docs` Module stays parked, not wired ([ADR 0002](adr/0002-memory.md)).
 
 ## 5. Memory
 
@@ -88,6 +88,23 @@ each project starts on kalfa with its Project layer already sorted.
 
 ## 7. Retire the old setup
 
-- [ ] Remove the agent folder from the documentation-site repository; the site stays.
-- [ ] Remove the workspace doctrine `~/Projects/Active/CLAUDE.md` once cloud-infra, doma and Authos build with the platform Module on.
-- [ ] Tag the first release.
+**Done when:** the documentation site has no agent folder, the workspace
+doctrine is gone, and kalfa v0.1.0 is tagged with a GitHub release.
+
+- [x] Remove the agent folder from the documentation-site repository; the site stays. Its page-writing skill became a Module in that repository, found through `module-dirs` and turned on in cloud-infra, doma, Authos and the site itself. The old session-start hook and the skills `close-task`, `docs-from-brief` and `handoff` are gone from the user settings. (2026-10-31)
+- [x] Remove the workspace doctrine `~/Projects/Active/CLAUDE.md` once cloud-infra, doma and Authos build with the platform Module on. (Moved to the kalfa backup folder on 2026-10-31.)
+- [ ] Tag the first release, v0.1.0.
+
+## 8. Definition of Done
+
+Every Plan and every Task gets a finish line when it is set. Work found after
+it becomes an `open` Memory record or a new Plan, not a new step.
+
+**Done when:** `kalfa plan check` reports a Plan without a `Done when` line,
+`kalfa task start` takes `--done-when` and keeps it in the Task Record, and
+`kalfa task close` shows the line and asks whether it holds; the tests cover
+all three.
+
+- [ ] The Plan format: where the `Done when` line goes (a Plan page, and each numbered part of a phased page like this one), and `kalfa plan check` reports one that has none.
+- [ ] Tasks: `kalfa task start --done-when "<line>"` writes it into the Task Record header; a new Task needs it, an old record without it still reads.
+- [ ] `kalfa task close` prints the line and asks whether it holds; the session report and the Handoff view show it for the open Task.
