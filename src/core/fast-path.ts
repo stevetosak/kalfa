@@ -1,14 +1,18 @@
 // The fast path: the `kalfa-hook` shim starts Node only when a handler can run.
-// The Core's events are built into the shim; a repository's Module events are
-// in `.kalfa/events`, rewritten whenever the Modules change: one line per
+// The Core's events are built into the shim. The Module events are in an
+// event table: in a repository with `kalfa.yaml`, `.kalfa/events` (the
+// machine's Modules and the project's); elsewhere the machine table in the
+// cache folder (the machine's Modules alone). A table is rewritten when it is
+// older than a file it is made from. One line per
 // event, the name alone (always run), or the name, a tab and a regex that the
 // raw payload must match (the Modules' filters joined; see ModuleDefinition),
 // then optionally a tab and the context size from which Node runs anyway (the
 // smallest `minContext`; the regex is empty when only that counts).
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CORE_EVENTS, type CoreEventName } from './events.ts';
 import type { ModuleDefinition } from './modules.ts';
+import { machineCacheDir } from './machine-paths.ts';
 import { privateDir } from './private-dir.ts';
 
 export const EVENT_TABLE = 'events';
@@ -29,10 +33,35 @@ function tableLine(name: CoreEventName, modules: ModuleDefinition[]): string {
 	return sizes.length ? `${line}\t${Math.min(...sizes)}` : line;
 }
 
-/** Writes the repository's event table; returns its path. */
-export function writeEventTable(root: string, modules: Iterable<ModuleDefinition>): string {
+function writeTable(path: string, modules: Iterable<ModuleDefinition>): string {
 	const list = [...modules];
-	const path = join(privateDir(root), EVENT_TABLE);
 	writeFileSync(path, handledEvents(list).map((name) => `${tableLine(name, list)}\n`).join(''));
 	return path;
+}
+
+/** Writes the repository's event table; returns its path. */
+export function writeEventTable(root: string, modules: Iterable<ModuleDefinition>): string {
+	return writeTable(join(privateDir(root), EVENT_TABLE), modules);
+}
+
+export function machineEventTablePath(env: NodeJS.ProcessEnv): string {
+	return join(machineCacheDir(env), EVENT_TABLE);
+}
+
+/** Writes the machine's event table (the machine's Modules alone); returns its path. */
+export function writeMachineEventTable(env: NodeJS.ProcessEnv, modules: Iterable<ModuleDefinition>): string {
+	const path = machineEventTablePath(env);
+	mkdirSync(join(path, '..'), { recursive: true });
+	return writeTable(path, modules);
+}
+
+/** The shim's rule: a table counts only when it exists and is newer than every source that exists. */
+export function isTableFresh(table: string, sources: string[]): boolean {
+	const mtime = (path: string) => statSync(path, { throwIfNoEntry: false })?.mtimeMs;
+	const at = mtime(table);
+	if (at === undefined) return false;
+	return sources.every((source) => {
+		const sourceAt = mtime(source);
+		return sourceAt === undefined || at > sourceAt;
+	});
 }

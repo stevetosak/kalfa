@@ -2,14 +2,17 @@
 // (through the `kalfa-hook` shim) pipes its payload in; the Adapter translates
 // both ways. It never exits 2 on its own error, because some harnesses read 2
 // as "block".
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Adapter } from '../../adapters/adapter.ts';
 import { activeModules, dispatch } from '../../core/dispatcher.ts';
 import { KalfaError } from '../../core/errors.ts';
 import { isCoreEventName } from '../../core/events.ts';
-import { writeEventTable } from '../../core/fast-path.ts';
+import { EVENT_TABLE, isTableFresh, machineEventTablePath, writeEventTable, writeMachineEventTable } from '../../core/fast-path.ts';
 import type { HandlerContext, ModuleDefinition } from '../../core/modules.ts';
-import { loadProject, type Project, repoRootOf } from '../../core/project.ts';
-import { DEFAULT_SETTINGS, loadSettings, type Settings } from '../../core/settings.ts';
+import { PRIVATE_DIR } from '../../core/private-dir.ts';
+import { loadProject, PROJECT_FILE, type Project, repoRootOf } from '../../core/project.ts';
+import { DEFAULT_SETTINGS, loadSettings, type Settings, settingsPath } from '../../core/settings.ts';
 import type { Command } from '../command.ts';
 import type { Io } from '../io.ts';
 
@@ -23,6 +26,26 @@ function orNotice<T>(load: () => T, fallback: T, notices: string[]): T {
 		if (!(error instanceof KalfaError)) throw error;
 		notices.push(`kalfa: ${error.message}`);
 		return fallback;
+	}
+}
+
+/**
+ * Rewrites the event tables the shim reads: at session start, and whenever a
+ * table is older than a file it is made from (else the shim starts Node on
+ * every event until the next session).
+ */
+function refreshEventTables(force: boolean, context: HandlerContext, registry: ReadonlyMap<string, ModuleDefinition>, notices: string[]): void {
+	const config = settingsPath(context.env);
+	// Without machine settings the shim needs no machine table (it exits at once).
+	if (existsSync(config) && (force || !isTableFresh(machineEventTablePath(context.env), [config]))) {
+		const machine = activeModules(registry, { project: undefined, settings: context.settings }).modules;
+		orNotice(() => writeMachineEventTable(context.env, machine), '', notices);
+	}
+	const project = context.project;
+	if (!project?.file) return;
+	const sources = [join(project.root, PROJECT_FILE), config];
+	if (force || !isTableFresh(join(project.root, PRIVATE_DIR, EVENT_TABLE), sources)) {
+		orNotice(() => writeEventTable(project.root, activeModules(registry, context).modules), '', notices);
 	}
 }
 
@@ -50,10 +73,7 @@ async function runHook(args: string[], io: Io, adapters: ReadonlyMap<string, Ada
 
 	const result = await dispatch(event, registry, context);
 	result.notice.unshift(...notices);
-	if (event.name === 'session.start' && project?.file) {
-		const { root: projectRoot } = project;
-		orNotice(() => writeEventTable(projectRoot, activeModules(registry, context).modules), '', result.notice);
-	}
+	refreshEventTables(event.name === 'session.start', context, registry, result.notice);
 
 	const out = adapter.render(event, result);
 	if (out.stdout) io.out(out.stdout);

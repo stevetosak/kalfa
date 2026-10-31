@@ -21,6 +21,12 @@ test('a repository without kalfa.yaml runs the Core alone', async () => {
 	assert.deepEqual(result.context, ['from core']);
 });
 
+test('the machine\'s Modules run in every repository, before the project\'s, and each Module once', async () => {
+	const machine = (modules: string[] | undefined) => ({ ...handlerContext(modules), settings: { schema: 1 as const, modules: ['docs'] } });
+	assert.deepEqual((await dispatch(command, registry(core, docs, guard), machine(undefined))).context, ['from core', 'from docs']);
+	assert.deepEqual((await dispatch(command, registry(core, docs, guard), machine(['guardrails', 'docs']))).context, ['from core', 'from docs', 'why']);
+});
+
 test('a block on an event that cannot block is dropped', async () => {
 	const result = await dispatch(toolAfter, registry(core, guard), handlerContext(['guardrails']));
 	assert.deepEqual(result.block, []);

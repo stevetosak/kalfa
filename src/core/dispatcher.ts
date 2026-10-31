@@ -4,9 +4,15 @@ import type { CoreEvent, DispatchResult } from './events.ts';
 import { BLOCKING_EVENTS, STOPPING_EVENTS } from './events.ts';
 import { CORE_MODULE, type HandlerContext, type ModuleDefinition } from './modules.ts';
 
-/** The Modules that run in this context: the Core, then those the project file enables. */
-export function activeModules(registry: ReadonlyMap<string, ModuleDefinition>, context: HandlerContext): { modules: ModuleDefinition[]; unknown: string[] } {
-	const names = [CORE_MODULE, ...(context.project?.file?.modules ?? [])];
+/**
+ * The Modules that run in this context, each once: the Core, then the
+ * machine's own Modules, then those the project file adds.
+ */
+export function activeModules(
+	registry: ReadonlyMap<string, ModuleDefinition>,
+	context: Pick<HandlerContext, 'project' | 'settings'>,
+): { modules: ModuleDefinition[]; unknown: string[] } {
+	const names = new Set([CORE_MODULE, ...context.settings.modules, ...(context.project?.file?.modules ?? [])]);
 	const modules: ModuleDefinition[] = [];
 	const unknown: string[] = [];
 	for (const name of names) {
@@ -20,7 +26,7 @@ export function activeModules(registry: ReadonlyMap<string, ModuleDefinition>, c
 export async function dispatch(event: CoreEvent, registry: ReadonlyMap<string, ModuleDefinition>, context: HandlerContext): Promise<DispatchResult> {
 	const result: DispatchResult = { context: [], block: [], quiet: true, stop: [], notice: [] };
 	const { modules, unknown } = activeModules(registry, context);
-	if (unknown.length) result.notice.push(`kalfa: kalfa.yaml names unknown Module(s): ${unknown.join(', ')}; check \`kalfa doctor\``);
+	if (unknown.length) result.notice.push(`kalfa: kalfa.yaml or the machine settings name unknown Module(s): ${unknown.join(', ')}; check \`kalfa doctor\``);
 
 	for (const module of modules) {
 		const handler = module.handlers[event.name];

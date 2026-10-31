@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { hookCommand } from '../src/cli/commands/hook.ts';
@@ -10,8 +10,8 @@ const core = { name: 'core', handlers: { 'session.start': () => ({ context: 'cor
 const guard = { name: 'guardrails', handlers: { 'command.before': () => ({ block: 'no push' }) } };
 const hook = hookCommand(new Map([['fake', fakeAdapter]]), registry(core, guard));
 
-async function run(args: string[], payload: unknown, cwd = tempDir()) {
-	const io = captureIo(cwd, { HOME: tempDir() }, typeof payload === 'string' ? payload : JSON.stringify(payload));
+async function run(args: string[], payload: unknown, cwd = tempDir(), home = tempDir()) {
+	const io = captureIo(cwd, { HOME: home }, typeof payload === 'string' ? payload : JSON.stringify(payload));
 	const code = await hook.run(args, io);
 	return { code, stdout: io.stdout, stderr: io.stderr.join('\n'), result: io.stdout[0] ? JSON.parse(io.stdout[0]) : undefined };
 }
@@ -53,4 +53,40 @@ test('session.start does not write the table into a .kalfa/ git would commit', a
 	const out = await run(['fake', 'session.start'], { cwd: root });
 	assert.match(out.result.notice[0], /git does not ignore it/);
 	assert.equal(existsSync(join(root, '.kalfa')), false);
+});
+
+function machineHome(modules: string): string {
+	const home = tempDir();
+	mkdirSync(join(home, '.config', 'kalfa'), { recursive: true });
+	writeFileSync(join(home, '.config', 'kalfa', 'config.yaml'), `schema: 1\nmodules: ${modules}\n`);
+	return home;
+}
+
+test('a machine Module runs in a repository without kalfa.yaml, and outside one', async () => {
+	const home = machineHome('[guardrails]');
+	assert.equal((await run(['fake', 'command.before'], { cwd: gitRepo() }, undefined, home)).code, 2);
+	assert.equal((await run(['fake', 'command.before'], { cwd: '/' }, undefined, home)).code, 2);
+});
+
+test('session.start writes the machine table; another event rewrites it only when it is stale', async () => {
+	const home = machineHome('[guardrails]');
+	const table = join(home, '.cache', 'kalfa', 'events');
+	await run(['fake', 'session.start'], { cwd: '/' }, undefined, home);
+	assert.equal(readFileSync(table, 'utf8'), 'session.start\ncommand.before\n');
+	writeFileSync(table, 'old\n');
+	await run(['fake', 'command.before'], { cwd: '/' }, undefined, home);
+	assert.equal(readFileSync(table, 'utf8'), 'old\n', 'fresh: kept');
+	utimesSync(table, new Date(2000, 0), new Date(2000, 0));
+	await run(['fake', 'command.before'], { cwd: '/' }, undefined, home);
+	assert.equal(readFileSync(table, 'utf8'), 'session.start\ncommand.before\n', 'stale: written again');
+});
+
+test('the project table holds the machine\'s Modules too, and no machine settings means no machine table', async () => {
+	const home = machineHome('[guardrails]');
+	const root = gitRepo({ 'kalfa.yaml': 'schema: 1\n', '.gitignore': '.kalfa/\n' });
+	await run(['fake', 'session.start'], { cwd: root }, undefined, home);
+	assert.equal(readFileSync(join(root, '.kalfa', 'events'), 'utf8'), 'session.start\ncommand.before\n');
+	const bare = tempDir();
+	await run(['fake', 'session.start'], { cwd: '/' }, undefined, bare);
+	assert.equal(existsSync(join(bare, '.cache', 'kalfa', 'events')), false);
 });
