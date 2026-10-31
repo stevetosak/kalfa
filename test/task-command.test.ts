@@ -94,8 +94,10 @@ test('the session report lists open Tasks, and after /clear gives the Handoff', 
 	const base = { harness: 'fake', cwd: root, name: 'session.start' as const };
 	const startup = await coreModule.handlers['session.start']!({ ...base, source: 'startup' }, context);
 	assert.match(startup?.context ?? '', /- feat-monitoring: Build the monitoring \(1 Section\(s\)\)\n  Next: render it\./);
+	assert.equal(startup?.notice, 'kalfa: Task feat-monitoring open on this branch (its Handoff comes after /clear)');
 	const clear = await coreModule.handlers['session.start']!({ ...base, source: 'clear' }, context);
 	assert.match(clear?.context ?? '', /^Continue the Task[\s\S]*Next: render it\.$/);
+	assert.equal(clear?.notice, 'kalfa: continuing Task feat-monitoring from its Handoff');
 });
 
 test('the session report puts the open Plans before the Tasks, and a broken glob is a notice', async () => {
@@ -107,7 +109,7 @@ test('the session report puts the open Plans before the Tasks, and a broken glob
 		result?.context ?? '',
 		/^Open Plans in this repository \(kalfa plan list\):\n- Monitoring \(active, 1 of 2 steps done; docs\/plan\.md\)\n  Next: Render\n\nOpen Tasks/,
 	);
-	assert.equal(result?.notice, "kalfa: Plans: plans glob 'nowhere/*.md' matches no file");
+	assert.equal(result?.notice, "kalfa: 1 open Plan · Task feat-monitoring open on this branch (its Handoff comes after /clear)\nkalfa: Plans: plans glob 'nowhere/*.md' matches no file");
 });
 
 test('a repository without Plans or Tasks gets no session report', async () => {
