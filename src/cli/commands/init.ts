@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { stringify } from 'yaml';
 import type { Adapter } from '../../adapters/adapter.ts';
 import { KalfaError } from '../../core/errors.ts';
+import type { ModuleDirs } from '../../core/module-dirs.ts';
 import { loadModuleSource } from '../../core/module-source.ts';
 import { findPlans } from '../../core/plans.ts';
 import { isPrivateDirIgnored, PRIVATE_DIR } from '../../core/private-dir.ts';
@@ -16,7 +17,7 @@ import { requireProject } from '../project.ts';
 
 const DEFAULT_PLANS = 'docs/**/*.md';
 
-export function initCommand(adapters: ReadonlyMap<string, Adapter>, modulesRoot: () => string): Command {
+export function initCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs): Command {
 	return {
 		summary: 'Make this repository a kalfa project: kalfa.yaml, the .kalfa/ ignore, the AGENTS.md import',
 		usage: 'kalfa init [--module <name>]... [--plans <glob>]... [--dry-run]',
@@ -29,7 +30,7 @@ export function initCommand(adapters: ReadonlyMap<string, Adapter>, modulesRoot:
 			const { root, file } = requireProject(io);
 			if (file) throw new KalfaError(`${PROJECT_FILE} exists already; edit it, then run kalfa build`);
 			const modules = values.module ?? [];
-			for (const name of modules) loadModuleSource(modulesRoot(), name);
+			for (const name of modules) loadModuleSource(moduleDirs(io.env), name);
 			// Without --plans, the documentation folder counts when it holds a Plan.
 			const plans = values.plans ?? (findPlans(root, [DEFAULT_PLANS]).plans.length ? [DEFAULT_PLANS] : []);
 

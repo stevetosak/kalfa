@@ -1,5 +1,5 @@
-// A Module's declarative side: the folder `modules/<name>/` in the kalfa
-// package. Skills (`skills/<skill>/SKILL.md`) and rules (`rules/<rule>.md`)
+// A Module's declarative side: the folder `<name>/` in one of the Module
+// folders (the kalfa package's `modules/`, then the machine's `module-dirs`). Skills (`skills/<skill>/SKILL.md`) and rules (`rules/<rule>.md`)
 // are found from the folder; `module.yaml` names only what the folder cannot
 // say: the Capabilities the Module needs, its command approvals and its pinned
 // third-party skills with their Overlays.
@@ -84,16 +84,19 @@ export function parseRule(text: string, ruleName: string, path: string): Rule {
 const subdirs = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((entry) => statSync(join(dir, entry)).isDirectory()).sort() : []);
 const markdownFiles = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((entry) => entry.endsWith('.md')).sort() : []);
 
-/** The names of the Module folders in `modulesRoot` (each has a `module.yaml`). */
-export function moduleFolders(modulesRoot: string): string[] {
-	return subdirs(modulesRoot).filter((entry) => existsSync(join(modulesRoot, entry, MODULE_FILE)));
+/** The names of the Modules in `dirs` (each has a `module.yaml`), sorted, each once. */
+export function moduleFolders(dirs: readonly string[]): string[] {
+	const names = dirs.flatMap((root) => subdirs(root).filter((entry) => existsSync(join(root, entry, MODULE_FILE))));
+	return [...new Set(names)].sort();
 }
 
-/** The Module folder `<modulesRoot>/<moduleName>`, checked. */
-export function loadModuleSource(modulesRoot: string, moduleName: string): ModuleSource {
-	const dir = join(modulesRoot, moduleName);
-	const manifest = readVersioned(join(dir, MODULE_FILE), moduleManifestFormat);
-	if (!manifest) throw new KalfaError(`unknown Module '${moduleName}' (no ${join(dir, MODULE_FILE)})`);
+/** The Module `moduleName` from the one folder in `dirs` that holds it, checked. */
+export function loadModuleSource(dirs: readonly string[], moduleName: string): ModuleSource {
+	const homes = [...new Set(dirs)].filter((root) => existsSync(join(root, moduleName, MODULE_FILE)));
+	if (homes.length > 1) throw new KalfaError(`Module '${moduleName}' is in more than one Module folder (${homes.join(', ')}); keep one`);
+	if (!homes.length) throw new KalfaError(`unknown Module '${moduleName}' (no ${join(moduleName, MODULE_FILE)} in ${dirs.join(', ')})`);
+	const dir = join(homes[0]!, moduleName);
+	const manifest = readVersioned(join(dir, MODULE_FILE), moduleManifestFormat)!;
 
 	const skills = subdirs(join(dir, 'skills')).map((skill) => ({ name: skill, dir: join(dir, 'skills', skill) }));
 	for (const skill of skills) {

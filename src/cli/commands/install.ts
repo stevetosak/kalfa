@@ -10,6 +10,7 @@ import { planApprovals } from '../../core/approvals.ts';
 import { KalfaError } from '../../core/errors.ts';
 import { applyUser, NOTHING, readInstallState, type UserWants, writeInstallState } from '../../core/install.ts';
 import { machineCacheDir } from '../../core/machine-paths.ts';
+import type { ModuleDirs } from '../../core/module-dirs.ts';
 import { loadModuleSource } from '../../core/module-source.ts';
 import { loadSettings } from '../../core/settings.ts';
 import { type Command, parseCommandArgs } from '../command.ts';
@@ -46,13 +47,13 @@ function run(adapters: ReadonlyMap<string, Adapter>, io: Io, wants: (adapter: Ad
 	return 0;
 }
 
-export function installCommand(adapters: ReadonlyMap<string, Adapter>, modulesRoot: () => string, packageRoot: () => string): Command {
+export function installCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs, packageRoot: () => string): Command {
 	return {
 		summary: "Write kalfa's hooks, the status-line tap and the machine Modules' approvals into the harnesses' user settings, and turn off their own memory",
 		usage: 'kalfa install [--dry-run]',
 		async run(args, io) {
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' } });
-			const sources = loadSettings(io.env).modules.map((name) => loadModuleSource(modulesRoot(), name));
+			const sources = loadSettings(io.env).modules.map((name) => loadModuleSource(moduleDirs(io.env), name));
 			const shim = quote([built(join(packageRoot(), 'dist', 'kalfa-hook'))]);
 			return run(
 				adapters,

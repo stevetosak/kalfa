@@ -4,6 +4,7 @@
 import type { Adapter } from '../../adapters/adapter.ts';
 import { applyHarness, type BuildOptions, type BuildState, planHarness, readBuildState, readTree, type SkillBundle, writeBuildState } from '../../core/build.ts';
 import { KalfaError } from '../../core/errors.ts';
+import type { ModuleDirs } from '../../core/module-dirs.ts';
 import { loadModuleSource, type ModuleSource } from '../../core/module-source.ts';
 import { isPrivateDirIgnored, PRIVATE_DIR } from '../../core/private-dir.ts';
 import { type Project, PROJECT_FILE } from '../../core/project.ts';
@@ -50,14 +51,14 @@ export interface BuildRun {
 export function buildProject(
 	project: Project,
 	adapters: ReadonlyMap<string, Adapter>,
-	modulesRoot: string,
+	moduleDirs: readonly string[],
 	env: NodeJS.ProcessEnv,
 	options: BuildOptions & { offline?: boolean } = {},
 ): BuildRun {
 	if (!project.file) throw new KalfaError(`no ${PROJECT_FILE} in ${project.root}; run kalfa init`);
 	if (!isPrivateDirIgnored(project.root)) throw new KalfaError(`git does not ignore ${PRIVATE_DIR}/, where kalfa records what it wrote; add \`${PRIVATE_DIR}/\` to .gitignore`);
 
-	const sources = project.file.modules.map((name) => loadModuleSource(modulesRoot, name));
+	const sources = project.file.modules.map((name) => loadModuleSource(moduleDirs, name));
 	const previous = readBuildState(project.root);
 	const report: string[] = [];
 	const { skills, pins } = composeSkills(sources, cacheRoot(env), previous, options.offline ?? false, report);
@@ -77,13 +78,13 @@ export function buildProject(
 	return { report, changes, state };
 }
 
-export function buildCommand(adapters: ReadonlyMap<string, Adapter>, modulesRoot: () => string): Command {
+export function buildCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs): Command {
 	return {
 		summary: "Write the enabled Modules' skills, rules and approvals into this repository",
 		usage: 'kalfa build [--dry-run] [--force]',
 		async run(args, io) {
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' }, force: { type: 'boolean' } });
-			const run = buildProject(requireProject(io), adapters, modulesRoot(), io.env, { dryRun: values['dry-run'], force: values.force });
+			const run = buildProject(requireProject(io), adapters, moduleDirs(io.env), io.env, { dryRun: values['dry-run'], force: values.force });
 			for (const line of run.report) io.out(line);
 			if (values['dry-run']) io.out('dry run: nothing was written');
 			return 0;

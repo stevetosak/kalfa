@@ -18,7 +18,7 @@ const modulesDir = tempRepo({
 	'clash/skills/push-gate/SKILL.md': 'other\n',
 });
 
-const build = buildCommand(new Map([['claude', claudeAdapter]]), () => modulesDir);
+const build = buildCommand(new Map([['claude', claudeAdapter]]), () => [modulesDir]);
 
 function repo(modules: string, ignore = '.kalfa/\n.claude/\n', files: Record<string, string> = {}): string {
 	return gitRepo({ 'kalfa.yaml': `schema: 1\nmodules: ${modules}\n`, '.gitignore': ignore, ...files });
@@ -140,7 +140,7 @@ function pinnedBuild(pin: string, overlay = true) {
 		'grill/module.yaml': `schema: 1\ndescription: d\nthird-party:\n  - name: grill-me\n    source: ${pin}\n${overlay ? '    overlay: overlays/grill-me.md\n' : ''}`,
 		'grill/overlays/grill-me.md': 'Start each question with a Background section.\n',
 	});
-	return buildCommand(new Map([['claude', claudeAdapter]]), () => modules);
+	return buildCommand(new Map([['claude', claudeAdapter]]), () => [modules]);
 }
 
 test('a pinned third-party skill is installed at its commit with the Overlay appended', async () => {
