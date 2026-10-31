@@ -97,4 +97,6 @@ export const claudeUser: UserFiles = {
 	hooks: setHooks,
 	statusLine: setStatusLine,
 	approvals: claudeApprovals,
+	// Auto memory (code.claude.com/docs/en/memory): the `/memory` toggle saves this key.
+	nativeMemory: { key: 'autoMemoryEnabled', off: false },
 };

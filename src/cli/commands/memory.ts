@@ -193,6 +193,43 @@ const subcommands: Record<string, MemorySubcommand> = {
 		return 0;
 	},
 
+	/**
+	 * Proposed records become active: the named ones, or every proposed record
+	 * of the layers in scope. The Operator's review is the check, so the
+	 * confirmed date is today. Every layer's budget is checked before anything
+	 * is written; then one commit per layer.
+	 */
+	async activate(args, io) {
+		const { values, positionals } = parseCommandArgs(args, layerOption, true);
+		const ids: string[] = positionals;
+		const plans = layersFor(io, layerName(values.layer)).map((layer) => {
+			const records = readLayer(layer);
+			const chosen = records.filter((r) => r.header.status === 'proposed' && (!ids.length || ids.includes(r.id)));
+			return { layer, records, chosen };
+		});
+		const found = new Set(plans.flatMap((p) => p.chosen.map((r) => r.id)));
+		const missing = ids.filter((id) => !found.has(id));
+		if (missing.length) throw new KalfaError(`no proposed record ${missing.map((id) => `'${id}'`).join(', ')} here (kalfa memory list --status proposed)`);
+		const date = today();
+		const writes = plans
+			.filter((p) => p.chosen.length)
+			.map(({ layer, records, chosen }) => {
+				const active = chosen.map((r): MemoryRecord => ({ ...r, header: { ...r.header, status: 'active', confirmed: date } }));
+				const byId = new Map(active.map((r) => [r.id, r]));
+				checkBudget(io, layer, records.map((r) => byId.get(r.id) ?? r));
+				return { layer, active };
+			});
+		if (!writes.length) {
+			io.out('no proposed records here');
+			return 0;
+		}
+		for (const { layer, active } of writes) {
+			writeRecords(memoryHome(io.env), active.map((record) => ({ layer, record })), `activate ${active.length} proposed record(s) (${layer.label})`);
+			io.out(`Activated ${active.length} record(s) in the ${layer.label} layer`);
+		}
+		return 0;
+	},
+
 	async show(args, io) {
 		const { values, positionals } = parseCommandArgs(args, layerOption, true);
 		const [id, ...extra] = positionals;
@@ -225,6 +262,7 @@ const CORE_USAGE = [
 	'kalfa memory add --type rule|fact|decision|open --layer personal|project --summary "<one line>" [--source <link>] [--id <id>] [--proposed]   (body on stdin, optional)',
 	'       kalfa memory supersede <id> --summary "<one line>" [--layer …] [--id <id>]   (body on stdin, optional)',
 	'       kalfa memory confirm <id> "<how you checked it>" [--layer …]',
+	'       kalfa memory activate [<id>…] [--layer …]   (proposed records become active; no id: all of them)',
 	'       kalfa memory show <id> [--layer …]',
 	'       kalfa memory list [--layer personal|project] [--status active|proposed|superseded|all]',
 ];

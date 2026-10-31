@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { claudeAdapter } from '../src/adapters/claude/adapter.ts';
@@ -86,6 +86,35 @@ test('install then uninstall gives back the same settings content', async () => 
 	await run(install, home);
 	await run(uninstall, home);
 	assert.deepEqual(settings(home), OPERATOR);
+});
+
+test("install turns off the harness's own memory, and uninstall puts back the value it had", async () => {
+	for (const before of [undefined, true]) {
+		const operator = before === undefined ? OPERATOR : { ...OPERATOR, autoMemoryEnabled: before };
+		const home = machine(operator);
+		const { out } = await run(install, home);
+		assert.equal(settings(home).autoMemoryEnabled, false);
+		assert.match(out, /own memory: off \(autoMemoryEnabled: false\)/);
+		assert.equal((await run(install, home)).out.includes('own memory'), false, 'a second install changes nothing');
+		const { out: removed } = await run(uninstall, home);
+		assert.match(removed, /autoMemoryEnabled put back/);
+		assert.deepEqual(settings(home), operator);
+	}
+});
+
+test("the Operator's own memory setting stays theirs: already off, or changed after the install", async () => {
+	const already = machine({ ...OPERATOR, autoMemoryEnabled: false });
+	await run(install, already);
+	await run(uninstall, already);
+	assert.equal(settings(already).autoMemoryEnabled, false, 'kalfa did not turn it off, so it does not turn it on');
+
+	const changed = machine(OPERATOR);
+	await run(install, changed);
+	const data = settings(changed);
+	writeFileSync(join(changed, '.claude/settings.json'), JSON.stringify({ ...data, autoMemoryEnabled: true }));
+	const { out } = await run(uninstall, changed);
+	assert.match(out, /changed by hand; left as it is/);
+	assert.equal(settings(changed).autoMemoryEnabled, true);
 });
 
 test('without a settings file, install writes one, and uninstall leaves it empty', async () => {
