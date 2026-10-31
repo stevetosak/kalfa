@@ -93,7 +93,7 @@ doctrine is gone, and kalfa v0.1.0 is tagged with a GitHub release.
 
 - [x] Remove the agent folder from the documentation-site repository; the site stays. Its page-writing skill became a Module in that repository, found through `module-dirs` and turned on in cloud-infra, doma, Authos and the site itself. The old session-start hook and the skills `close-task`, `docs-from-brief` and `handoff` are gone from the user settings. (2026-10-31)
 - [x] Remove the workspace doctrine `~/Projects/Active/CLAUDE.md` once cloud-infra, doma and Authos build with the platform Module on. (Moved to the kalfa backup folder on 2026-10-31.)
-- [ ] Tag the first release, v0.1.0.
+- [x] Tag the first release, v0.1.0. (Tagged and released on 2026-10-31.)
 
 ## 8. Definition of Done
 
