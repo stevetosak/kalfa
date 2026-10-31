@@ -14,7 +14,7 @@ const modulesDir = tempRepo({
 	'guardrails/rules/r.md': 'Rule.\n',
 });
 const adapters = new Map([['claude', claudeAdapter]]);
-const init = initCommand(adapters, () => modulesDir);
+const init = initCommand(adapters, () => [modulesDir]);
 const read = (root: string, path: string) => readFileSync(join(root, path), 'utf8');
 
 async function run(command: { run: (args: string[], io: ReturnType<typeof captureIo>) => Promise<number> }, cwd: string, args: string[] = [], env?: NodeJS.ProcessEnv) {
@@ -96,7 +96,7 @@ test('doctor shows the install mode, the Capabilities that are off and whether t
 	const bin = tempDir();
 	symlinkSync(join(pkg, 'dist/kalfa.mjs'), join(bin, 'kalfa'));
 	const limited = { ...fakeAdapter, name: 'limited', capabilities: new Set(['context-injection'] as const) };
-	const doctor = doctorCommand(new Map([['claude', claudeAdapter], ['limited', limited]]), () => modulesDir, () => pkg);
+	const doctor = doctorCommand(new Map([['claude', claudeAdapter], ['limited', limited]]), () => [modulesDir], () => pkg);
 	const root = gitRepo({ '.gitignore': '.kalfa/\n.claude/\n', 'kalfa.yaml': 'schema: 1\nmodules: [guardrails]\n' });
 	const env = { HOME: tempDir(), PATH: `/nowhere:${bin}` };
 
@@ -114,6 +114,14 @@ test('doctor shows the install mode, the Capabilities that are off and whether t
 test('doctor names the skill references that no installed skill answers', async () => {
 	const home = tempRepo({ '.claude/skills/present/SKILL.md': 'x' });
 	const root = gitRepo({ 'AGENTS.md': 'Use the `present` skill.\n', 'CLAUDE.md': '@AGENTS.md\n\nRun `/compact`, then `/gone`.\n' });
-	const doctor = doctorCommand(adapters, () => modulesDir, () => checkout());
+	const doctor = doctorCommand(adapters, () => [modulesDir], () => checkout());
 	assert.match((await run(doctor, root, [], { HOME: home })).out, /skill references:\n {2}claude: 1 of 3 not found\n {4}CLAUDE\.md:3: gone$/m);
+});
+
+test('doctor lists the Module folders and flags a missing one and a Module in two', async () => {
+	const clash = tempRepo({ 'guardrails/module.yaml': 'schema: 1\ndescription: d\n' });
+	const missing = join(tempDir(), 'gone');
+	const doctor = doctorCommand(adapters, () => [modulesDir, clash, missing], () => checkout());
+	const { out } = await run(doctor, tempDir(), [], { HOME: tempDir() });
+	assert.match(out, new RegExp(`Module folders: 3\n {2}${modulesDir} \\(the package\\): 1 Module\\(s\\)\n {2}${clash}: 1 Module\\(s\\)\n {2}${missing}: problem: not found\n {2}problem: Module 'guardrails' is in more than one folder`));
 });

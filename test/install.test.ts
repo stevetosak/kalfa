@@ -15,7 +15,7 @@ const pkg = tempRepo({ 'package.json': '{}\n', 'dist/kalfa-hook': '', 'dist/adap
 const shim = join(pkg, 'dist/kalfa-hook');
 const tap = join(pkg, 'dist/adapters/claude/status-tap');
 const adapters = new Map([['claude', claudeAdapter]]);
-const install = installCommand(adapters, () => modulesDir, () => pkg);
+const install = installCommand(adapters, () => [modulesDir], () => pkg);
 const uninstall = uninstallCommand(adapters);
 
 const FOREIGN = { matcher: 'Bash', hooks: [{ type: 'command', command: 'operator-own-hook', timeout: 5 }] };

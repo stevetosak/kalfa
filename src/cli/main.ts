@@ -1,5 +1,6 @@
 import { KalfaError } from '../core/errors.ts';
-import { modulesRoot, packageRoot } from '../core/package-root.ts';
+import { moduleDirs, moduleDirsOrOwn } from '../core/module-dirs.ts';
+import { packageRoot } from '../core/package-root.ts';
 import { type Command, UsageError } from './command.ts';
 import { adapters } from '../adapters/index.ts';
 import { memoryExtensions, moduleCommands, modules, withFolderModules } from '../modules/index.ts';
@@ -15,13 +16,13 @@ import { sectionCommand, taskCommand } from './commands/task.ts';
 import type { Io } from './io.ts';
 import { version } from './version.ts';
 
-const registry = withFolderModules(modules, modulesRoot());
+const registry = withFolderModules(modules, moduleDirsOrOwn(process.env));
 
 const commands: Record<string, Command> = {
-	init: initCommand(adapters, modulesRoot),
-	build: buildCommand(adapters, modulesRoot),
-	doctor: doctorCommand(adapters, modulesRoot, () => packageRoot()),
-	install: installCommand(adapters, modulesRoot, () => packageRoot()),
+	init: initCommand(adapters, moduleDirs),
+	build: buildCommand(adapters, moduleDirs),
+	doctor: doctorCommand(adapters, moduleDirs, () => packageRoot()),
+	install: installCommand(adapters, moduleDirs, () => packageRoot()),
 	uninstall: uninstallCommand(adapters),
 	link: linkCommand(() => packageRoot()),
 	unlink: unlinkCommand(() => packageRoot()),

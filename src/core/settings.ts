@@ -34,6 +34,13 @@ const settingsSchema = z.strictObject({
 	 * checks its part; a key in `kalfa.yaml` overrides the same key here.
 	 */
 	settings: z.record(moduleName, z.unknown()).optional(),
+	/**
+	 * More Module folders, after the package's own: a Module that is not
+	 * generic lives in its own repository. A Module name in two folders is refused.
+	 */
+	'module-dirs': z
+		.array(z.string().refine((dir) => dir.startsWith('/') || dir.startsWith('~/'), 'a Module folder is an absolute path or starts with ~/'))
+		.optional(),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;

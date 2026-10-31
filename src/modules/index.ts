@@ -28,11 +28,11 @@ export const moduleCommands: Record<string, (adapters: ReadonlyMap<string, Adapt
 export const memoryExtensions: readonly MemoryExtension[] = [memoryExtension];
 
 /**
- * `registry` and every Module folder in `modulesRoot` that has no handlers: a
+ * `registry` and every Module in the Module folders `dirs` that has no handlers: a
  * Module can be only skills, rules and approvals, and it is still a known name.
  */
-export function withFolderModules(registry: ReadonlyMap<string, ModuleDefinition>, modulesRoot: string): ReadonlyMap<string, ModuleDefinition> {
+export function withFolderModules(registry: ReadonlyMap<string, ModuleDefinition>, dirs: readonly string[]): ReadonlyMap<string, ModuleDefinition> {
 	const all = new Map(registry);
-	for (const name of moduleFolders(modulesRoot)) if (!all.has(name)) all.set(name, { name, handlers: {} });
+	for (const name of moduleFolders(dirs)) if (!all.has(name)) all.set(name, { name, handlers: {} });
 	return all;
 }

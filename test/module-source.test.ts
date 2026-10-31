@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { loadModuleSource, moduleFolders, parseRule } from '../src/core/module-source.ts';
+import { moduleDirs, moduleDirsOrOwn } from '../src/core/module-dirs.ts';
 import { modulesRoot, packageRoot } from '../src/core/package-root.ts';
 import { coreModule } from '../src/modules/core.ts';
 import { withFolderModules } from '../src/modules/index.ts';
@@ -17,7 +18,7 @@ test('a Module folder: skills and rules found from the folder, the rest from mod
 		'guardrails/rules/infra.md': "---\npaths: ['core/**/*.yaml']\n---\nPin every image.\n",
 		'guardrails/rules/always.md': 'Ask before every push.\n',
 	});
-	const source = loadModuleSource(root, 'guardrails');
+	const source = loadModuleSource([root], 'guardrails');
 	assert.deepEqual(source.skills.map((s) => s.name), ['push-gate']);
 	assert.deepEqual(source.rules, [
 		{ name: 'always', body: 'Ask before every push.\n' },
@@ -40,7 +41,7 @@ const refusals: Array<[string, Record<string, string>, RegExp]> = [
 
 for (const [what, files, message] of refusals) {
 	test(`a Module with ${what} is refused`, () => {
-		assert.throws(() => loadModuleSource(tempRepo(files), 'm'), { name: 'KalfaError', message });
+		assert.throws(() => loadModuleSource([tempRepo(files)], 'm'), { name: 'KalfaError', message });
 	});
 }
 
@@ -54,10 +55,10 @@ test('the package root is found from the source', () => {
 
 test('a Module folder without handlers is a known Module; a folder without module.yaml is not', () => {
 	const root = tempRepo({ 'rules-only/module.yaml': 'schema: 1\ndescription: d\n', 'stray/notes.md': 'x\n' });
-	const registry = withFolderModules(new Map([['core', coreModule]]), root);
+	const registry = withFolderModules(new Map([['core', coreModule]]), [root]);
 	assert.deepEqual([...registry.keys()], ['core', 'rules-only']);
 	assert.deepEqual(registry.get('rules-only')?.handlers, {});
-	assert.equal(withFolderModules(new Map([['core', coreModule]]), `${root}/missing`).size, 1);
+	assert.equal(withFolderModules(new Map([['core', coreModule]]), [`${root}/missing`]).size, 1);
 });
 
 test('KALFA_MODULES_DIR moves the Module folders', () => {
@@ -65,8 +66,41 @@ test('KALFA_MODULES_DIR moves the Module folders', () => {
 	assert.equal(modulesRoot({}), `${packageRoot()}/modules`);
 });
 
+test('a second Module folder adds its Modules; a name in two folders is refused', () => {
+	const own = tempRepo({ 'docs/module.yaml': 'schema: 1\ndescription: d\n' });
+	const extra = tempRepo({ 'platform/module.yaml': 'schema: 1\ndescription: p\n', 'platform/rules/r.md': 'Text.\n' });
+	assert.deepEqual(moduleFolders([own, extra]), ['docs', 'platform']);
+	assert.equal(loadModuleSource([own, extra], 'platform').dir, `${extra}/platform`);
+	assert.throws(() => loadModuleSource([own, extra], 'nope'), { name: 'KalfaError', message: new RegExp(`unknown Module 'nope' .*${extra}`) });
+	const clash = tempRepo({ 'docs/module.yaml': 'schema: 1\ndescription: d\n' });
+	assert.throws(() => loadModuleSource([own, clash], 'docs'), { name: 'KalfaError', message: /more than one Module folder/ });
+	assert.equal(loadModuleSource([own, own], 'docs').dir, `${own}/docs`);
+});
+
+test('module-dirs follows the package folder; ~/ is the home; bad settings fall back only on the hook path', () => {
+	const home = tempRepo({ '.config/kalfa/config.yaml': 'schema: 1\nmodules: []\nmodule-dirs: [~/infra/kalfa/modules, /opt/modules]\n' });
+	const env = { HOME: home, KALFA_MODULES_DIR: '/own' };
+	assert.deepEqual(moduleDirs(env), ['/own', `${home}/infra/kalfa/modules`, '/opt/modules']);
+	assert.deepEqual(moduleDirs({ HOME: tempRepo({}), KALFA_MODULES_DIR: '/own' }), ['/own']);
+
+	const relative = tempRepo({ '.config/kalfa/config.yaml': 'schema: 1\nmodules: []\nmodule-dirs: [modules]\n' });
+	assert.throws(() => moduleDirs({ HOME: relative }), { name: 'KalfaError', message: /absolute path or starts with ~\// });
+	assert.deepEqual(moduleDirsOrOwn({ HOME: relative, KALFA_MODULES_DIR: '/own' }), ['/own']);
+});
+
 test('every Module folder this kalfa ships loads', () => {
-	const names = moduleFolders(modulesRoot({}));
+	const names = moduleFolders([modulesRoot({})]);
 	assert.deepEqual(names, ['docs', 'guardrails', 'herdr', 'infra', 'memory', 'meter']);
-	for (const name of names) assert.equal(loadModuleSource(modulesRoot({}), name).name, name);
+	for (const name of names) assert.equal(loadModuleSource([modulesRoot({})], name).name, name);
+});
+
+// Claude Code gives a path-scoped rule only its first 40,000 characters (200K context window).
+const SCOPED_RULE_LIMIT = 40_000;
+
+test('every shipped path-scoped rule fits the smallest per-file limit', () => {
+	for (const name of moduleFolders([modulesRoot({})])) {
+		for (const rule of loadModuleSource([modulesRoot({})], name).rules) {
+			if (rule.paths) assert.ok(rule.body.length < SCOPED_RULE_LIMIT, `${name}/${rule.name}: ${rule.body.length} characters`);
+		}
+	}
 });

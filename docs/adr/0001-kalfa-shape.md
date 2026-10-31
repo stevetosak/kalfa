@@ -96,3 +96,15 @@ kalfa's. A hook or status line is kalfa's by the program it runs; an approval
 only when kalfa recorded adding it. APM keeps only the personal skills. Since
 ADR 0002, install also turns off the harness's own automatic memory, and
 uninstall gives back the value it had, unless the Operator changed it since.
+
+## Amendment 2026-10-31: Modules from more than one folder
+
+A Module that describes one Operator's own systems is not generic, so it does
+not ship in the kalfa package. It lives in the repository it describes, and the
+machine setting `module-dirs` names that repository's Module folder. kalfa
+reads the package's own folder first, then each folder in that list. A Module
+name found in two folders is refused, so a folder cannot silently replace a
+shipped Module. The registry that the hooks use falls back to the package's
+folder when the machine settings are bad, because the dispatcher reports the
+settings itself and a hook must not break on them; every command reports the
+error. `kalfa doctor` lists the folders and flags a missing one.

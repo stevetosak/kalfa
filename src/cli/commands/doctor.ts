@@ -8,7 +8,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import type { Adapter } from '../../adapters/adapter.ts';
 import { KalfaError } from '../../core/errors.ts';
-import { loadModuleSource, type ModuleManifest } from '../../core/module-source.ts';
+import type { ModuleDirs } from '../../core/module-dirs.ts';
+import { loadModuleSource, MODULE_FILE, moduleFolders, type ModuleManifest } from '../../core/module-source.ts';
 import { findPlans, isOpenPlan } from '../../core/plans.ts';
 import { AGENTS_FILE, loadProject, type Project, PROJECT_FILE } from '../../core/project.ts';
 import { loadSettings, settingsPath } from '../../core/settings.ts';
@@ -44,10 +45,10 @@ function installMode(env: NodeJS.ProcessEnv, packageRoot: string): string {
 	return 'kalfa is not on PATH';
 }
 
-function capabilityLines(project: Project | undefined, adapters: ReadonlyMap<string, Adapter>, modulesRoot: string): string[] {
+function capabilityLines(project: Project | undefined, adapters: ReadonlyMap<string, Adapter>, dirs: readonly string[]): string[] {
 	const needs: Array<{ owner: string } & ModuleManifest['needs'][number]> = coreNeeds.map((need) => ({ owner: 'core', ...need }));
 	for (const name of project?.file?.modules ?? []) {
-		needs.push(...loadModuleSource(modulesRoot, name).manifest.needs.map((need) => ({ owner: name, ...need })));
+		needs.push(...loadModuleSource(dirs, name).manifest.needs.map((need) => ({ owner: name, ...need })));
 	}
 	const lines: string[] = [];
 	for (const adapter of adapters.values()) {
@@ -56,6 +57,16 @@ function capabilityLines(project: Project | undefined, adapters: ReadonlyMap<str
 		for (const need of off) lines.push(`  ${need.owner} without ${need.capability}: ${need.without}`);
 	}
 	return ['', ...lines];
+}
+
+/** Each Module folder in order, with a missing one and a Module name in two folders flagged. */
+function moduleFolderLines(dirs: readonly string[], env: NodeJS.ProcessEnv): string[] {
+	const lines = dirs.map((dir, i) => {
+		const why = i === 0 ? (env.KALFA_MODULES_DIR ? ' (KALFA_MODULES_DIR)' : ' (the package)') : '';
+		return `${dir}${why}${existsSync(dir) ? `: ${moduleFolders([dir]).length} Module(s)` : ': problem: not found'}`;
+	});
+	const twice = moduleFolders(dirs).filter((name) => dirs.filter((dir) => existsSync(join(dir, name, MODULE_FILE))).length > 1);
+	return [`${dirs.length}`, ...lines, ...twice.map((name) => `problem: Module '${name}' is in more than one folder`)];
 }
 
 /** Per harness: the skill references in the instruction files it reads that none of its skills answers. */
@@ -74,7 +85,7 @@ function skillRefLines(root: string, env: NodeJS.ProcessEnv, adapters: ReadonlyM
 	return ['', ...lines];
 }
 
-export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, modulesRoot: () => string, packageRoot: () => string): Command {
+export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs, packageRoot: () => string): Command {
 	return {
 		summary: 'Report what kalfa sees on this machine and in this repository',
 		usage: 'kalfa doctor [--smoke]   (--smoke: install, use and remove this kalfa in a throw-away HOME and repository)',
@@ -83,12 +94,12 @@ export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, modulesRoo
 			if (values.smoke) return runSmoke(packageRoot(), io);
 			io.out(`kalfa ${version} from ${packageRoot()}`);
 			part(io, 'install', () => [installMode(io.env, packageRoot())]);
-			if (io.env.KALFA_MODULES_DIR) io.out(`Modules folder: ${modulesRoot()} (from KALFA_MODULES_DIR)`);
 			const path = settingsPath(io.env);
 			part(io, 'machine settings', () => {
 				loadSettings(io.env);
 				return [`${path}${existsSync(path) ? '' : ' (not found, defaults)'}`];
 			});
+			part(io, 'Module folders', () => moduleFolderLines(moduleDirs(io.env), io.env));
 
 			const project = loadProject(io.cwd);
 			if (!project) {
@@ -107,11 +118,11 @@ export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, modulesRoo
 					});
 				}
 			}
-			part(io, 'Capabilities', () => capabilityLines(project, adapters, modulesRoot()));
+			part(io, 'Capabilities', () => capabilityLines(project, adapters, moduleDirs(io.env)));
 			part(io, 'skill references', () => skillRefLines(project.root, io.env, adapters));
 			if (project.file) {
 				part(io, 'build', () => {
-					const run = buildProject(project, adapters, modulesRoot(), io.env, { dryRun: true, offline: true });
+					const run = buildProject(project, adapters, moduleDirs(io.env), io.env, { dryRun: true, offline: true });
 					if (!run.changes) return ['up to date'];
 					return [`${run.changes} change(s) waiting; run kalfa build`, ...run.report];
 				});
