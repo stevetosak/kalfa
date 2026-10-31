@@ -44,11 +44,22 @@ export interface ModuleDefinition {
 	settings?: z.ZodType;
 }
 
-/** The Module's settings from `kalfa.yaml`, checked against its schema (defaults filled in). */
-export function moduleSettings<S extends z.ZodType>(module: ModuleDefinition & { settings: S }, project: Project | undefined): z.infer<S> {
-	const result = module.settings.safeParse(project?.file?.settings[module.name] ?? {});
-	if (!result.success) throw new KalfaError(`kalfa.yaml settings.${module.name}: ${result.error.issues.map((i) => `${i.path.join('.') || '(top)'}: ${i.message}`).join('; ')}`);
+const settingsObject = (value: unknown): Record<string, unknown> => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
+
+/**
+ * The Module's settings, checked against its schema (defaults filled in): the
+ * machine settings' part, then `kalfa.yaml`'s part over it, key by key.
+ */
+export function moduleSettings<S extends z.ZodType>(module: ModuleDefinition & { settings: S }, project: Project | undefined, machine?: Settings): z.infer<S> {
+	const merged = { ...settingsObject(machine?.settings?.[module.name]), ...settingsObject(project?.file?.settings[module.name]) };
+	const result = module.settings.safeParse(merged);
+	if (!result.success) throw new KalfaError(`settings.${module.name} (kalfa.yaml or the machine settings): ${result.error.issues.map((i) => `${i.path.join('.') || '(top)'}: ${i.message}`).join('; ')}`);
 	return result.data;
+}
+
+/** The Module runs here: the machine settings or the project file turn it on. */
+export function isModuleOn(name: string, project: Project | undefined, machine: Settings): boolean {
+	return machine.modules.includes(name) || (project?.file?.modules.includes(name) ?? false);
 }
 
 /** The Core's own handlers; they run in every repository, first. */

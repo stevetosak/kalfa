@@ -15,9 +15,9 @@ export const guardrailsModule = {
 	filters: { 'command.before': 'push' },
 	failClosed: ['command.before'],
 	handlers: {
-		'command.before'(event, { project }) {
+		'command.before'(event, { project, settings }) {
 			if (event.name !== 'command.before') return undefined;
-			const branches = moduleSettings(guardrailsModule, project)['protected-branches'];
+			const branches = moduleSettings(guardrailsModule, project, settings)['protected-branches'];
 			const reasons = protectedPushes(event.command, event.cwd, branches);
 			if (!reasons.length) return undefined;
 			return { block: `kalfa guardrails refused ${reasons.join('; ')}. Push another branch and open a pull request.` };

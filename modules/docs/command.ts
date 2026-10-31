@@ -23,7 +23,7 @@ export function docsCommand(today = () => new Date().toISOString().slice(0, 10))
 			const project = requireProject(io);
 			if (sub === 'draft') {
 				const { values } = parseCommandArgs(rest, { task: { type: 'string' }, out: { type: 'string' } });
-				requireModule(project, 'docs');
+				requireModule(project, 'docs', io.env);
 				const id = taskId(project, values.task);
 				const record = readRecord(project.root, id);
 				if (!record) throw new KalfaError(`no Task Record '${id}'; start one with: kalfa task start "<goal>"`);
@@ -44,7 +44,7 @@ export function docsCommand(today = () => new Date().toISOString().slice(0, 10))
 			}
 			if (sub === 'check') {
 				const { values } = parseCommandArgs(rest, { base: { type: 'string' }, head: { type: 'string' } });
-				requireModule(project, 'docs');
+				requireModule(project, 'docs', io.env);
 				const { logs, base } = docsSettings(project);
 				const verdict = checkBranch({ dir: io.cwd, logGlobs: logs, base: values.base ?? base ?? defaultBranch(io.cwd), head: values.head });
 				if (verdict.ok) {

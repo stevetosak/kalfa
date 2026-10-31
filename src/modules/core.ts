@@ -3,7 +3,7 @@
 // Standing memory: the Personal layer in every session, and the project's
 // layer inside a repository, under their budgets (ADR 0002).
 import { currentBranch } from '../core/git.ts';
-import { memoryHome, readLayer, sessionLayers } from '../core/memory/home.ts';
+import { memoryHome, scanLayer, sessionLayers } from '../core/memory/home.ts';
 import { budgetOf, layerView, overBudgetNotice, renderLayer } from '../core/memory/standing.ts';
 import { memoryBudgets, type Settings } from '../core/settings.ts';
 import type { HandlerResult } from '../core/events.ts';
@@ -58,9 +58,12 @@ function taskReport(project: Project, source: string | undefined): ReportPart {
 
 function memoryReport(project: Project | undefined, settings: Settings, env: NodeJS.ProcessEnv): ReportPart {
 	const budgets = memoryBudgets(settings);
-	const views = sessionLayers(memoryHome(env), project).map((layer) => layerView(layer, readLayer(layer), budgetOf(layer, budgets)));
+	const scans = sessionLayers(memoryHome(env), project).map((layer) => ({ layer, scan: scanLayer(layer) }));
+	const views = scans.map(({ layer, scan }) => layerView(layer, scan.records, budgetOf(layer, budgets)));
 	const blocks = views.map(renderLayer).filter(Boolean);
-	const notices = views.map((v) => overBudgetNotice(v, budgetOf(v.layer, budgets))).filter(Boolean);
+	// A broken file is left out and named; the other records still load.
+	const unreadable = scans.flatMap(({ scan }) => scan.problems.map((p) => `kalfa: memory: left out: ${p}`));
+	const notices = [...views.map((v) => overBudgetNotice(v, budgetOf(v.layer, budgets))).filter(Boolean), ...unreadable];
 	const rules = views.reduce((n, v) => n + v.rules.length, 0);
 	const lines = views.reduce((n, v) => n + v.index.length, 0);
 	return {

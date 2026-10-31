@@ -6,7 +6,7 @@ import { basename, join } from 'node:path';
 import type { Parts, TaskRecord } from '../../src/core/task-record.ts';
 
 /** The parts the draft gathers at the end, not per Section. */
-const GATHERED = new Set(['Next', 'Lesson candidates']);
+const GATHERED = new Set(['Next', 'Memory candidates']);
 
 function sectionBlock(title: string, parts: Parts): string[] {
 	const lines = [`## ${title}`, ''];
@@ -26,8 +26,8 @@ export function logDraft(record: TaskRecord, today: string): string {
 	if (header.plan) lines.push(`Plan: ${header.plan}`, '');
 	for (const section of sections) lines.push(...sectionBlock(section.title, section.parts));
 	if (close) lines.push(...sectionBlock('Close', close));
-	const candidates = sections.flatMap((s) => s.parts.get('Lesson candidates')?.trim() || []);
-	if (candidates.length) lines.push('## Lesson candidates', '', ...candidates.flatMap((c) => [c, '']));
+	const candidates = sections.flatMap((s) => s.parts.get('Memory candidates')?.trim() || []);
+	if (candidates.length) lines.push('## Memory candidates', '', ...candidates.flatMap((c) => [c, '']));
 	const next = close?.get('Next') ?? sections.at(-1)?.parts.get('Next');
 	if (next?.trim()) lines.push('## Next', '', next.trim(), '');
 	return `${lines.join('\n').trimEnd()}\n`;

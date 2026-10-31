@@ -43,7 +43,7 @@ export function herdrCommand(adapters: ReadonlyMap<string, Adapter>, deps: Herdr
 				force: { type: 'boolean' },
 			});
 			const project = requireProject(io);
-			requireModule(project, 'herdr');
+			requireModule(project, 'herdr', io.env);
 			const record = openRecord(project, taskId(project, values.task));
 			const adapter = harness(adapters, io.env, values.harness);
 			const result = continueTask({

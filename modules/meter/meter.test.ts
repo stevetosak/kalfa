@@ -131,7 +131,7 @@ test('the handler reads the session through the Adapter, keeps its state in the 
 	const stopped = await meterModule.handlers['tool.after'](event(transcript(300_000, 90), { sessionId: 's3', tool: 'AskUserQuestion', durationMs: 90 * 60_000 }), context);
 	assert.match(stopped?.stop ?? '', /Paused before the next request[\s\S]*\/clear starts a fresh, small session/);
 	const project = { ...context, project: { root: '/r', file: { schema: 1 as const, modules: ['meter'], plans: [], settings: { meter: { 'compact-at': 50_000 } } } } };
-	await assert.rejects(Promise.resolve().then(() => meterModule.handlers['tool.after'](event(path, { sessionId: 's4' }), project)), /settings\.meter: compact-at/);
+	await assert.rejects(Promise.resolve().then(() => meterModule.handlers['tool.after'](event(path, { sessionId: 's4' }), project)), /settings\.meter \(kalfa\.yaml or the machine settings\): compact-at/);
 });
 
 test('API-equivalent prices: Opus 5.5 with an hour-long write; an unknown model costs nothing', () => {

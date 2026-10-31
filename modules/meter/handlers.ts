@@ -50,7 +50,7 @@ function meter(event: CoreEvent, context: HandlerContext, now = Date.now()): Han
 		last,
 		now,
 		state: before,
-		compactAt: moduleSettings(meterModule, context.project)['compact-at'],
+		compactAt: moduleSettings(meterModule, context.project, context.settings)['compact-at'],
 		fresh: () => freshStart(context.project),
 	});
 	if (JSON.stringify(state) !== JSON.stringify(before)) writeState(dir, event.sessionId, state);

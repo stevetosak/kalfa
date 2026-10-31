@@ -3,8 +3,8 @@
 // layer is `projects/<host>/<owner>/<repo>/`, keyed by its `origin` URL, so
 // every work tree and clone of a repository shares it.
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, join, relative } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, relative } from 'node:path';
 import { KalfaError } from '../errors.ts';
 import { machineDataDir } from '../machine-paths.ts';
 import type { Project } from '../project.ts';
@@ -74,12 +74,38 @@ export function recordPath(layer: Layer, id: string): string {
 	return join(layer.dir, `${id}.md`);
 }
 
+export interface LayerScan {
+	records: MemoryRecord[];
+	/** One message per file that is not a valid record; such a file is left out. */
+	problems: string[];
+}
+
+/** Every record of the layer; a file that is not a valid record is reported and left out. */
+export function scanLayer(layer: Layer): LayerScan {
+	const scan: LayerScan = { records: [], problems: [] };
+	if (!existsSync(layer.dir)) return scan;
+	for (const name of readdirSync(layer.dir).filter((n) => n.endsWith('.md')).sort()) {
+		const path = join(layer.dir, name);
+		try {
+			scan.records.push(parseMemoryRecord(readFileSync(path, 'utf8'), path, name.slice(0, -3)));
+		} catch (error) {
+			if (!(error instanceof KalfaError)) throw error;
+			scan.problems.push(error.message);
+		}
+	}
+	return scan;
+}
+
+/** Every record of the layer; refused when a file is not a valid record (a write must see the whole layer). */
 export function readLayer(layer: Layer): MemoryRecord[] {
-	if (!existsSync(layer.dir)) return [];
-	return readdirSync(layer.dir)
-		.filter((name) => name.endsWith('.md'))
-		.sort()
-		.map((name) => parseMemoryRecord(readFileSync(join(layer.dir, name), 'utf8'), join(layer.dir, name), name.slice(0, -3)));
+	const { records, problems } = scanLayer(layer);
+	if (problems.length) throw new KalfaError(`${problems.join('; ')} (fix the file by hand, then try again)`);
+	return records;
+}
+
+/** The folder of a project's closed Task Records in the Memory home. */
+export function projectTasksDir(home: string, project: Project): string {
+	return join(projectLayer(home, project).dir, 'tasks');
 }
 
 // The home's git runs with no hooks, no signing and its own identity, so a
@@ -98,27 +124,52 @@ function ensureHome(home: string): void {
 	if (!existsSync(join(home, '.git'))) git(home, ['init', '-q']);
 }
 
+export interface HomeChange {
+	/** Files to write: absolute paths inside the home, with their text. */
+	write?: { path: string; text: string }[];
+	/** Files to remove: absolute paths inside the home. */
+	remove?: string[];
+}
+
 /**
- * Writes records and commits them with `message`. Changes made by hand since
- * the last write are committed first, on their own, so the history says who
- * changed what.
+ * Writes and removes files in the Memory home and commits them as one change
+ * with `message`. Changes made by hand since the last write are committed
+ * first, on their own, so the history says who changed what.
  */
-export function writeRecords(home: string, writes: { layer: Layer; record: Pick<MemoryRecord, 'id' | 'header' | 'body'> }[], message: string): string[] {
+export function commitHome(home: string, change: HomeChange, message: string): void {
 	ensureHome(home);
+	const inside = (path: string) => {
+		const rel = relative(home, path);
+		if (!rel || rel.startsWith('..')) throw new KalfaError(`Memory home: ${path} is outside ${home}`);
+		return rel;
+	};
 	if (git(home, ['status', '--porcelain']).trim()) {
 		git(home, ['add', '-A']);
 		git(home, ['commit', '-q', '-m', 'hand edits']);
 	}
-	const paths = writes.map(({ layer, record }) => {
-		mkdirSync(layer.dir, { recursive: true });
-		const path = recordPath(layer, record.id);
-		writeFileSync(path, renderMemoryRecord(record));
-		return path;
+	const written = (change.write ?? []).map(({ path, text }) => {
+		const rel = inside(path);
+		mkdirSync(dirname(path), { recursive: true });
+		writeFileSync(path, text);
+		return rel;
 	});
-	git(home, ['add', '--', ...paths.map((p) => relative(home, p))]);
+	const removed = (change.remove ?? []).flatMap((path) => {
+		const rel = inside(path);
+		if (!existsSync(path)) return [];
+		rmSync(path);
+		return [rel];
+	});
+	const paths = [...written, ...removed];
+	if (paths.length) git(home, ['add', '-A', '--', ...paths]);
 	// A confirm on the day of the last one changes no byte, but its proof still goes into the history.
 	git(home, ['commit', '-q', '--allow-empty', '-m', message]);
-	return paths;
+}
+
+/** Writes records (and any other change) and commits them with `message`; returns the records' paths. */
+export function writeRecords(home: string, writes: { layer: Layer; record: Pick<MemoryRecord, 'id' | 'header' | 'body'> }[], message: string, also: HomeChange = {}): string[] {
+	const records = writes.map(({ layer, record }) => ({ path: recordPath(layer, record.id), text: renderMemoryRecord(record) }));
+	commitHome(home, { write: [...records, ...(also.write ?? [])], remove: also.remove }, message);
+	return records.map((r) => r.path);
 }
 
 /**
