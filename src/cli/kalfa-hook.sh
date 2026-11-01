@@ -7,7 +7,8 @@
 # The table: in a repository with kalfa.yaml, its own (the machine's Modules
 # and the project's); elsewhere the machine's, and none at all when the machine
 # settings do not exist. A missing table, or one older than a file it is made
-# from, starts Node, and Node writes it again.
+# from, starts Node, and Node writes it again. A wake marker for the event
+# (.kalfa/wake/<event>, set by a handler) starts Node once; the handler removes it.
 set -u
 harness=${1:-}
 event=${2:-}
@@ -21,6 +22,7 @@ case " @CORE_EVENTS@ " in *" $event "*) run "$@" ;; esac
 config=${XDG_CONFIG_HOME:-$HOME/.config}/kalfa/config.yaml
 root=$PWD
 until [[ -e $root/.git || $root == / ]]; do root=$(dirname "$root"); done
+[[ -e $root/.git && -e $root/.kalfa/wake/$event ]] && run "$@"
 if [[ -e $root/.git && -f $root/kalfa.yaml ]]; then
 	table=$root/.kalfa/events
 	[[ $table -nt $root/kalfa.yaml ]] || run "$@"

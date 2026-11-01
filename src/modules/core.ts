@@ -1,5 +1,9 @@
-// The Core's own handlers: the session report (open Plans; open Tasks, or
-// after a /clear the Handoff of the branch's Task) and the task-list mapping.
+// The Core's own handlers: the session report (open Plans; open Tasks, or the
+// branch's Task after /clear, /compact or a fork), the continue word and the
+// task-list mapping. After /clear the Operator sees the Task's brief, and the
+// Handoff loads only when the first prompt is a continue word: any other
+// prompt starts a new task without it. After /compact or a fork the session
+// goes on with the Task, so the Handoff loads at once.
 // Standing memory: the Personal layer in every session, and the project's
 // layer inside a repository: the Loaded tier under their budgets, and a line
 // for the Stored tier (ADR 0002).
@@ -8,12 +12,14 @@ import { memoryHome, scanLayer, sessionLayers } from '../core/memory/home.ts';
 import { budgetOf, layerView, overBudgetNotice, renderLayer } from '../core/memory/standing.ts';
 import { readUsage } from '../core/memory/usage.ts';
 import { memoryBudgets, type Settings } from '../core/settings.ts';
-import type { HandlerResult } from '../core/events.ts';
+import { isContinueWord } from '../core/continue-word.ts';
+import type { CoreEvent, HandlerResult, SessionStartSource } from '../core/events.ts';
 import type { ModuleManifest } from '../core/module-source.ts';
 import { CORE_MODULE, type Handler, type ModuleDefinition } from '../core/modules.ts';
 import { findPlans, isOpenPlan, planSummary } from '../core/plans.ts';
 import type { Project } from '../core/project.ts';
-import { handoffView, listRecords, taskIdOf } from '../core/task-record.ts';
+import { briefView, handoffView, listRecords, readRecord, type TaskRecord, taskIdOf } from '../core/task-record.ts';
+import { setWake, takeWake } from '../core/wake.ts';
 
 /** One part of the session report: what the agent reads, and a short summary the Operator sees. */
 interface ReportPart {
@@ -36,15 +42,31 @@ function planReport(project: Project): ReportPart {
 	};
 }
 
-function taskReport(project: Project, source: string | undefined): ReportPart {
+/** After these the session goes on with the work it had, so the Handoff loads at once. */
+const RELOAD_SOURCES: ReadonlySet<SessionStartSource> = new Set(['compact', 'fork']);
+
+const handoffContext = (record: TaskRecord) => `Continue the Task from its record (kalfa task show --handoff):\n\n${handoffView(record)}`;
+
+/** After /clear: the brief for the Operator, a pointer for the agent, and a wake for the first prompt. */
+function clearReport(project: Project, own: TaskRecord, session: string | undefined): ReportPart {
+	setWake(project.root, 'prompt.submit', { session, data: { task: own.id } });
+	return {
+		context: [
+			`Task ${own.id} is open on this branch; the Operator sees its brief.`,
+			`If the first prompt is a continue word, the Task's Handoff comes with it. Any other first prompt is a new task: read the Handoff (kalfa task show --handoff) only when the prompt is about Task ${own.id}.`,
+		].join(' '),
+		notice: `kalfa: ${briefView(own)}\nType "continue" to load its Handoff, or give a new task.`,
+	};
+}
+
+function taskReport(project: Project, event: Extract<CoreEvent, { name: 'session.start' }>): ReportPart {
 	const open = listRecords(project.root).filter((r) => r.header.status === 'open');
 	if (!open.length) return {};
 
 	const branch = currentBranch(project.root);
 	const own = branch ? open.find((r) => r.id === taskIdOf(branch)) : undefined;
-	if (source === 'clear' && own) {
-		return { context: `Continue the Task from its record (kalfa task show --handoff):\n\n${handoffView(own)}`, summary: `continuing Task ${own.id} from its Handoff` };
-	}
+	if (own && event.source === 'clear') return clearReport(project, own, event.sessionId);
+	if (own && RELOAD_SOURCES.has(event.source)) return { context: handoffContext(own), summary: `Handoff of Task ${own.id} loaded again` };
 
 	const lines = open.map((r) => {
 		const next = r.sections.at(-1)?.parts.get('Next');
@@ -53,7 +75,7 @@ function taskReport(project: Project, source: string | undefined): ReportPart {
 	});
 	const hint = 'Record each closed Section with `kalfa section close "<title>"` (parts on stdin); close the Task with `kalfa task close` once its Done when line holds.';
 	const others = open.length - (own ? 1 : 0);
-	const summary = [own ? `Task ${own.id} open on this branch (its Handoff comes after /clear)` : undefined, others ? plural(others, own ? 'other open Task' : 'open Task') : undefined]
+	const summary = [own ? `Task ${own.id} open on this branch (after /clear, "continue" loads its Handoff)` : undefined, others ? plural(others, own ? 'other open Task' : 'open Task') : undefined]
 		.filter(Boolean)
 		.join(' · ');
 	return { context: [`Open Tasks in this repository (kalfa task show --task <id>):`, ...lines, hint].join('\n'), summary };
@@ -85,12 +107,25 @@ function memoryReport(project: Project | undefined, settings: Settings, env: Nod
  */
 const sessionReport: Handler = (event, { project, settings, env }) => {
 	if (event.name !== 'session.start') return undefined;
-	const parts = [memoryReport(project, settings, env), ...(project ? [planReport(project), taskReport(project, event.source)] : [])];
+	const parts = [memoryReport(project, settings, env), ...(project ? [planReport(project), taskReport(project, event)] : [])];
 	const context = parts.map((p) => p.context).filter(Boolean).join('\n\n');
 	const summary = parts.map((p) => p.summary).filter(Boolean).join(' · ');
 	const notice = [summary ? `kalfa: ${summary}` : undefined, ...parts.map((p) => p.notice)].filter(Boolean).join('\n');
 	if (!context && !notice) return undefined;
 	return { context: context || undefined, notice: notice || undefined };
+};
+
+/**
+ * The first prompt after /clear (the wake from clearReport): a continue word
+ * loads the Handoff of the Task; any other prompt only uses up the wake.
+ */
+const continueWord: Handler = (event, { project }) => {
+	if (event.name !== 'prompt.submit' || event.subagent || !project) return undefined;
+	const task = takeWake(project.root, 'prompt.submit', event.sessionId)?.data.task;
+	if (!task || !isContinueWord(event.prompt)) return undefined;
+	const record = readRecord(project.root, task);
+	if (record?.header.status !== 'open') return undefined;
+	return { context: `The Operator continues Task ${task}. ${handoffContext(record)}`, notice: `kalfa: Handoff of Task ${task} loaded` };
 };
 
 /** Without a task list the Section stays in the record only. */
@@ -107,5 +142,6 @@ export const coreNeeds: ModuleManifest['needs'] = [
 
 export const coreModule: ModuleDefinition = {
 	name: CORE_MODULE,
-	handlers: { 'session.start': sessionReport, 'section.close': taskListMapping },
+	handlers: { 'session.start': sessionReport, 'prompt.submit': continueWord, 'section.close': taskListMapping },
+	wakeOnly: ['prompt.submit'],
 };

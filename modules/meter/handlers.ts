@@ -20,7 +20,7 @@ const settings = z.strictObject({
 export function freshStart(project: Project | undefined): string {
 	const branch = project && currentBranch(project.root);
 	const record = branch ? readRecord(project.root, taskIdOf(branch)) : undefined;
-	if (record?.header.status === 'open') return `Task ${record.id} is open: record the Section with \`kalfa section close\`, then /clear shows its Handoff in a fresh, small session.`;
+	if (record?.header.status === 'open') return `Task ${record.id} is open: record the Section with \`kalfa section close\`, then /clear shows its brief and \"continue\" loads its Handoff in a fresh, small session.`;
 	return '/clear starts a fresh, small session.';
 }
 

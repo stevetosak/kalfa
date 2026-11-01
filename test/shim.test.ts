@@ -2,7 +2,7 @@
 // records the call, so the test sees whether Node would have started.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { tempDir, tempRepo } from './helpers.ts';
@@ -93,6 +93,18 @@ function machineSettings(table?: string): NodeJS.ProcessEnv {
 	}
 	return dirs;
 }
+
+test('a wake marker starts Node for its event, in a repository with or without kalfa.yaml', () => {
+	for (const root of [tempRepo({ 'kalfa.yaml': 'schema: 1\n' }), tempRepo()]) {
+		mkdirSync(join(root, '.kalfa', 'wake'), { recursive: true });
+		writeFileSync(join(root, '.kalfa', 'events'), '');
+		if (existsSync(join(root, 'kalfa.yaml'))) utimesSync(join(root, 'kalfa.yaml'), new Date(2000, 0), new Date(2000, 0));
+		assert.equal(shimRuns(root, 'prompt.submit'), false);
+		writeFileSync(join(root, '.kalfa', 'wake', 'prompt.submit'), '{}\n');
+		assert.equal(shimRuns(root, 'prompt.submit'), true);
+		assert.equal(shimRuns(root, 'tool.after'), false, 'the wake is for its own event only');
+	}
+});
 
 test('with machine settings, the machine table decides outside a kalfa project', () => {
 	const dirs = machineSettings('command.before\n');

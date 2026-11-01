@@ -20,7 +20,7 @@ a logical Section, never in the middle of a change.
    ask for it.
 3. **Ask once**: "Start the next session on Task `<id>` now?", with the Next
    step in the question. Anything but a clear yes: stop. The record waits; a
-   `/clear` in this repository shows its Handoff.
+   `/clear` in this repository shows its brief, and "continue" loads its Handoff.
 4. **Start it**: `kalfa herdr continue` (add `--task <id>` when the Task is
    not the one of the checked-out branch, `--model <model>` when the
    Operator names one).

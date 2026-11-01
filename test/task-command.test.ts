@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { sectionCommand, taskCommand } from '../src/cli/commands/task.ts';
 import { main } from '../src/cli/main.ts';
+import { isContinueWord } from '../src/core/continue-word.ts';
 import { writeRecord } from '../src/core/task-record.ts';
+import { wakePath } from '../src/core/wake.ts';
 import { coreModule } from '../src/modules/core.ts';
 import { fakeAdapter, registry } from './fakes.ts';
 import { captureIo, gitRepo, tempDir } from './helpers.ts';
@@ -25,6 +27,16 @@ function repo(kalfaYaml = 'schema: 1\nmodules: [docs]\n', ignore = '.kalfa/\n'):
 }
 
 const inHarness = { HOME: tempDir(), KALFA_FAKE_HARNESS: '1' };
+
+/** A repository with Task feat-monitoring open on its branch, one Section closed. */
+async function openTask() {
+	const root = repo();
+	await task.run(['start', '--done-when', 'it works', 'Build the monitoring'], captureIo(root));
+	await section.run(['close', 'proven'], captureIo(root, { HOME: tempDir() }, '**Done:** x\n**Found:** the API answers.\n**Next:** render it.\n'));
+	const context = { project: { root, file: undefined }, settings: { schema: 1 as const, modules: [] }, env: { HOME: tempDir() }, capabilities: new Set<never>() };
+	const base = { harness: 'fake', cwd: root, name: 'session.start' as const };
+	return { root, context, base };
+}
 
 test('start, close Sections, close: the whole Task in one record', async () => {
 	const root = repo();
@@ -98,18 +110,69 @@ test('a Section for a Module that is off is refused through main, with exit 1', 
 	assert.match(io.stderr.join('\n'), /Module docs is not enabled/);
 });
 
-test('the session report lists open Tasks, and after /clear gives the Handoff', async () => {
-	const root = repo();
-	await task.run(['start', '--done-when', 'it works', 'Build the monitoring'], captureIo(root));
-	await section.run(['close', 'proven'], captureIo(root, { HOME: tempDir() }, '**Done:** x\n**Next:** render it.\n'));
-	const context = { project: { root, file: undefined }, settings: { schema: 1 as const, modules: [] }, env: { HOME: tempDir() }, capabilities: new Set<never>() };
-	const base = { harness: 'fake', cwd: root, name: 'session.start' as const };
+test('the session report lists open Tasks on startup', async () => {
+	const { context, base } = await openTask();
 	const startup = await coreModule.handlers['session.start']!({ ...base, source: 'startup' }, context);
 	assert.match(startup?.context ?? '', /- feat-monitoring: Build the monitoring \(1 Section\(s\)\)\n  Done when: it works\n  Next: render it\./);
-	assert.equal(startup?.notice, 'kalfa: Task feat-monitoring open on this branch (its Handoff comes after /clear)');
-	const clear = await coreModule.handlers['session.start']!({ ...base, source: 'clear' }, context);
-	assert.match(clear?.context ?? '', /^Continue the Task[\s\S]*\nDone when: it works\n[\s\S]*Next: render it\.$/);
-	assert.equal(clear?.notice, 'kalfa: continuing Task feat-monitoring from its Handoff');
+	assert.equal(startup?.notice, 'kalfa: Task feat-monitoring open on this branch (after /clear, "continue" loads its Handoff)');
+});
+
+test('after /clear the Operator sees the brief, and the agent gets a pointer, not the Handoff', async () => {
+	const { context, base } = await openTask();
+	const clear = await coreModule.handlers['session.start']!({ ...base, source: 'clear', sessionId: 's1' }, context);
+	assert.equal(
+		clear?.notice,
+		[
+			'kalfa: Task feat-monitoring: Build the monitoring',
+			'  Done when: it works',
+			'  Done: proven',
+			'  State: proven: the API answers.',
+			'  Next: render it.',
+			'Type "continue" to load its Handoff, or give a new task.',
+		].join('\n'),
+	);
+	assert.match(clear?.context ?? '', /^Task feat-monitoring is open on this branch; the Operator sees its brief\. If the first prompt is a continue word/);
+	assert.doesNotMatch(clear?.context ?? '', /Next: render it/);
+});
+
+test('the first prompt after /clear: a continue word loads the Handoff once', async () => {
+	const { root, context, base } = await openTask();
+	await coreModule.handlers['session.start']!({ ...base, source: 'clear', sessionId: 's1' }, context);
+	assert.equal(existsSync(wakePath(root, 'prompt.submit')), true);
+	const prompt = (text: string) => coreModule.handlers['prompt.submit']!({ harness: 'fake', cwd: root, name: 'prompt.submit', prompt: text, sessionId: 's1' }, context);
+	const first = await prompt(' Continue! ');
+	assert.match(first?.context ?? '', /^The Operator continues Task feat-monitoring\. Continue the Task from its record[\s\S]*\nDone when: it works\n[\s\S]*Next: render it\.$/);
+	assert.equal(first?.notice, 'kalfa: Handoff of Task feat-monitoring loaded');
+	assert.equal(existsSync(wakePath(root, 'prompt.submit')), false);
+	assert.equal(await prompt('continue'), undefined);
+});
+
+test('the first prompt after /clear: any other prompt is a new task and uses up the wake', async () => {
+	const { root, context, base } = await openTask();
+	await coreModule.handlers['session.start']!({ ...base, source: 'clear', sessionId: 's1' }, context);
+	const prompt = (text: string, sessionId = 's1') => coreModule.handlers['prompt.submit']!({ harness: 'fake', cwd: root, name: 'prompt.submit', prompt: text, sessionId }, context);
+	assert.equal(await prompt('fix the login page'), undefined);
+	assert.equal(existsSync(wakePath(root, 'prompt.submit')), false);
+	assert.equal(await prompt('continue'), undefined);
+
+	await coreModule.handlers['session.start']!({ ...base, source: 'clear', sessionId: 's1' }, context);
+	assert.equal(await prompt('continue', 'another session'), undefined, 'a wake from another session is dropped');
+	assert.equal(existsSync(wakePath(root, 'prompt.submit')), false);
+});
+
+for (const source of ['compact', 'fork'] as const) {
+	test(`after ${source} the Handoff loads at once, with no brief`, async () => {
+		const { root, context, base } = await openTask();
+		const result = await coreModule.handlers['session.start']!({ ...base, source }, context);
+		assert.match(result?.context ?? '', /^Continue the Task[\s\S]*\nDone when: it works\n[\s\S]*Next: render it\.$/);
+		assert.equal(result?.notice, 'kalfa: Handoff of Task feat-monitoring loaded again');
+		assert.equal(existsSync(wakePath(root, 'prompt.submit')), false);
+	});
+}
+
+test('the continue words', () => {
+	for (const yes of ['continue', 'C', 'go  on.', ' Continue!\n']) assert.equal(isContinueWord(yes), true, yes);
+	for (const no of ['continue with the login page', 'cont', 'go', '']) assert.equal(isContinueWord(no), false, no);
 });
 
 test('the session report puts the open Plans before the Tasks, and a broken glob is a notice', async () => {
@@ -121,7 +184,7 @@ test('the session report puts the open Plans before the Tasks, and a broken glob
 		result?.context ?? '',
 		/^Open Plans in this repository \(kalfa plan list\):\n- Monitoring \(active, 1 of 2 steps done; docs\/plan\.md\)\n  Next: Render\n\nOpen Tasks/,
 	);
-	assert.equal(result?.notice, "kalfa: 1 open Plan · Task feat-monitoring open on this branch (its Handoff comes after /clear)\nkalfa: Plans: plans glob 'nowhere/*.md' matches no file");
+	assert.equal(result?.notice, `kalfa: 1 open Plan · Task feat-monitoring open on this branch (after /clear, "continue" loads its Handoff)\nkalfa: Plans: plans glob 'nowhere/*.md' matches no file`);
 });
 
 test('a repository without Plans or Tasks gets no session report', async () => {

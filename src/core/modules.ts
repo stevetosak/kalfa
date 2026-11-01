@@ -44,6 +44,11 @@ export interface ModuleDefinition {
 	 */
 	minContext?: Partial<Record<CoreEventName, number>>;
 	/**
+	 * Events whose handler acts only on a wake (`core/wake.ts`): the shim does
+	 * not start Node for them on its own, only when the wake marker exists.
+	 */
+	wakeOnly?: CoreEventName[];
+	/**
 	 * Per event, whether the handler runs here at all (a setting turns it on).
 	 * When it says no, the shim does not start Node for this Module and the
 	 * Dispatcher skips the handler, so a feature that is off costs nothing.
