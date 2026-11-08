@@ -1,10 +1,12 @@
 // The Core's own handlers: the session report (open Plans; open Tasks, or
 // after a /clear the Handoff of the branch's Task) and the task-list mapping.
 // Standing memory: the Personal layer in every session, and the project's
-// layer inside a repository, under their budgets (ADR 0002).
+// layer inside a repository: the Loaded tier under their budgets, and a line
+// for the Stored tier (ADR 0002).
 import { currentBranch } from '../core/git.ts';
 import { memoryHome, scanLayer, sessionLayers } from '../core/memory/home.ts';
 import { budgetOf, layerView, overBudgetNotice, renderLayer } from '../core/memory/standing.ts';
+import { readUsage } from '../core/memory/usage.ts';
 import { memoryBudgets, type Settings } from '../core/settings.ts';
 import type { HandlerResult } from '../core/events.ts';
 import type { ModuleManifest } from '../core/module-source.ts';
@@ -60,18 +62,19 @@ function taskReport(project: Project, source: string | undefined): ReportPart {
 function memoryReport(project: Project | undefined, settings: Settings, env: NodeJS.ProcessEnv): ReportPart {
 	const budgets = memoryBudgets(settings);
 	const scans = sessionLayers(memoryHome(env), project).map((layer) => ({ layer, scan: scanLayer(layer) }));
-	const views = scans.map(({ layer, scan }) => layerView(layer, scan.records, budgetOf(layer, budgets)));
+	const views = scans.map(({ layer, scan }) => layerView(layer, scan.records, budgetOf(layer, budgets), readUsage(layer, env)));
 	const blocks = views.map(renderLayer).filter(Boolean);
 	// A broken file is left out and named; the other records still load.
 	const unreadable = scans.flatMap(({ scan }) => scan.problems.map((p) => `kalfa: memory: left out: ${p}`));
 	const notices = [...views.map((v) => overBudgetNotice(v, budgetOf(v.layer, budgets))).filter(Boolean), ...unreadable];
 	const rules = views.reduce((n, v) => n + v.rules.length, 0);
 	const lines = views.reduce((n, v) => n + v.index.length, 0);
+	const stored = views.reduce((n, v) => n + v.stored.length, 0);
 	return {
 		context: blocks.length
 			? ['Standing memory (kalfa memory). Write a record only through `kalfa memory add|supersede|confirm`; what you find yourself is a Memory candidate first.', ...blocks].join('\n\n')
 			: undefined,
-		summary: blocks.length ? `memory: ${plural(rules, 'rule')}, ${plural(lines, 'index line')}` : undefined,
+		summary: blocks.length ? `memory: ${plural(rules, 'rule')}, ${plural(lines, 'index line')}${stored ? `, ${stored} Stored` : ''}` : undefined,
 		notice: notices.length ? notices.join('\n') : undefined,
 	};
 }

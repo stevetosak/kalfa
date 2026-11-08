@@ -70,13 +70,13 @@ export interface MemoryBudgets {
 }
 
 /**
- * First values only: Plan step 5 sets them from the measured size of the
- * sorted memory. The rule count limits how many instructions load; the
- * index bytes limit what the index lines cost in context.
+ * The rule count limits how many instructions load; the index bytes limit
+ * what the Loaded index lines cost in context. Neither ever refuses a write:
+ * a record past the bytes is Stored, not lost (ADR 0002, amendment 2026-11-08).
  */
 export const DEFAULT_MEMORY_BUDGETS: MemoryBudgets = {
 	personal: { rules: 25, 'index-bytes': 4096 },
-	project: { rules: 15, 'index-bytes': 4096 },
+	project: { rules: 15, 'index-bytes': 8192 },
 	ruleChars: 600,
 };
 
