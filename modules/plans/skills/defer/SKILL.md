@@ -1,0 +1,74 @@
+---
+name: defer
+description: Records work for later, without starting it - as a deferred item (one Memory record in the project layer) or as a proposed Plan (a Plan page with status proposed, steps and a Done when line per part). Use when the Operator says "add this as a deferred item", "defer this", "park this", "add a plan for this", "make this a deferred plan", or types /defer.
+argument-hint: item | plan  <what to defer>
+---
+
+# Defer work
+
+Deferred work is recorded, never started. Do not start a Task, change code
+or make a step of it now.
+
+## 1. Item or Plan
+
+Take the kind from the Operator's word:
+
+| The Operator says | Kind |
+|---|---|
+| "deferred item", "defer this", "park this", "note it for later" | **Item** |
+| "plan", "deferred plan", "proposed plan", "make a plan for this" | **Plan** |
+
+If the word does not say which, ask one question: item (one line in memory)
+or Plan (a page with steps)? Do not choose for the Operator.
+
+## 2a. Item: one Memory record
+
+```
+kalfa memory add --type decision --layer project --id <slug>-deferred \
+  --summary "Deferred (<YYYY-MM-DD>): <what>. Do not plan it before the Operator takes it on."
+```
+
+- Body on stdin: why it is deferred, the condition that brings it back (if
+  the Operator gave one), and the source (PR, issue, Plan, session).
+- A condition is only something to report. When it holds, tell the Operator;
+  it never starts the work.
+- Use `--layer personal` only when the item is about no one repository.
+- Then run `kalfa memory show <slug>-deferred` and give the Operator its id.
+
+## 2b. Plan: a page with status proposed
+
+1. Find where Plans live: the `plans:` globs in `kalfa.yaml`, and the paths
+   that `kalfa plan list --all` shows. Put the new page next to the others.
+2. If the repository publishes its docs through a docs-writing skill (for
+   tosak repositories, `write-tosak-docs`), load it first: its Contract
+   decides the front matter and the style.
+3. Write the page:
+
+   ```markdown
+   ---
+   title: "<Subject>: <the result in a few words>"
+   type: plan
+   status: proposed
+   ---
+
+   <Why the work is needed, why it waits, and what brings it back.>
+
+   ## <Part name>
+
+   **Done when:** <a check that can be true or false>
+
+   - [ ] <step>
+   - [ ] <step>
+   ```
+
+   - Every part has a **Done when:** line above its steps. A proposed Plan
+     is open, so `kalfa plan check` requires it.
+   - Steps are what is known now. Do not invent detail: a step can be
+     "Decide X in a grill" when the design is still open.
+4. Run `kalfa plan check`. It must report nothing for the new page.
+5. Commit on a branch. Pushing and the PR follow the repository's rules.
+
+## 3. Report
+
+One or two lines: the kind, the record id or the page path, and the
+condition that brings it back. `/kalfa-status` shows both kinds.

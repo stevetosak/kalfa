@@ -90,7 +90,7 @@ test('module-dirs follows the package folder; ~/ is the home; bad settings fall 
 
 test('every Module folder this kalfa ships loads', () => {
 	const names = moduleFolders([modulesRoot({})]);
-	assert.deepEqual(names, ['docs', 'guardrails', 'herdr', 'infra', 'memory', 'meter']);
+	assert.deepEqual(names, ['docs', 'guardrails', 'herdr', 'infra', 'memory', 'meter', 'plans']);
 	for (const name of names) assert.equal(loadModuleSource([modulesRoot({})], name).name, name);
 });
 
