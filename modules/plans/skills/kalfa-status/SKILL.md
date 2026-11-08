@@ -33,24 +33,24 @@ A read-only summary. It changes nothing: no `task start`, `task close`,
 **Active Plans** (N)
 | Plan | Steps done | Next step |
 |---|---|---|
-| Email: inboxes on Stalwart | 4 of 27 | Create the B2 bucket for the message files … |
+| Search: results in under a second | 3 of 12 | Add the index on the title column … |
 
 **Proposed Plans** (N)
 | Plan | Steps | Path |
 |---|---|---|
-| Logs: Loki and an agent | 0 of 6 | docs/plans/logs-loki-and-an-agent.md |
+| Exports: CSV for every report | 0 of 5 | docs/plans/exports-csv-for-every-report.md |
 
 **Tasks** (N open)
-- `mail-phase-1-accounts` — Email Plan Phase 1: the account steps
-  - **Waits for you:** create the B2 account, the buckets and the keys …
-  - Plan: Email: inboxes on Stalwart
-  - Done when: SES has production access …
+- `search-index` — Search Plan Phase 1: the title index
+  - **Waits for you:** approve the migration on the staging database …
+  - Plan: Search: results in under a second
+  - Done when: a title search returns in under a second on staging …
 
 **Deferred items** (N)
-- `dns-writes-deferred` (2026-10-22): a Plan item decides a kluster zone-write Stage vs external-dns.
+- `dark-mode-deferred` (2026-10-22): dark mode for the settings pages.
 
 **Plan check**
-- docs/runbook/rebuild-2026-09-20.md: Phase 4 has no **Done when:** line.
+- docs/plans/billing-move-to-a-new-provider.md: Phase 2 has no **Done when:** line.
 ```
 
 - A section with nothing in it is one line: "Proposed Plans: none."

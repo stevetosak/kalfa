@@ -39,9 +39,9 @@ kalfa memory add --type decision --layer project --id <slug>-deferred \
 
 1. Find where Plans live: the `plans:` globs in `kalfa.yaml`, and the paths
    that `kalfa plan list --all` shows. Put the new page next to the others.
-2. If the repository publishes its docs through a docs-writing skill (for
-   tosak repositories, `write-tosak-docs`), load it first: its Contract
-   decides the front matter and the style.
+2. If the repository publishes its docs through a docs-writing skill (its
+   rules or an enabled Module name one), load it first: its rules decide the
+   front matter and the style.
 3. Write the page:
 
    ```markdown
