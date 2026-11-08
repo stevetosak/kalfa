@@ -1,0 +1,10 @@
+schema: 1
+description: The view of the open work (active and proposed Plans, open Tasks, deferred items, Plan faults) and the capture of deferred work as a Memory record or a proposed Plan.
+commands:
+  allow:
+    - kalfa plan list*
+    - kalfa plan show *
+    - kalfa plan check
+    - kalfa task list
+    - kalfa task show*
+    - kalfa memory list*
