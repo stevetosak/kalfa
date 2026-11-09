@@ -1,6 +1,6 @@
 ---
 name: defer
-description: Records work for later, without starting it - as a deferred item (one Memory record in the project layer) or as a proposed Plan (a Plan page with status proposed, steps and a Done when line per part). Use when the Operator says "add this as a deferred item", "defer this", "park this", "add a plan for this", "make this a deferred plan", or types /defer.
+description: Records work for later, without starting it - as a deferred item (one entry in the private deferred list, kalfa defer) or as a proposed Plan (a Plan page with status proposed, steps and a Done when line per part). Use when the Operator says "add this as a deferred item", "defer this", "park this", "add a plan for this", "make this a deferred plan", or types /defer.
 argument-hint: item | plan  <what to defer>
 ---
 
@@ -21,19 +21,24 @@ Take the kind from the Operator's word:
 If the word does not say which, ask one question: item (one line in memory)
 or Plan (a page with steps)? Do not choose for the Operator.
 
-## 2a. Item: one Memory record
+## 2a. Item: one entry in the deferred list
 
 ```
-kalfa memory add --type decision --layer project --id <slug>-deferred \
-  --summary "Deferred (<YYYY-MM-DD>): <what>. Do not plan it before the Operator takes it on."
+kalfa defer add --layer project --summary "<what>" [--when "<what brings it back>"]
 ```
 
-- Body on stdin: why it is deferred, the condition that brings it back (if
-  the Operator gave one), and the source (PR, issue, Plan, session).
-- A condition is only something to report. When it holds, tell the Operator;
-  it never starts the work.
+- Body on stdin: why it is deferred and the source (PR, issue, Plan,
+  session).
+- `--when` only if the Operator gave a condition. A condition is only
+  something to report. When it holds, tell the Operator; it never starts
+  the work.
 - Use `--layer personal` only when the item is about no one repository.
-- Then run `kalfa memory show <slug>-deferred` and give the Operator its id.
+- The list is private (the Memory home), not memory: it is not a Memory
+  record, and it does not load as one.
+- Give the Operator the id that `kalfa defer add` prints.
+- When the Operator takes an item on, run `kalfa defer take <id> "<the Plan
+  or Task it became>"`; when the Operator drops it, `kalfa defer drop <id>
+  "<why>"`. Never on your own.
 
 ## 2b. Plan: a page with status proposed
 

@@ -1,6 +1,6 @@
 ---
 name: kalfa-status
-description: Shows a summary of the open work of the current kalfa repository - active and proposed Plans with their next step, open Tasks, deferred items from the Memory records, and the Plan faults that `kalfa plan check` finds. Use when the Operator types /kalfa-status, or asks what is open, what is deferred, what Plans or Tasks are active, or where the work stands.
+description: Shows a summary of the open work of the current kalfa repository - active and proposed Plans with their next step, open Tasks, deferred items from the deferred list, and the Plan faults that `kalfa plan check` finds. Use when the Operator types /kalfa-status, or asks what is open, what is deferred, what Plans or Tasks are active, or where the work stands.
 ---
 
 # kalfa status
@@ -16,9 +16,8 @@ A read-only summary. It changes nothing: no `task start`, `task close`,
    - `kalfa plan list` — the open Plans: status (`active` or `proposed`),
      steps done and the next step.
    - `kalfa task list` — every Task Record. Keep only the rows with `open`.
-   - `kalfa memory list --layer project` — keep the `decision` records with
-     status `active` whose id or summary has the word "defer" (deferred,
-     Deferred). These are the deferred items.
+   - `kalfa defer list` — the open deferred items of this repository and of
+     the Personal layer, with the condition that brings each back.
    - `kalfa plan check` — Plan parts without a **Done when:** line, and other faults.
 3. For each open Task, run `kalfa task show --task <id>`. Take:
    - `done-when` and `plan` from the front matter,
@@ -47,7 +46,8 @@ A read-only summary. It changes nothing: no `task start`, `task close`,
   - Done when: a title search returns in under a second on staging …
 
 **Deferred items** (N)
-- `dark-mode-deferred` (2026-10-22): dark mode for the settings pages.
+- `dark-mode` (2026-10-22): dark mode for the settings pages.
+  When: the settings pages get their redesign.
 
 **Plan check**
 - docs/plans/billing-move-to-a-new-provider.md: Phase 2 has no **Done when:** line.

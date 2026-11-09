@@ -37,7 +37,8 @@ export function layerName(value: string | undefined): LayerName | undefined {
 	return value;
 }
 
-function layerFor(io: Io, name: LayerName): Layer {
+/** The layer named by --layer, as this directory sees it. */
+export function layerFor(io: Io, name: LayerName): Layer {
 	const home = memoryHome(io.env);
 	if (name === 'personal') return personalLayer(home);
 	const project = loadProject(io.cwd);
@@ -46,7 +47,7 @@ function layerFor(io: Io, name: LayerName): Layer {
 }
 
 /** The layers to look in for an id: the one named, else every layer this directory sees. */
-function layersFor(io: Io, name: LayerName | undefined): Layer[] {
+export function layersFor(io: Io, name: LayerName | undefined): Layer[] {
 	return name ? [layerFor(io, name)] : sessionLayers(memoryHome(io.env), loadProject(io.cwd));
 }
 

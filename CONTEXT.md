@@ -75,6 +75,10 @@ _Avoid_: summary, context dump
 A tracked list of the steps of a larger piece of work, with the state of each step.
 _Avoid_: roadmap, backlog, todo
 
+**Deferred item**:
+Work the Operator has named but not taken on, with the condition that brings it back. It lives in the private deferred list of its Memory layer, not in the repository, and it is not a Memory record: it leaves the list when the Operator takes it on (it becomes a Plan or a Task) or drops it. A condition is only reported; it never starts the work.
+_Avoid_: deferred record, backlog item, parked task
+
 **Memory candidate**:
 A finding from a Task (a possible rule, fact, decision or open item), with its proof, kept until the Operator accepts or drops it. Candidates not yet answered wait in the inbox of the Memory home.
 _Avoid_: Lesson candidate, learning, takeaway
