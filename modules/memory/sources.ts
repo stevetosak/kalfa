@@ -37,6 +37,14 @@ export interface Chunk {
 	ref: string;
 	/** For a Task Record chunk: the Task's id. */
 	task?: string;
+	/** For a Memory record chunk: its id and its layer's label, so a search can mark it used. */
+	record?: RecordRef;
+}
+
+/** A Memory record by its id and the label of its layer (`personal`, or the project key). */
+export interface RecordRef {
+	id: string;
+	layer: string;
 }
 
 /** A Markdown file larger than this is not indexed (a generated page, a dump). */
@@ -171,6 +179,7 @@ function memoryChunks(file: SourceFile, text: string): Chunk[] {
 			title: `${record.header.type}${mark}: ${record.header.summary}`,
 			text: record.body,
 			ref: `kalfa memory show ${id} (${file.label})`,
+			record: { id, layer: file.label },
 		},
 	];
 }

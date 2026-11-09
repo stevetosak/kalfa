@@ -10,14 +10,14 @@ import { join } from 'node:path';
 import MiniSearch, { type Options } from 'minisearch';
 import { machineCacheDir } from '../../src/core/machine-paths.ts';
 import { memoryHome } from '../../src/core/memory/home.ts';
-import { type Chunk, chunksOf, listSources, type SourceFile, type SourceKind, type SourceScope } from './sources.ts';
+import { type Chunk, chunksOf, listSources, type RecordRef, type SourceFile, type SourceKind, type SourceScope } from './sources.ts';
 import { keepTerm } from './words.ts';
 
 /** Changes when the chunks or the options change, so an old cache is not read. */
-const INDEX_VERSION = 1;
+const INDEX_VERSION = 2;
 const SNIPPET_CHARS = 240;
 
-type Stored = Pick<Chunk, 'kind' | 'title' | 'ref' | 'task'> & { snippet: string };
+type Stored = Pick<Chunk, 'kind' | 'title' | 'ref' | 'task' | 'record'> & { snippet: string };
 
 export interface Hit extends Stored {
 	score: number;
@@ -25,7 +25,7 @@ export interface Hit extends Stored {
 
 const OPTIONS: Options<Chunk & { snippet: string }> = {
 	fields: ['title', 'text'],
-	storeFields: ['kind', 'title', 'ref', 'task', 'snippet'],
+	storeFields: ['kind', 'title', 'ref', 'task', 'record', 'snippet'],
 	processTerm: keepTerm,
 	searchOptions: {
 		boost: { title: 2 },
@@ -114,6 +114,7 @@ export function openIndex(scope: SourceScope): SearchIndex {
 					snippet: result.snippet as string,
 					score: result.score,
 					...(result.task ? { task: result.task as string } : {}),
+					...(result.record ? { record: result.record as RecordRef } : {}),
 				};
 				if (!keep(hit)) continue;
 				hits.push(hit);

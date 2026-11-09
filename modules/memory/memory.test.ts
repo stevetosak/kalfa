@@ -8,7 +8,8 @@ import { sectionCommand, taskCommand } from '../../src/cli/commands/task.ts';
 import { dispatch } from '../../src/core/dispatcher.ts';
 import { KalfaError } from '../../src/core/errors.ts';
 import { handledEvents } from '../../src/core/fast-path.ts';
-import { memoryHome, personalLayer, scanLayer } from '../../src/core/memory/home.ts';
+import { memoryHome, personalLayer, projectLayerOfKey, scanLayer } from '../../src/core/memory/home.ts';
+import { readUsage } from '../../src/core/memory/usage.ts';
 import { renderMemoryRecord } from '../../src/core/memory/record.ts';
 import type { HandlerContext } from '../../src/core/modules.ts';
 import { loadProject } from '../../src/core/project.ts';
@@ -152,6 +153,22 @@ test('search finds docs, archives, records and Task Records, and reads the cache
 	assert.equal(changed.search('zebra', 5).length, 2);
 	const out = await memory(repo, env, ['search', 'Envoy']);
 	assert.match(out.out, /\[doc\] docs\/other\.md › Gateway\n {4}docs\/other\.md:1/);
+});
+
+test('kalfa memory search marks the records it returns as used, and the recall does not', async () => {
+	const { repo, env } = machine();
+	await memory(repo, env, ['add', '--type', 'fact', '--layer', 'project', '--summary', 'The walrus gateway needs kluster.']);
+	await memory(repo, env, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'The walrus laptop runs Ubuntu.']);
+	await memory(repo, env, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'Envoy times out at 15 s.']);
+	const project = projectLayerOfKey(memoryHome(env), KEY);
+	const personal = personalLayer(memoryHome(env));
+	const prompt = { name: 'prompt.submit', harness: 'fake', cwd: repo, prompt: 'how does the walrus gateway and the walrus laptop work' } as const;
+	const recall = await memoryModule.handlers['prompt.submit']?.(prompt, contextOf(repo, env));
+	assert.match(String(recall?.context), /walrus gateway/);
+	assert.deepEqual(readUsage(project, env), {}, 'the recall is not a use');
+	assert.equal((await memory(repo, env, ['search', 'walrus'])).code, 0);
+	assert.deepEqual(Object.keys(readUsage(project, env)), ['the-walrus-gateway-needs-kluster']);
+	assert.deepEqual(Object.keys(readUsage(personal, env)), ['the-walrus-laptop-runs-ubuntu'], 'only the hits, in their own layer');
 });
 
 test('search keeps a closed record and marks it', async () => {
