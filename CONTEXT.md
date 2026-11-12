@@ -75,6 +75,10 @@ _Avoid_: summary, context dump
 The summary a harness wrote when it compacted a session that works on a Task, kept next to the Task Record; the newest one tells where the session stood.
 _Avoid_: snapshot, save point
 
+**Recap**:
+Where the work of a repository stood, joined from its Plan, its last Task Record, the last Checkpoint and the commits since; a new session after some idle days starts with it.
+_Avoid_: recap of a session (the harness's own `/recap`), status, summary
+
 **Plan**:
 A tracked list of the steps of a larger piece of work, with the state of each step.
 _Avoid_: roadmap, backlog, todo

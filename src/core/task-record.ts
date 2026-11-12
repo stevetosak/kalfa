@@ -259,15 +259,24 @@ export function compactFocus(record: TaskRecord): string {
 	const next = `- Next: ${record.close?.get('Next') ?? last?.parts.get('Next') ?? 'not recorded; keep the step the session was on'}`;
 	const tail = [next, 'Keep also what the Next step needs that the record does not hold: the files changed since the last Section, the commands run and their results, and open questions to the Operator.'];
 
-	let room = COMPACT_FOCUS_MAX - [...head, ...tail].join('\n').length - 30;
-	const decisions: string[] = [];
+	const decisions = recentDecisions(sections, COMPACT_FOCUS_MAX - [...head, ...tail].join('\n').length - 30);
+	return [...head, ...(decisions.length ? ['- Decisions:', ...decisions] : []), ...tail].join('\n');
+}
+
+/**
+ * The Decisions of the newest Sections that fit in `room` characters (and at
+ * most `sections` of them), printed oldest first: `  <title>:` and the text
+ * indented below it.
+ */
+export function recentDecisions(sections: readonly Section[], room: number, max = Infinity): string[] {
+	const entries: string[] = [];
 	for (const section of [...sections].reverse()) {
 		const text = section.parts.get('Decisions');
 		if (!text) continue;
 		const entry = `  ${section.title}:\n${text.replace(/^/gm, '    ')}`;
-		if (entry.length + 1 > room) break;
-		decisions.unshift(entry);
+		if (entry.length + 1 > room || entries.length >= max) break;
+		entries.unshift(entry);
 		room -= entry.length + 1;
 	}
-	return [...head, ...(decisions.length ? ['- Decisions:', ...decisions] : []), ...tail].join('\n');
+	return entries;
 }

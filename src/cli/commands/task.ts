@@ -104,6 +104,9 @@ export function taskCommand(adapters: ReadonlyMap<string, Adapter>, registry: Re
 	};
 }
 
+/** A Recap after days away tells why the work went this way from the Decisions; a Section without them leaves a gap. */
+export const NO_DECISIONS = 'kalfa: this Section has no **Decisions:** part. If a choice was made (an option taken, a design kept, a step dropped), add it in the next Section; a Recap after days away reads the why from there.';
+
 export function sectionCommand(adapters: ReadonlyMap<string, Adapter>, registry: ReadonlyMap<string, ModuleDefinition>): Command {
 	return {
 		summary: 'Record a closed Section in the Task Record (its parts as Markdown on stdin)',
@@ -119,6 +122,7 @@ export function sectionCommand(adapters: ReadonlyMap<string, Adapter>, registry:
 			const section = { title, parts: sectionParts(await io.stdin(), project.file?.modules ?? []) };
 			const path = writeRecord(project.root, { ...record, sections: [...record.sections, section] });
 			io.out(`Section "${title}" recorded in ${path}`);
+			if (!section.parts.has('Decisions')) io.err(NO_DECISIONS);
 			report(await raise({ name: 'section.close', task: record.id, record: path, section }, project, io, adapters, registry), io);
 			return 0;
 		},
