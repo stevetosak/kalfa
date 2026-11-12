@@ -12,6 +12,7 @@ import { linkCommand, unlinkCommand } from './commands/link.ts';
 import { hookCommand } from './commands/hook.ts';
 import { memoryCommand } from './commands/memory.ts';
 import { planCommand } from './commands/plan.ts';
+import { recapCommand } from './commands/recap.ts';
 import { sectionCommand, taskCommand } from './commands/task.ts';
 import type { Io } from './io.ts';
 import { version } from './version.ts';
@@ -30,6 +31,7 @@ const commands: Record<string, Command> = {
 	task: taskCommand(adapters, registry),
 	section: sectionCommand(adapters, registry),
 	plan: planCommand,
+	recap: recapCommand,
 	memory: memoryCommand(memoryExtensions),
 	...Object.fromEntries(Object.entries(moduleCommands).map(([name, command]) => [name, command(adapters)])),
 };

@@ -7,6 +7,8 @@
 // Before a compaction (the Operator's /compact, or the harness's own near the
 // limit or after idle time) the summary is told what the branch's Task needs;
 // after it, the summary is kept as the Task's Checkpoint.
+// After some days with no activity in the repository, a new session starts
+// with the Recap instead of the list of open Tasks.
 // Standing memory: the Personal layer in every session, and the project's
 // layer inside a repository: the Loaded tier under their budgets, and a line
 // for the Stored tier (ADR 0002).
@@ -15,7 +17,8 @@ import { currentBranch } from '../core/git.ts';
 import { memoryHome, scanLayer, sessionLayers } from '../core/memory/home.ts';
 import { budgetOf, layerView, overBudgetNotice, renderLayer } from '../core/memory/standing.ts';
 import { readUsage } from '../core/memory/usage.ts';
-import { memoryBudgets, type Settings } from '../core/settings.ts';
+import { lastActivity, idleDays, markSession, recapTask, recapView } from '../core/recap.ts';
+import { memoryBudgets, recapAfterDays, type Settings } from '../core/settings.ts';
 import { isContinueWord } from '../core/continue-word.ts';
 import type { CoreEvent, HandlerResult, SessionStartSource } from '../core/events.ts';
 import type { ModuleManifest } from '../core/module-source.ts';
@@ -85,6 +88,29 @@ function taskReport(project: Project, event: Extract<CoreEvent, { name: 'session
 	return { context: [`Open Tasks in this repository (kalfa task show --task <id>):`, ...lines, hint].join('\n'), summary };
 }
 
+/**
+ * A new session after `recap.after-days` days without activity: the agent
+ * gets the Recap and tells it before other work; the Operator sees the brief.
+ * Every new session counts as activity, so the Recap shows once per absence.
+ */
+function recapReport(project: Project, settings: Settings, event: Extract<CoreEvent, { name: 'session.start' }>): ReportPart | undefined {
+	if (event.source !== 'startup') return undefined;
+	const since = lastActivity(project.root);
+	markSession(project.root);
+	const now = new Date();
+	const days = since ? idleDays(since, now) : 0;
+	const record = recapTask(project.root);
+	if (days < recapAfterDays(settings) || !record) return undefined;
+	return {
+		context: [
+			`The Operator comes back to this repository after ${plural(days, 'day')} without activity. Before other work, tell the Operator in a few sentences where the work stood, why (the Decisions) and the next step, as /where-was-i does; read the last Checkpoint when the record does not tell enough. The Recap (kalfa recap):`,
+			recapView(project.root, project.file?.plans ?? [], { now }),
+		].join('\n\n'),
+		summary: `Recap after ${plural(days, 'day')} away`,
+		notice: `kalfa: ${plural(days, 'day')} since the last activity here.\n${briefView(record)}\n/where-was-i tells the line of thinking.`,
+	};
+}
+
 function memoryReport(project: Project | undefined, settings: Settings, env: NodeJS.ProcessEnv): ReportPart {
 	const budgets = memoryBudgets(settings);
 	const scans = sessionLayers(memoryHome(env), project).map((layer) => ({ layer, scan: scanLayer(layer) }));
@@ -111,7 +137,11 @@ function memoryReport(project: Project | undefined, settings: Settings, env: Nod
  */
 const sessionReport: Handler = (event, { project, settings, env }) => {
 	if (event.name !== 'session.start') return undefined;
-	const parts = [memoryReport(project, settings, env), ...(project ? [planReport(project), taskReport(project, event)] : [])];
+	// The Recap comes first: a harness can show only the start of a long report.
+	const recap = project ? recapReport(project, settings, event) : undefined;
+	const parts = recap
+		? [recap, memoryReport(project, settings, env), planReport(project!)]
+		: [memoryReport(project, settings, env), ...(project ? [planReport(project), taskReport(project, event)] : [])];
 	const context = parts.map((p) => p.context).filter(Boolean).join('\n\n');
 	const summary = parts.map((p) => p.summary).filter(Boolean).join(' · ');
 	const notice = [summary ? `kalfa: ${summary}` : undefined, ...parts.map((p) => p.notice)].filter(Boolean).join('\n');

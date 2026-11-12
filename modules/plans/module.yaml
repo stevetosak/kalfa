@@ -1,5 +1,5 @@
 schema: 1
-description: The view of the open work (active and proposed Plans, open Tasks, deferred items, Plan faults) and the capture of deferred work as a deferred item (kalfa defer, private in the Memory home) or a proposed Plan.
+description: The view of the open work (active and proposed Plans, open Tasks, deferred items, Plan faults), the account of where the work stood (/where-was-i, from kalfa recap) and the capture of deferred work as a deferred item (kalfa defer, private in the Memory home) or a proposed Plan.
 needs:
   - capability: context-injection
     without: no deferred items at session start; kalfa defer list still shows them
@@ -10,5 +10,6 @@ commands:
     - kalfa plan check
     - kalfa task list
     - kalfa task show*
+    - kalfa recap*
     - kalfa defer list*
     - kalfa defer show *

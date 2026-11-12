@@ -40,10 +40,11 @@ and keeps what it wrote.
 
 **Done when:** `/where-was-i` in a repository with a closed or open Task shows the Plan part, the Task's goal, the Decisions of its last Sections, the last checkpoint, the commits since and the Next step, and a session start after N idle days shows it unasked.
 
-- [ ] `kalfa recap`: the Plan part, the last Task (goal, Done when, Sections, recent Decisions, Next), the last checkpoint, commits since the last Section, other open Tasks. No model call.
-- [ ] `/where-was-i` skill: reads `kalfa recap` and tells the line of thinking in a few sentences.
-- [ ] Session start shows the recap instead of the brief when the repository has had no activity for N days (default 2).
-- [ ] `kalfa section close` warns when a Section has no Decisions part.
+- [x] `kalfa recap`: the Plan part, the last Task (goal, Done when, Sections, recent Decisions, Next), the last checkpoint, commits since the last Section, other open Tasks. No model call.
+- [x] `/where-was-i` skill: reads `kalfa recap` and tells the line of thinking in a few sentences.
+- [x] Session start shows the recap instead of the open Tasks when the repository has had no activity for N days (`recap.after-days` in the machine settings, default 2).
+- [x] `kalfa section close` warns when a Section has no Decisions part.
+- [x] Prove it in a real session: `/where-was-i`, and a session start after the idle days.
 
 ## 3. Board and cleanup
 

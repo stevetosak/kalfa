@@ -29,6 +29,13 @@ const settingsSchema = z.strictObject({
 	modules: moduleList,
 	/** The Standing memory budgets; each value left out takes its default. */
 	memory: memorySettings.optional(),
+	/** The Recap at session start (Core). */
+	recap: z
+		.strictObject({
+			/** After this many days without activity in a repository, a new session starts with the Recap instead of the open Tasks. */
+			'after-days': z.int().positive().optional(),
+		})
+		.optional(),
 	/**
 	 * Per Module, the Operator's own settings on this machine. Each Module
 	 * checks its part; a key in `kalfa.yaml` overrides the same key here.
@@ -88,3 +95,8 @@ export function memoryBudgets(settings: Settings): MemoryBudgets {
 		ruleChars: memory['rule-chars'] ?? DEFAULT_MEMORY_BUDGETS.ruleChars,
 	};
 }
+
+/** Days without activity before a session start shows the Recap. */
+export const DEFAULT_RECAP_AFTER_DAYS = 2;
+
+export const recapAfterDays = (settings: Settings): number => settings.recap?.['after-days'] ?? DEFAULT_RECAP_AFTER_DAYS;
