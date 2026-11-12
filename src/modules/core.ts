@@ -4,9 +4,13 @@
 // Handoff loads only when the first prompt is a continue word: any other
 // prompt starts a new task without it. After /compact or a fork the session
 // goes on with the Task, so the Handoff loads at once.
+// Before a compaction (the Operator's /compact, or the harness's own near the
+// limit or after idle time) the summary is told what the branch's Task needs;
+// after it, the summary is kept as the Task's Checkpoint.
 // Standing memory: the Personal layer in every session, and the project's
 // layer inside a repository: the Loaded tier under their budgets, and a line
 // for the Stored tier (ADR 0002).
+import { writeCheckpoint } from '../core/checkpoint.ts';
 import { currentBranch } from '../core/git.ts';
 import { memoryHome, scanLayer, sessionLayers } from '../core/memory/home.ts';
 import { budgetOf, layerView, overBudgetNotice, renderLayer } from '../core/memory/standing.ts';
@@ -18,7 +22,7 @@ import type { ModuleManifest } from '../core/module-source.ts';
 import { CORE_MODULE, type Handler, type ModuleDefinition } from '../core/modules.ts';
 import { findPlans, isOpenPlan, planSummary } from '../core/plans.ts';
 import type { Project } from '../core/project.ts';
-import { briefView, handoffView, listRecords, readRecord, type TaskRecord, taskIdOf } from '../core/task-record.ts';
+import { briefView, compactFocus, handoffView, listRecords, readRecord, type TaskRecord, taskIdOf } from '../core/task-record.ts';
 import { setWake, takeWake } from '../core/wake.ts';
 
 /** One part of the session report: what the agent reads, and a short summary the Operator sees. */
@@ -128,6 +132,29 @@ const continueWord: Handler = (event, { project }) => {
 	return { context: `The Operator continues Task ${task}. ${handoffContext(record)}`, notice: `kalfa: Handoff of Task ${task} loaded` };
 };
 
+/** The open Task of the branch checked out at `root`. */
+function branchTask(root: string): TaskRecord | undefined {
+	const branch = currentBranch(root);
+	const record = branch ? readRecord(root, taskIdOf(branch)) : undefined;
+	return record?.header.status === 'open' ? record : undefined;
+}
+
+/** What the summary must keep for the branch's Task. A subagent's compaction is its own. */
+const compactBefore: Handler = (event, { project }) => {
+	if (event.name !== 'compact.before' || event.subagent || !project) return undefined;
+	const own = branchTask(project.root);
+	return own ? { context: compactFocus(own) } : undefined;
+};
+
+/** The summary becomes the Task's newest Checkpoint. */
+const compactAfter: Handler = (event, { project }) => {
+	if (event.name !== 'compact.after' || event.subagent || !project || !event.summary.trim()) return undefined;
+	const own = branchTask(project.root);
+	if (!own) return undefined;
+	const path = writeCheckpoint(project.root, { task: own.id, trigger: event.trigger, at: new Date().toISOString(), session: event.sessionId, summary: event.summary });
+	return { notice: `kalfa: checkpoint of Task ${own.id} saved (${event.trigger} compaction): ${path}` };
+};
+
 /** Without a task list the Section stays in the record only. */
 const taskListMapping: Handler = (event, { capabilities }) => {
 	if (event.name !== 'section.close' || !capabilities.has('task-list')) return undefined;
@@ -138,10 +165,11 @@ const taskListMapping: Handler = (event, { capabilities }) => {
 export const coreNeeds: ModuleManifest['needs'] = [
 	{ capability: 'context-injection', without: 'no session report; the agent runs kalfa plan list and kalfa task list itself' },
 	{ capability: 'task-list', without: 'a closed Section stays in the Task Record only' },
+	{ capability: 'compaction', without: "a compaction keeps what the harness chooses, and the Task gets no Checkpoint" },
 ];
 
 export const coreModule: ModuleDefinition = {
 	name: CORE_MODULE,
-	handlers: { 'session.start': sessionReport, 'prompt.submit': continueWord, 'section.close': taskListMapping },
+	handlers: { 'session.start': sessionReport, 'prompt.submit': continueWord, 'compact.before': compactBefore, 'compact.after': compactAfter, 'section.close': taskListMapping },
 	wakeOnly: ['prompt.submit'],
 };

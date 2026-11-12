@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { sectionCommand, taskCommand } from '../src/cli/commands/task.ts';
 import { main } from '../src/cli/main.ts';
 import { isContinueWord } from '../src/core/continue-word.ts';
-import { writeRecord } from '../src/core/task-record.ts';
+import { CHECKPOINTS_KEPT, checkpointsDir, lastCheckpoint, writeCheckpoint } from '../src/core/checkpoint.ts';
+import { COMPACT_FOCUS_MAX, compactFocus, writeRecord } from '../src/core/task-record.ts';
 import { wakePath } from '../src/core/wake.ts';
 import { coreModule } from '../src/modules/core.ts';
 import { fakeAdapter, registry } from './fakes.ts';
@@ -173,6 +174,52 @@ for (const source of ['compact', 'fork'] as const) {
 test('the continue words', () => {
 	for (const yes of ['continue', 'C', 'go  on.', ' Continue!\n']) assert.equal(isContinueWord(yes), true, yes);
 	for (const no of ['continue with the login page', 'cont', 'go', '']) assert.equal(isContinueWord(no), false, no);
+});
+
+test('before a compaction the summary is told what the Task needs: goal, finish line, Decisions, Next', async () => {
+	const { root, context } = await openTask();
+	await section.run(['close', 'chose'], captureIo(root, { HOME: tempDir() }, '**Done:** y\n**Decisions:** Grafana, not Kibana.\n**Next:** wire the alerts.\n'));
+	const event = { harness: 'fake', cwd: root, name: 'compact.before' as const, trigger: 'auto' };
+	const focus = await coreModule.handlers['compact.before']!(event, context);
+	assert.match(focus?.context ?? '', /^This session works on kalfa Task feat-monitoring \(record: .*feat-monitoring\.md\)\. Keep these in the summary/);
+	assert.match(focus?.context ?? '', /\n- Goal: Build the monitoring\n- Done when: it works\n- Sections closed: proven; chose\n- Decisions:\n {2}chose:\n {4}Grafana, not Kibana\.\n- Next: wire the alerts\.\n/);
+	assert.equal(await coreModule.handlers['compact.before']!({ ...event, subagent: true }, context), undefined, "a subagent's compaction is its own");
+});
+
+test('the compact focus keeps the newest Decisions when they do not all fit', () => {
+	const big = 'x'.repeat(2500);
+	const sections = ['one', 'two', 'three'].map((title) => ({ title, parts: new Map([['Done', 'd'], ['Decisions', `${title} ${big}`]]) }));
+	const record = { id: 't', path: '/r/t.md', header: { schema: 1 as const, goal: 'g', status: 'open' as const, started: '2026-11-12' }, sections };
+	const focus = compactFocus(record);
+	assert.ok(focus.length <= COMPACT_FOCUS_MAX, `${focus.length} > ${COMPACT_FOCUS_MAX}`);
+	assert.doesNotMatch(focus, / {2}one:/);
+	assert.match(focus, / {2}two:[\s\S]* {2}three:/);
+	assert.match(focus, /- Next: not recorded/);
+});
+
+test('after a compaction the summary is the Task\'s newest Checkpoint; only the newest few are kept', async () => {
+	const { root, context } = await openTask();
+	const after = (summary: string) => coreModule.handlers['compact.after']!({ harness: 'fake', cwd: root, name: 'compact.after', trigger: 'manual', summary, sessionId: 's1' }, context);
+	const result = await after('## 1. Primary request\nBuild it.');
+	assert.match(result?.notice ?? '', /^kalfa: checkpoint of Task feat-monitoring saved \(manual compaction\): .*\.kalfa\/checkpoints\/feat-monitoring\/\d{8}T\d{6}Z-manual\.md$/);
+	const last = lastCheckpoint(root, 'feat-monitoring');
+	assert.equal(last?.summary, '## 1. Primary request\nBuild it.');
+	assert.equal(last?.trigger, 'manual');
+	assert.equal(last?.session, 's1');
+	assert.equal(await after('  '), undefined, 'an empty summary is not kept');
+
+	const dir = checkpointsDir(root, 'feat-monitoring');
+	for (let i = 0; i < CHECKPOINTS_KEPT + 2; i++) writeCheckpoint(root, { task: 'feat-monitoring', trigger: 'auto', at: `2030-01-01T00:00:0${i}.000Z`, summary: `n${i}` });
+	assert.equal(readdirSync(dir).length, CHECKPOINTS_KEPT);
+	assert.equal(lastCheckpoint(root, 'feat-monitoring')?.summary, `n${CHECKPOINTS_KEPT + 1}`);
+});
+
+test('a compaction on a branch without an open Task does nothing', async () => {
+	const root = repo();
+	const context = { project: { root, file: undefined }, settings: { schema: 1 as const, modules: [] }, env: { HOME: tempDir() }, capabilities: new Set<never>() };
+	assert.equal(await coreModule.handlers['compact.before']!({ harness: 'fake', cwd: root, name: 'compact.before', trigger: 'auto' }, context), undefined);
+	assert.equal(await coreModule.handlers['compact.after']!({ harness: 'fake', cwd: root, name: 'compact.after', trigger: 'auto', summary: 's' }, context), undefined);
+	assert.equal(existsSync(join(root, '.kalfa/checkpoints')), false);
 });
 
 test('the session report puts the open Plans before the Tasks, and a broken glob is a notice', async () => {

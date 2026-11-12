@@ -59,12 +59,19 @@ export interface UserFiles {
 	 */
 	statusLine?(data: Record<string, unknown>, tap: string | undefined): Record<string, unknown>;
 	approvals: ApprovalLayout;
-	/**
-	 * The top-level setting that turns off the harness's own automatic memory,
-	 * and its value for off. kalfa's Standing memory replaces it (ADR 0002), so
-	 * `kalfa install` sets it and `uninstall` puts the earlier value back.
-	 */
-	nativeMemory?: { key: string; off: unknown };
+	/** The settings `kalfa install` sets to kalfa's value; `uninstall` puts back the value each had. */
+	owned?: readonly OwnedSetting[];
+}
+
+/** One user setting kalfa sets, such as the switch that turns off the harness's own memory. */
+export interface OwnedSetting {
+	/** Its name in `install.yaml` and in the report, e.g. `native-memory`. */
+	name: string;
+	/** The keys to it in the settings file, e.g. `['env', 'SOME_VARIABLE']`. */
+	path: readonly string[];
+	value: unknown;
+	/** Why kalfa sets it, for the Operator. */
+	why: string;
 }
 
 /** A new session: its name and the prompt it starts on. */

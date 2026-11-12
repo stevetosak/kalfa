@@ -1,5 +1,6 @@
 // `kalfa doctor`: what kalfa sees on this machine and in this repository. Where
-// kalfa runs from, the machine settings, the project file and its Plans, the
+// kalfa runs from, whether the harnesses' user settings hold what `kalfa
+// install` writes (hooks, settings kalfa owns), the machine settings, the project file and its Plans, the
 // Capabilities each harness lacks with what the Core and the Modules do
 // without them, and whether the build is up to date. A broken part is
 // reported and the next part still runs; only a broken project file stops it.
@@ -20,6 +21,7 @@ import type { Io } from '../io.ts';
 import { runSmoke } from '../smoke.ts';
 import { version } from '../version.ts';
 import { buildProject } from './build.ts';
+import { installWants, pendingInstall } from './install.ts';
 import { LINKED, linkTarget } from './link.ts';
 
 /** Runs one part; a kalfa error becomes a line instead of stopping the report. */
@@ -43,6 +45,14 @@ function installMode(env: NodeJS.ProcessEnv, packageRoot: string): string {
 		return target ? `${path} links to ${target}` : `installed at ${path}`;
 	}
 	return 'kalfa is not on PATH';
+}
+
+/** Per harness, whether its user settings are what `kalfa install` writes, and the changes it would make. */
+function userSettingLines(adapters: ReadonlyMap<string, Adapter>, env: NodeJS.ProcessEnv, moduleDirs: ModuleDirs, packageRoot: string): string[] {
+	const lines = pendingInstall(adapters, env, installWants(env, moduleDirs, packageRoot)).flatMap(({ harness, changes }) =>
+		changes.length ? [`${harness}: ${changes.length} change(s) waiting; run kalfa install`, ...changes.map((c) => `  ${c}`)] : [`${harness}: up to date`],
+	);
+	return ['', ...lines];
 }
 
 function capabilityLines(project: Project | undefined, adapters: ReadonlyMap<string, Adapter>, dirs: readonly string[]): string[] {
@@ -100,6 +110,7 @@ export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs
 			if (values.smoke) return runSmoke(packageRoot(), io);
 			io.out(`kalfa ${version} from ${packageRoot()}`);
 			part(io, 'install', () => [installMode(io.env, packageRoot())]);
+			part(io, 'user settings', () => userSettingLines(adapters, io.env, moduleDirs, packageRoot()));
 			const path = settingsPath(io.env);
 			part(io, 'machine settings', () => {
 				loadSettings(io.env);

@@ -7,4 +7,6 @@ export const CLAUDE_HOOKS: Partial<Record<CoreEventName, { hook: string; matcher
 	'prompt.submit': { hook: 'UserPromptSubmit' },
 	'command.before': { hook: 'PreToolUse', matcher: 'Bash' },
 	'tool.after': { hook: 'PostToolUse' },
+	'compact.before': { hook: 'PreCompact' },
+	'compact.after': { hook: 'PostCompact' },
 };
