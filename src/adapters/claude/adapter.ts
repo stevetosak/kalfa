@@ -112,7 +112,7 @@ const sessionArgs = ({ name, prompt, model }: SessionStart) => ['-n', name, ...(
 
 export const claudeAdapter: Adapter = {
 	name: 'claude',
-	capabilities: new Set<Capability>(['context-injection', 'command-block', 'transcript', 'task-list', 'status-line', 'background-agent', 'usage', 'turn-stop', 'compaction']),
+	capabilities: new Set<Capability>(['context-injection', 'command-block', 'transcript', 'task-list', 'status-line', 'background-agent', 'usage', 'turn-stop', 'compaction', 'instruction-file']),
 	// Claude Code sets CLAUDECODE=1 for the commands it runs.
 	detect: (env) => env.CLAUDECODE === '1',
 	toEvent,
@@ -122,4 +122,6 @@ export const claudeAdapter: Adapter = {
 	skills: claudeSkills,
 	session: { program: 'claude', interactive: sessionArgs, background: (start) => ['--bg', ...sessionArgs(start)] },
 	usage: claudeUsage,
+	// additionalContext above 10,000 characters goes to a file; the agent sees a 2,000-character preview.
+	contextCap: 10_000,
 };

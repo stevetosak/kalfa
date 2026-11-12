@@ -219,7 +219,7 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 		},
 	},
 	{
-		name: 'memory: kalfa memory writes records in the Memory home, and session.start injects both layers',
+		name: 'memory: kalfa memory writes records in the Memory home; the instruction file holds the Personal layer, session.start the project layer',
 		run(world) {
 			kalfa(world, ['memory', 'add', '--type', 'rule', '--layer', 'personal', '--summary', PERSONAL_RULE]);
 			kalfa(world, ['memory', 'add', '--type', 'fact', '--layer', 'project', '--summary', PROJECT_FACT]);
@@ -235,8 +235,10 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			expect(start.status === 0, `session.start exited ${start.status}: ${start.stderr.trim()}`);
 			const output = JSON.parse(start.stdout || '{}');
 			const context = String(output.hookSpecificOutput?.additionalContext ?? '');
-			expect(context.includes(PERSONAL_RULE) && context.includes(`[fact] ${PROJECT_FACT}`), 'session.start does not inject both layers');
-			expect(String(output.systemMessage ?? '').includes('memory: 1 rule, 1 index line'), `the summary does not count the records: ${output.systemMessage}`);
+			const rules = join(world.home, '.claude', 'rules', 'kalfa-memory.md');
+			expect(existsSync(rules) && readFileSync(rules, 'utf8').includes(PERSONAL_RULE), 'the instruction file does not hold the personal rule');
+			expect(!context.includes(PERSONAL_RULE) && context.includes(`[fact] ${PROJECT_FACT}`), 'session.start does not inject the project layer alone');
+			expect(String(output.systemMessage ?? '').includes('memory: 0 rules, 1 index line (+ the Personal layer from the instruction file)'), `the summary does not count the records: ${output.systemMessage}`);
 		},
 	},
 	{

@@ -159,3 +159,40 @@ close finished open items. The Operator answers once; no work waits on it.
 taken on, so it moves from the Memory records to a deferred list that the
 `plans` Module keeps in the Memory home, private as the Project layer is, and
 reports at the session start beside the Plans.
+
+## Amendment 2026-11-12: the session context fits the harness
+
+The session start sent every part of Standing memory in one hook output, and
+the budgets counted each layer, never the whole. Claude Code caps a hook's
+`additionalContext` at 10,000 characters, measured for each hook command on
+its own, and above the cap it gives the model only a 2,000-character preview
+and the path of a file it does not ask the model to read. In the kalfa
+repository the output was 18,064 characters: the model saw about half of the
+Personal rules, and none of the Project layer, the Plans or the Tasks. The
+instruction files of the harness have no such cap: Claude Code loads a
+CLAUDE.md, its `@` imports and the files in `~/.claude/rules/` in full, up to
+4 MiB, at the stable start of the prompt. Splitting the output over several
+hook commands was set aside, because the number of hooks would have to grow
+with memory and each one would load the project again.
+
+**The Personal layer goes to an instruction file.** A Capability,
+`instruction-file`, says the harness loads a user file of instructions in full
+at every session start; the Claude Adapter names
+`~/.claude/rules/kalfa-memory.md`. `kalfa install` writes the file and records
+it in `install.yaml`, and `kalfa uninstall` removes it. Every write to the
+Personal layer, and every session start, writes it again from the Loaded tier,
+so the next session has the current records; the file says it is generated and
+that a change goes through `kalfa memory`. The Personal layer is the largest
+part and the same in every repository, so it gains most from a place without a
+cap. Under a harness without the Capability, or before `kalfa install`, the
+Personal layer stays in the session report.
+
+**The session report has one budget.** What changes with the repository stays
+in the hook: the Project layer, the Recap, the Plans, the Tasks, recall and the
+deferred items. The Adapter states its cap, and the report is fitted under it
+with room left for the other Modules: rules always load, and the Project
+layer's index lines fill what the Recap, the Plans and the Tasks leave, the
+rest going to the Stored tier. The open Tasks other than the branch's are
+named in one line each, only the three most recently written, with a count of
+the rest. A report past nine tenths of the cap prints a line to the Operator
+at that session start, and `kalfa doctor` shows its size against the cap.

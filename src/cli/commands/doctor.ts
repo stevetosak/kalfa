@@ -2,12 +2,14 @@
 // kalfa runs from, whether the harnesses' user settings hold what `kalfa
 // install` writes (hooks, settings kalfa owns), the machine settings, the project file and its Plans, the
 // Capabilities each harness lacks with what the Core and the Modules do
-// without them, and whether the build is up to date. A broken part is
+// without them, the size of the last session start's context against the
+// harness's cap, and whether the build is up to date. A broken part is
 // reported and the next part still runs; only a broken project file stops it.
 // `--smoke` runs the clean-state smoke instead (see smoke.ts).
 import { existsSync, readFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import type { Adapter } from '../../adapters/adapter.ts';
+import { contextSizeLine, contextSizes } from '../../core/context-size.ts';
 import { KalfaError } from '../../core/errors.ts';
 import type { ModuleDirs } from '../../core/module-dirs.ts';
 import { loadModuleSource, MODULE_FILE, moduleFolders, type ModuleManifest } from '../../core/module-source.ts';
@@ -136,6 +138,10 @@ export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs
 				}
 			}
 			part(io, 'Capabilities', () => capabilityLines(project, adapters, moduleDirs(io.env)));
+			part(io, 'session context', () => {
+				const sizes = Object.entries(contextSizes(io.env, project.root));
+				return sizes.length ? ['', ...sizes.map(([harness, size]) => contextSizeLine(harness, size))] : ['no session start recorded in this repository yet'];
+			});
 			part(io, 'skill references', () => skillRefLines(project.root, io.env, adapters, new Set(project.file?.['skill-refs']?.ignore)));
 			if (project.file) {
 				part(io, 'build', () => {

@@ -20,6 +20,7 @@ import {
 	writeRecords,
 } from '../../core/memory/home.ts';
 import { checkHeader, type MemoryRecord, RECORD_STATUSES, RECORD_TYPES, type RecordHeader, type RecordType, ruleText, slugOf } from '../../core/memory/record.ts';
+import { refreshInstructions } from '../../core/memory/instructions.ts';
 import { markUsed } from '../../core/memory/usage.ts';
 import { loadProject } from '../../core/project.ts';
 import { loadSettings, memoryBudgets } from '../../core/settings.ts';
@@ -303,7 +304,14 @@ export function memoryCommand(extensions: readonly MemoryExtension[] = []): Comm
 			const [sub, ...rest] = args;
 			const run = sub && Object.hasOwn(all, sub) ? all[sub] : undefined;
 			if (!run) throw new UsageError(sub ? `unknown subcommand '${sub}'` : 'give a subcommand');
-			return run(rest, io);
+			const code = await run(rest, io);
+			// A write, or a read that changes a record's rank, can change the Personal layer's Loaded tier.
+			try {
+				refreshInstructions(io.env, loadSettings(io.env));
+			} catch (error) {
+				io.err(`kalfa memory: the instruction file was not written again: ${(error as Error).message}`);
+			}
+			return code;
 		},
 	};
 }

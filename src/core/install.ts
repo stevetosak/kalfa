@@ -5,8 +5,9 @@
 // so an entry the Operator wrote is never taken away. The same holds for the
 // settings kalfa sets (the Adapter's `owned` list): kalfa owns one only when it
 // changed it, and puts back the earlier value. A changed settings file
-// is backed up next to itself before kalfa writes it.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+// is backed up next to itself before kalfa writes it. The instruction file
+// (the Personal layer, where a harness loads one) is kalfa's by its name.
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -30,6 +31,8 @@ const harnessStateSchema = z
 		approvals: z.strictObject({ allow: entries, ask: entries, deny: entries }),
 		/** The settings kalfa changed, by their name in the Adapter's `owned` list. */
 		settings: z.record(z.string(), settingStateSchema).optional(),
+		/** The instruction file kalfa wrote, relative to HOME. */
+		instructions: z.string().optional(),
 		/** Before the `settings` map: the harness's own memory setting. Read, never written. */
 		'native-memory': settingStateSchema.optional(),
 	})
@@ -69,6 +72,8 @@ export interface UserWants {
 	approvals: Approvals;
 	/** Set the Adapter's `owned` settings; left out, kalfa puts back what it changed. */
 	ownedSettings?: boolean;
+	/** The text of the Adapter's instruction file; left out, kalfa removes the file it wrote. */
+	instructions?: string;
 }
 
 export const NOTHING: UserWants = { approvals: noApprovals() };
@@ -160,6 +165,34 @@ function readSettings(path: string): Record<string, unknown> | undefined {
 
 const backupPath = (path: string, now: Date) => `${path}.bak-kalfa-${now.toISOString().replace(/[:.]/g, '-')}`;
 
+/**
+ * Writes the instruction file when its text differs, or removes the one kalfa
+ * wrote when no text is wanted. The file is kalfa's alone: its name says so.
+ */
+function applyInstructions(home: string, user: UserFiles, text: string | undefined, owned: string | undefined, report: string[], dryRun: boolean): { changed: boolean; owned?: string } {
+	const relativePath = user.instructions;
+	if (!relativePath) return { changed: false };
+	const path = join(home, relativePath);
+	if (text === undefined) {
+		const old = owned ? join(home, owned) : undefined;
+		if (!old || !existsSync(old)) return { changed: false };
+		report.push(`instructions: remove ${old}`);
+		if (!dryRun) {
+			rmSync(old);
+			// A folder kalfa's file was the last thing in goes too; one with the Operator's files stays.
+			if (!readdirSync(dirname(old)).length) rmdirSync(dirname(old));
+		}
+		return { changed: true };
+	}
+	if (existsSync(path) && readFileSync(path, 'utf8') === text) return { changed: false, owned: relativePath };
+	report.push(`instructions: write ${path} (the Personal layer's Loaded tier)`);
+	if (!dryRun) {
+		mkdirSync(dirname(path), { recursive: true });
+		writeFileSync(path, text);
+	}
+	return { changed: true, owned: relativePath };
+}
+
 /** Brings kalfa's entries in one harness's user settings under `home` to `want`. Checks everything before it writes. */
 export function applyUser(home: string, user: UserFiles, want: UserWants, owned: HarnessState | undefined, options: UserOptions = {}): UserResult {
 	const path = join(home, user.settings);
@@ -181,9 +214,11 @@ export function applyUser(home: string, user: UserFiles, want: UserWants, owned:
 	const settings = applySettings(merged.after, user.owned ?? [], want.ownedSettings ?? false, owned?.settings, report);
 	const after = settings.data;
 
-	const changed = after !== before && !(existing === undefined && isDeepStrictEqual(after, {}));
+	const settingsChanged = after !== before && !(existing === undefined && isDeepStrictEqual(after, {}));
+	const instructions = applyInstructions(home, user, want.instructions, owned?.instructions, report, options.dryRun ?? false);
+	const changed = settingsChanged || instructions.changed;
 	if (!changed) report.push('nothing to change');
-	if (changed && !options.dryRun) {
+	if (settingsChanged && !options.dryRun) {
 		if (existing !== undefined) {
 			const backup = backupPath(path, options.now ?? new Date());
 			copyFileSync(path, backup);
@@ -192,5 +227,10 @@ export function applyUser(home: string, user: UserFiles, want: UserWants, owned:
 		mkdirSync(dirname(path), { recursive: true });
 		writeFileSync(path, `${JSON.stringify(after, null, 2)}\n`);
 	}
-	return { path, report, changed, owned: { approvals: merged.owned, ...(settings.owned ? { settings: settings.owned } : {}) } };
+	return {
+		path,
+		report,
+		changed,
+		owned: { approvals: merged.owned, ...(settings.owned ? { settings: settings.owned } : {}), ...(instructions.owned ? { instructions: instructions.owned } : {}) },
+	};
 }
