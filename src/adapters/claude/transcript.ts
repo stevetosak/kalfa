@@ -192,7 +192,16 @@ export function loadSessions(root: string, since = 0): SessionUsage[] {
 	return sessions;
 }
 
+/** A session's transcript, in whichever project folder holds it. */
+export function findTranscript(root: string, sessionId: string): string | undefined {
+	if (!existsSync(root)) return undefined;
+	return readdirSync(root)
+		.map((folder) => join(root, folder, `${sessionId}.jsonl`))
+		.find((path) => existsSync(path));
+}
+
 export const claudeUsage: UsageSource = {
 	lastRequest,
+	transcriptOf: (env, sessionId) => findTranscript(projectsDir(env), sessionId),
 	sessions: (env, since) => loadSessions(projectsDir(env), since),
 };

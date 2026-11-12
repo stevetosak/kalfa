@@ -1,12 +1,16 @@
-// `kalfa herdr continue`: starts the successor of this session on an open Task
-// (see successor.ts). The `successor` skill asks the Operator before it runs
-// this. Exit 3 means a usage limit is near and nothing started.
+// The herdr Module's commands. `kalfa herdr continue` starts the successor of
+// this session on an open Task (see successor.ts); the `successor` skill asks
+// the Operator before it runs it, and exit 3 means a usage limit is near and
+// nothing started. `kalfa board` shows every agent session across the Herdr
+// workspaces and closes the finished ones (see board.ts).
 import type { Adapter } from '../../src/adapters/adapter.ts';
 import { type Command, parseCommandArgs, UsageError } from '../../src/cli/command.ts';
 import { openRecord, taskId } from '../../src/cli/commands/task.ts';
 import { requireModule, requireProject } from '../../src/cli/project.ts';
 import { KalfaError } from '../../src/core/errors.ts';
 import { checkLimits, type LimitVerdict, limitsPath } from '../../src/core/usage-limits.ts';
+import { cleanWorkspaces, diskLookups, finishedWorkspaces, readSnapshot, renderBoard, type Snapshot } from './board.ts';
+import { errorText, type HerdrExec, herdrCli } from './launcher.ts';
 import { continueTask, defaultLauncher, type Launcher } from './successor.ts';
 
 export const LIMIT_EXIT = 3;
@@ -61,6 +65,34 @@ export function herdrCommand(adapters: ReadonlyMap<string, Adapter>, deps: Herdr
 			}
 			io.out(result.output);
 			io.out(`Usage: ${result.note}.`);
+			return 0;
+		},
+	};
+}
+
+export interface BoardCommandDeps {
+	exec?: HerdrExec;
+	now?: () => number;
+}
+
+/** `kalfa board`: every agent session across the Herdr workspaces; `--clean` lists the finished workspaces, `--clean --yes` closes them. */
+export function boardCommand(adapters: ReadonlyMap<string, Adapter>, deps: BoardCommandDeps = {}): Command {
+	return {
+		summary: 'herdr Module: every agent session across the Herdr workspaces, with its Task, state, context, idle time, cache and Next; --clean closes finished workspaces',
+		usage: 'kalfa board [--clean [--yes]]   (--clean lists the workspaces whose Tasks are all closed; --yes closes them, after the Operator\'s yes)',
+		async run(args, io) {
+			const { values } = parseCommandArgs(args, { clean: { type: 'boolean' }, yes: { type: 'boolean' } });
+			if (values.yes && !values.clean) throw new UsageError('--yes goes with --clean');
+			const exec = deps.exec ?? herdrCli;
+			let snapshot: Snapshot;
+			try {
+				snapshot = readSnapshot(exec);
+			} catch (error) {
+				throw new KalfaError(`kalfa board reads its sessions from Herdr, and herdr failed: ${errorText(error)}`);
+			}
+			const lookups = diskLookups(adapters, io.env, (deps.now ?? Date.now)());
+			const finished = finishedWorkspaces(snapshot, lookups);
+			io.out(values.clean ? cleanWorkspaces(exec, snapshot, finished, values.yes === true).join('\n') : renderBoard(snapshot, lookups, finished));
 			return 0;
 		},
 	};

@@ -183,7 +183,8 @@ test('at session start inside Herdr, a missing or old integration for the harnes
 	assert.equal(integrationState(status, 'codex'), 'not installed');
 	assert.equal(integrationState(status, 'kimi'), undefined);
 
-	const module = herdrModuleWith(() => status);
+	const empty = answer({ workspaces: [], tabs: [], panes: [], agents: [] });
+	const module = herdrModuleWith((args) => (args[0] === 'integration' ? status : empty));
 	const start = (harness: string) => ({ harness, cwd: '/', name: 'session.start' as const, source: 'startup' as const });
 	const inside = { ...handlerContext(['herdr']), env: { HERDR_ENV: '1', PATH: fakeBinDir() } };
 	assert.match((await module.handlers['session.start']!(start('claude'), inside))!.notice!, /integration is outdated.*herdr integration install claude/);
@@ -192,5 +193,5 @@ test('at session start inside Herdr, a missing or old integration for the harnes
 	const broken = herdrModuleWith(() => {
 		throw Object.assign(new Error('x'), { stderr: 'no server' });
 	});
-	assert.match((await broken.handlers['session.start']!(start('claude'), inside))!.notice!, /integration status failed: no server/);
+	assert.match((await broken.handlers['session.start']!(start('claude'), inside))!.notice!, /integration status failed: no server\nkalfa herdr: the Task labels failed: no server/);
 });

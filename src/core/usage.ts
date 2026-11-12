@@ -5,6 +5,8 @@
 /** The lifetime of the prompt cache a request wrote to. */
 export type CacheTtl = '5m' | '1h';
 
+export const CACHE_TTL_MS: Record<CacheTtl, number> = { '5m': 5 * 60_000, '1h': 60 * 60_000 };
+
 export interface TokenUsage {
 	input: number;
 	output: number;
@@ -51,6 +53,8 @@ export interface SessionUsage {
 export interface UsageSource {
 	/** The session's newest request, from its transcript; `undefined` before the first one. */
 	lastRequest(transcript: string): LastRequest | undefined;
+	/** The transcript of the session with this id; `undefined` when the harness keeps none here. */
+	transcriptOf(env: NodeJS.ProcessEnv, sessionId: string): string | undefined;
 	/** Every session on this machine with a request at or after `since` (epoch ms). */
 	sessions(env: NodeJS.ProcessEnv, since: number): SessionUsage[];
 }

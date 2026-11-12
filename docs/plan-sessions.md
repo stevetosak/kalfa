@@ -50,10 +50,10 @@ and keeps what it wrote.
 
 **Done when:** `kalfa board` lists every agent session across workspaces with its Task, state, context, idle time, cache state and Next, and a workspace whose Tasks are all closed is marked and closed only after the Operator's yes.
 
-- [ ] `kalfa board`: join `herdr agent list` with the Task Records and the meter state; one row per session.
-- [ ] Label each pane with its Task and Next step at session start and Section close.
-- [ ] Task close marks the workspace finished when all of its Tasks are closed.
-- [ ] `kalfa board --clean` lists the finished workspaces and closes them after one yes.
+- [x] `kalfa board`: join `herdr agent list` with the Task Records and the meter state; one row per session.
+- [x] Label each pane with its Task and Next step at session start and Section close.
+- [x] Task close marks the workspace finished when all of its Tasks are closed.
+- [x] `kalfa board --clean` lists the finished workspaces and closes them after one yes.
 - [ ] Decide the visual board in a grill, after the CLI has been used.
 
 ## 4. Workspace presets
