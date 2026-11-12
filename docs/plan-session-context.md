@@ -2,7 +2,7 @@
 title: "Session context: every Loaded record in view at session start"
 description: "Claude Code shows the model only a 2 KB preview of a long SessionStart context, so most of Standing memory does not load; fit the context to the harness or load it another way."
 type: plan
-status: active
+status: done
 topics: [memory, agents]
 ---
 
@@ -43,4 +43,4 @@ the Loaded tier reaches the model is a design choice.
 
 - [x] Apply the choice from part 2.
 - [x] The Claude Adapter knows the limit; `kalfa doctor` shows the session context size against it.
-- [ ] Prove it with a scratch session: a rule at the end of the Loaded tier is quoted without a file read.
+- [x] Prove it with a scratch session: a rule at the end of the Loaded tier is quoted without a file read.
