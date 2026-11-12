@@ -1,0 +1,79 @@
+---
+title: "Sessions: continuity across days and many parallel sessions"
+description: "Idle checkpoints, a recap after days away, a board of all sessions with cleanup, workspace presets and an autonomous compaction mode."
+type: plan
+status: proposed
+topics: [agents, tooling]
+---
+
+Work on many repositories at once leaves several agent sessions open per
+repository, and after a few days away the last Task, the reasoning behind it
+and the next step are hard to recover. This Plan closes those gaps in order of
+cost: the smallest part rests on what the harness already does, the largest
+needs new mechanics.
+
+A spike on 2026-11-12 settled the ground. Claude Code keeps the main
+conversation on a one-hour prompt cache within plan usage (five minutes on
+usage credits, for subagents and for compaction), and it compacts an idle
+session itself before that hour ends, from 200k tokens by default. Its
+PreCompact hook steers the summary and its PostCompact hook receives it. An
+outside process can type into a session through `herdr agent prompt`,
+including `/compact` and `/clear`; a finished turn in an unfocused pane reads
+as `done`, not `idle`, and `/clear` reports a stall although it clears.
+Claude Code's own `/recap` covers the current session in one line, so the
+recap below takes another name.
+
+## 1. Idle checkpoint
+
+The built-in idle compaction does the work; kalfa gives it the Task's focus
+and keeps what it wrote.
+
+**Done when:** a compaction in a session with an open Task carries the Task's goal, Decisions and Next into the summary, and the summary is in the Task Record afterwards, proven in a real session.
+
+- [ ] Claude Adapter: map PreCompact and PostCompact to Core events.
+- [ ] PreCompact prints the summary focus from the open Task Record (goal, Done when, Decisions, Next).
+- [ ] PostCompact saves `compact_summary` into the Task Record as a checkpoint, with its trigger and time.
+- [ ] Set `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` to the meter's GUARD_FROM (100k) through `kalfa build`, and report it in `kalfa doctor`.
+- [ ] Prove it with a manual `/compact` in a scratch repo, then with one real idle compaction.
+
+## 2. Recap after days away
+
+**Done when:** `/where-was-i` in a repository with a closed or open Task shows the Plan part, the Task's goal, the Decisions of its last Sections, the last checkpoint, the commits since and the Next step, and a session start after N idle days shows it unasked.
+
+- [ ] `kalfa recap`: the Plan part, the last Task (goal, Done when, Sections, recent Decisions, Next), the last checkpoint, commits since the last Section, other open Tasks. No model call.
+- [ ] `/where-was-i` skill: reads `kalfa recap` and tells the line of thinking in a few sentences.
+- [ ] Session start shows the recap instead of the brief when the repository has had no activity for N days (default 2).
+- [ ] `kalfa section close` warns when a Section has no Decisions part.
+
+## 3. Board and cleanup
+
+**Done when:** `kalfa board` lists every agent session across workspaces with its Task, state, context, idle time, cache state and Next, and a workspace whose Tasks are all closed is marked and closed only after the Operator's yes.
+
+- [ ] `kalfa board`: join `herdr agent list` with the Task Records and the meter state; one row per session.
+- [ ] Label each pane with its Task and Next step at session start and Section close.
+- [ ] Task close marks the workspace finished when all of its Tasks are closed.
+- [ ] `kalfa board --clean` lists the finished workspaces and closes them after one yes.
+- [ ] Decide the visual board in a grill, after the CLI has been used.
+
+## 4. Workspace presets
+
+**Done when:** `kalfa space open <repo> --preset <name>` opens a workspace with the preset's tabs, and with `--task` a git worktree, a branch and a Task Record for that Task.
+
+- [ ] Preset format in the machine settings (personal, not in `kalfa.yaml`): named tab sets such as an agent tab and a lazygit tab.
+- [ ] `kalfa space open`: workspace, tabs, focus; reuse the workspace when it exists.
+- [ ] `--task`: one git worktree, branch and Task Record per parallel Task, so two sessions never share one Task Record.
+
+## 5. Autonomous compaction
+
+A per-session mode, never a project setting. Each reset must pay back its
+cost: at 150k tokens on Opus 5.5 a Section close, `/clear` and continue pays
+back after about 9 requests, a `/compact` after about 35 (estimates).
+
+**Done when:** a session in auto mode passes the compact point, resets at a Section boundary without the Operator, and goes on with the Task; the cost of each reset is recorded and stays below what it saves.
+
+- [ ] `/meter auto` and `kalfa meter auto` for the agent when the Operator asks for an autonomous run; the mode is kept in the Task Record header.
+- [ ] At the compact point, at the next Section boundary: Section close, `/clear`, continue word, through Herdr; check the new session id, not the exit code.
+- [ ] Skip the reset when the remaining work is under the payback point.
+- [ ] `/compact` with the PreCompact focus only when no Section boundary comes within COMPACT_NOW_AFTER.
+- [ ] Record each reset's cost; the usage report cannot see the compaction request in the transcript, so measure it another way.
+- [ ] Supersede the compact-not-handoff memory rule for auto mode.
