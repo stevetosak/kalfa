@@ -10,6 +10,7 @@ export const CAPABILITIES = {
 	'background-agent': 'a skill can start a background agent',
 	usage: 'kalfa can read the token use of each request, and so the size of the context',
 	'turn-stop': "a hook can end the agent's turn after a tool ran",
+	compaction: 'a hook can tell the harness what its context summary must keep, and reads the summary after',
 } as const;
 
 export type Capability = keyof typeof CAPABILITIES;

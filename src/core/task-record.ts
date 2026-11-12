@@ -238,3 +238,36 @@ export function handoffView(record: TaskRecord): string {
 	lines.push('', `Next: ${next ?? 'not recorded'}`);
 	return lines.join('\n');
 }
+
+/** The longest compact focus; the harness's own limit is larger, and its summary needs room for the rest. */
+export const COMPACT_FOCUS_MAX = 6000;
+
+/**
+ * What a context summary must keep so the session goes on with the Task: the
+ * goal, the finish line, the Decisions of the Sections (the newest first when
+ * they do not all fit) and the next step.
+ */
+export function compactFocus(record: TaskRecord): string {
+	const { header, sections } = record;
+	const last = sections.at(-1);
+	const head = [
+		`This session works on kalfa Task ${record.id} (record: ${record.path}). Keep these in the summary, word for word where you can:`,
+		`- Goal: ${header.goal}`,
+		...(header['done-when'] ? [`- Done when: ${header['done-when']}`] : []),
+		...(sections.length ? [`- Sections closed: ${sections.map((s) => s.title).join('; ')}`] : []),
+	];
+	const next = `- Next: ${record.close?.get('Next') ?? last?.parts.get('Next') ?? 'not recorded; keep the step the session was on'}`;
+	const tail = [next, 'Keep also what the Next step needs that the record does not hold: the files changed since the last Section, the commands run and their results, and open questions to the Operator.'];
+
+	let room = COMPACT_FOCUS_MAX - [...head, ...tail].join('\n').length - 30;
+	const decisions: string[] = [];
+	for (const section of [...sections].reverse()) {
+		const text = section.parts.get('Decisions');
+		if (!text) continue;
+		const entry = `  ${section.title}:\n${text.replace(/^/gm, '    ')}`;
+		if (entry.length + 1 > room) break;
+		decisions.unshift(entry);
+		room -= entry.length + 1;
+	}
+	return [...head, ...(decisions.length ? ['- Decisions:', ...decisions] : []), ...tail].join('\n');
+}

@@ -3,7 +3,7 @@ import type { Section } from './task-record.ts';
 // The harness-neutral moments of a session. An Adapter turns a harness hook
 // into one of these; Modules handle them and never see a harness payload.
 
-export const CORE_EVENTS = ['session.start', 'prompt.submit', 'command.before', 'tool.after', 'section.close', 'task.close'] as const;
+export const CORE_EVENTS = ['session.start', 'prompt.submit', 'command.before', 'tool.after', 'compact.before', 'compact.after', 'section.close', 'task.close'] as const;
 
 export type CoreEventName = (typeof CORE_EVENTS)[number];
 
@@ -24,6 +24,9 @@ interface EventBase {
 
 export type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact' | 'fork';
 
+/** What started a compaction: `manual` (the Operator), `auto` (the harness, near the limit or after idle time), or a harness's own word. */
+export type CompactTrigger = string;
+
 export type CoreEvent = EventBase &
 	(
 		| { name: 'session.start'; source: SessionStartSource }
@@ -32,6 +35,10 @@ export type CoreEvent = EventBase &
 		| { name: 'command.before'; command: string }
 		/** `durationMs`: how long the tool ran, without the wait for an approval. */
 		| { name: 'tool.after'; tool: string; durationMs?: number }
+		/** The harness is about to summarise the session; `instructions`: what the Operator typed after /compact. */
+		| { name: 'compact.before'; trigger: CompactTrigger; instructions?: string }
+		/** The harness has summarised the session; `summary` replaces the conversation from now on. */
+		| { name: 'compact.after'; trigger: CompactTrigger; summary: string }
 		/** Raised by `kalfa section close` after the Section is written. */
 		| { name: 'section.close'; task: string; record: string; section: Section }
 		/** Raised by `kalfa task close` after the record is closed. */
@@ -40,7 +47,7 @@ export type CoreEvent = EventBase &
 
 /** What a handler gives back. Each part is optional. */
 export interface HandlerResult {
-	/** Text the agent reads. */
+	/** Text the agent reads; on `compact.before`, what the summary must keep. */
 	context?: string;
 	/** Stops the action, with the reason the agent reads. Honoured on `prompt.submit` and `command.before`. */
 	block?: string;

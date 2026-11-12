@@ -26,6 +26,29 @@ function built(path: string): string {
 	return path;
 }
 
+/** What `kalfa install` wants in each harness's user settings; `kalfa doctor` compares the settings with it. */
+export function installWants(env: NodeJS.ProcessEnv, moduleDirs: ModuleDirs, packageRoot: string): (adapter: Adapter) => UserWants {
+	const sources = loadSettings(env).modules.map((name) => loadModuleSource(moduleDirs(env), name));
+	const shim = quote([built(join(packageRoot, 'dist', 'kalfa-hook'))]);
+	return (adapter) => ({
+		hook: (event) => `${shim} ${adapter.name} ${event}`,
+		tap: quote([built(join(packageRoot, 'dist', 'adapters', adapter.name, 'status-tap'))]),
+		approvals: planApprovals(sources, adapter.user!.approvals),
+		ownedSettings: true,
+	});
+}
+
+/** The changes `kalfa install` would make in each harness's user settings, without writing them. */
+export function pendingInstall(adapters: ReadonlyMap<string, Adapter>, env: NodeJS.ProcessEnv, wants: (adapter: Adapter) => UserWants): Array<{ harness: string; changes: string[] }> {
+	const state = readInstallState(env);
+	return [...adapters.values()]
+		.filter((adapter) => adapter.user)
+		.map((adapter) => {
+			const result = applyUser(home(env), adapter.user!, wants(adapter), state.harnesses[adapter.name], { dryRun: true });
+			return { harness: adapter.name, changes: result.changed ? result.report : [] };
+		});
+}
+
 /**
  * Runs `wants` for every harness with user settings: first as a dry run for
  * all of them, so a problem in one writes nothing anywhere, then for real.
@@ -49,24 +72,11 @@ function run(adapters: ReadonlyMap<string, Adapter>, io: Io, wants: (adapter: Ad
 
 export function installCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs, packageRoot: () => string): Command {
 	return {
-		summary: "Write kalfa's hooks, the status-line tap and the machine Modules' approvals into the harnesses' user settings, and turn off their own memory",
+		summary: "Write kalfa's hooks, the status-line tap and the machine Modules' approvals into the harnesses' user settings, and set the settings kalfa owns (their own memory off, idle compaction)",
 		usage: 'kalfa install [--dry-run]',
 		async run(args, io) {
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' } });
-			const sources = loadSettings(io.env).modules.map((name) => loadModuleSource(moduleDirs(io.env), name));
-			const shim = quote([built(join(packageRoot(), 'dist', 'kalfa-hook'))]);
-			return run(
-				adapters,
-				io,
-				(adapter) => ({
-					hook: (event) => `${shim} ${adapter.name} ${event}`,
-					tap: quote([built(join(packageRoot(), 'dist', 'adapters', adapter.name, 'status-tap'))]),
-					approvals: planApprovals(sources, adapter.user!.approvals),
-					nativeMemoryOff: true,
-				}),
-				values['dry-run'] ?? false,
-				false,
-			);
+			return run(adapters, io, installWants(io.env, moduleDirs, packageRoot()), values['dry-run'] ?? false, false);
 		},
 	};
 }

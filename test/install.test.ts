@@ -94,12 +94,35 @@ test("install turns off the harness's own memory, and uninstall puts back the va
 		const home = machine(operator);
 		const { out } = await run(install, home);
 		assert.equal(settings(home).autoMemoryEnabled, false);
-		assert.match(out, /own memory: off \(autoMemoryEnabled: false\)/);
-		assert.equal((await run(install, home)).out.includes('own memory'), false, 'a second install changes nothing');
+		assert.match(out, /native-memory: autoMemoryEnabled = false; kalfa's Standing memory replaces it/);
+		assert.equal((await run(install, home)).out.includes('native-memory'), false, 'a second install changes nothing');
 		const { out: removed } = await run(uninstall, home);
 		assert.match(removed, /autoMemoryEnabled put back/);
 		assert.deepEqual(settings(home), operator);
 	}
+});
+
+test('install sets the idle compaction size in env next to the Operator\'s variables; uninstall removes only it', async () => {
+	const cases: Array<typeof OPERATOR & { env?: Record<string, string> }> = [OPERATOR, { ...OPERATOR, env: { MY_VAR: '1' } }, { ...OPERATOR, env: { CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS: '300000' } }];
+	for (const operator of cases) {
+		const home = machine(operator);
+		const { out } = await run(install, home);
+		assert.equal(settings(home).env.CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS, '100000');
+		assert.match(out, /idle-compact: env\.CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS = "100000"; an idle session from 100k tokens is compacted/);
+		assert.equal(settings(home).env.MY_VAR, operator.env?.MY_VAR);
+		await run(uninstall, home);
+		assert.deepEqual(settings(home), operator);
+	}
+});
+
+test('an install.yaml from before the settings map still puts back the memory setting', async () => {
+	const home = machine({ ...OPERATOR, autoMemoryEnabled: false });
+	const state = { schema: 1, harnesses: { claude: { approvals: { allow: [], ask: [], deny: [] }, 'native-memory': { previous: true } } } };
+	writeFileSync(join(home, '.config/kalfa/install.yaml'), JSON.stringify(state));
+	await run(install, home);
+	assert.deepEqual(JSON.parse(readFileSync(join(home, '.config/kalfa/install.yaml'), 'utf8')).harnesses.claude.settings['native-memory'], { previous: true });
+	await run(uninstall, home);
+	assert.equal(settings(home).autoMemoryEnabled, true);
 });
 
 test("the Operator's own memory setting stays theirs: already off, or changed after the install", async () => {

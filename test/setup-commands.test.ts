@@ -63,7 +63,7 @@ test('init --dry-run writes nothing, and an unknown Module is refused', async ()
 });
 
 function checkout(): string {
-	const root = tempRepo({ 'package.json': '{}', 'dist/kalfa.mjs': '', 'dist/kalfa-hook': '' });
+	const root = tempRepo({ 'package.json': '{}', 'dist/kalfa.mjs': '', 'dist/kalfa-hook': '', 'dist/adapters/claude/status-tap': '' });
 	return root;
 }
 
@@ -102,7 +102,8 @@ test('doctor shows the install mode, the Capabilities that are off and whether t
 
 	const before = (await run(doctor, root, [], env)).out;
 	assert.match(before, new RegExp(`install: linked to this checkout \\(${bin}/kalfa\\)`));
-	assert.match(before, /Capabilities:\n {2}claude: all on\n {2}limited: 2 off\n {4}core without task-list: a closed Section stays in the Task Record only\n {4}guardrails without command-block: the push gate only warns/);
+	assert.match(before, /user settings:\n {2}claude: \d+ change\(s\) waiting; run kalfa install\n {4}hooks: write kalfa-hook for every Core event\n[\s\S]* {4}idle-compact: env\.CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS = "100000"/);
+	assert.match(before, /Capabilities:\n {2}claude: all on\n {2}limited: 3 off\n {4}core without task-list: a closed Section stays in the Task Record only\n {4}core without compaction: a compaction keeps what the harness chooses, and the Task gets no Checkpoint\n {4}guardrails without command-block: the push gate only warns/);
 	assert.match(before, /build: 1 change\(s\) waiting; run kalfa build\n[\s\S]*write \.claude\/rules\/kalfa-guardrails-r\.md/);
 	assert.equal(existsSync(join(root, '.claude')), false, 'doctor writes nothing');
 

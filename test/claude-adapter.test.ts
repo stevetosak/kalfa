@@ -1,14 +1,14 @@
 // Adapter contract tests on payloads recorded from real Claude Code sessions
 // (scripts/record-claude-fixtures.sh). Every recorded version must pass.
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { CLAUDE_HOOKS, claudeAdapter } from '../src/adapters/claude/adapter.ts';
 import type { CoreEvent, CoreEventName, DispatchResult } from '../src/core/events.ts';
 
 const FIXTURES = 'test/fixtures/claude';
-const versions = readdirSync(FIXTURES);
+const versions = readdirSync(FIXTURES).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 const common = {
 	harness: 'claude',
 	cwd: '/work/repo',
@@ -21,15 +21,24 @@ const expected: Record<string, CoreEvent> = {
 	'prompt.submit': { ...common, name: 'prompt.submit', prompt: 'Run the shell command `echo hi` with the Bash tool, then reply with the single word: done.' },
 	'command.before': { ...common, name: 'command.before', command: 'echo hi' },
 	'tool.after': { ...common, name: 'tool.after', tool: 'Bash', durationMs: 350 },
+	'compact.before': { ...common, name: 'compact.before', trigger: 'manual' },
+	'compact.after': { ...common, name: 'compact.after', trigger: 'manual', summary: 'The fixture summary.' },
 };
 
 test('at least one Claude Code version is recorded', () => assert.ok(versions.length > 0));
 
+test('the newest recorded version has a payload for every hook the Adapter wires', () => {
+	const newest = versions.at(-1)!;
+	for (const { hook } of Object.values(CLAUDE_HOOKS)) assert.ok(existsSync(join(FIXTURES, newest, `${hook}.json`)), `${newest} has no ${hook}.json; run scripts/record-claude-fixtures.sh`);
+});
+
 for (const version of versions) {
 	describe(`Claude Code ${version}`, () => {
+		// An older version keeps the hooks it was recorded with; the newest must have them all.
 		for (const [name, { hook }] of Object.entries(CLAUDE_HOOKS) as Array<[CoreEventName, { hook: string }]>) {
-			const payload = JSON.parse(readFileSync(join(FIXTURES, version, `${hook}.json`), 'utf8'));
-			test(`${hook} becomes ${name}`, () => assert.deepEqual(claudeAdapter.toEvent(name, payload), expected[name]));
+			const file = join(FIXTURES, version, `${hook}.json`);
+			if (!existsSync(file)) continue;
+			test(`${hook} becomes ${name}`, () => assert.deepEqual(claudeAdapter.toEvent(name, JSON.parse(readFileSync(file, 'utf8'))), expected[name]));
 		}
 
 		const preToolUse = JSON.parse(readFileSync(join(FIXTURES, version, 'PreToolUse.json'), 'utf8'));
@@ -101,3 +110,20 @@ test('a stop after a tool ends the turn, with the reasons for the Operator', () 
 		hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: 'note' },
 	});
 });
+
+test('the compact focus goes out as plain text, cut to what Claude Code reads; a notice goes to stderr', () => {
+	const event = expected['compact.before']!;
+	assert.deepEqual(claudeAdapter.render(event, result({ context: ['keep A', 'keep B'], notice: ['n'] })), { stdout: 'keep A\n\nkeep B', stderr: 'n', exitCode: 0 });
+	assert.equal(claudeAdapter.render(event, result({ context: ['x'.repeat(20_000)] })).stdout?.length, 10_000);
+	assert.deepEqual(claudeAdapter.render(event, result({})), { stdout: undefined, stderr: undefined, exitCode: 0 });
+});
+
+test('the text after /compact becomes the instructions of compact.before', () => {
+	const payload = { hook_event_name: 'PreCompact', cwd: '/', trigger: 'manual', custom_instructions: 'keep the API notes' };
+	assert.equal((claudeAdapter.toEvent('compact.before', payload) as { instructions?: string }).instructions, 'keep the API notes');
+});
+
+test('after a compaction only a notice is printed', () => {
+	assert.deepEqual(json(expected['compact.after']!, { context: ['ignored'], notice: ['saved'] }), { systemMessage: 'saved' });
+});
+

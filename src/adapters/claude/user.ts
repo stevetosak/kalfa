@@ -1,6 +1,6 @@
 // What `kalfa install` writes into `~/.claude/settings.json`: one hook per Core
-// event, the status-tap wrapped around the Operator's status line, and the
-// machine Modules' approvals. Every other entry stays as it is, and the order
+// event, the status-tap wrapped around the Operator's status line, the
+// machine Modules' approvals and the settings kalfa owns. Every other entry stays as it is, and the order
 // of the other tools' hooks is kept.
 import { basename } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -97,6 +97,16 @@ export const claudeUser: UserFiles = {
 	hooks: setHooks,
 	statusLine: setStatusLine,
 	approvals: claudeApprovals,
-	// Auto memory (code.claude.com/docs/en/memory): the `/memory` toggle saves this key.
-	nativeMemory: { key: 'autoMemoryEnabled', off: false },
+	owned: [
+		// Auto memory (code.claude.com/docs/en/memory): the `/memory` toggle saves this key.
+		{ name: 'native-memory', path: ['autoMemoryEnabled'], value: false, why: "kalfa's Standing memory replaces it (ADR 0002)" },
+		// Idle compaction runs about an hour after the last turn, before the prompt
+		// cache ends; by default only from 200k tokens. 100k is the lowest it takes.
+		{
+			name: 'idle-compact',
+			path: ['env', 'CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS'],
+			value: '100000',
+			why: 'an idle session from 100k tokens is compacted before its prompt cache ends, and the Task gets a Checkpoint',
+		},
+	],
 };

@@ -46,7 +46,7 @@ _Avoid_: feature flag, requirement
 ### Events
 
 **Core event**:
-A harness-neutral moment in a session that Modules handle: `session.start`, `prompt.submit`, `command.before`, `tool.after`, `section.close` or `task.close`.
+A harness-neutral moment in a session that Modules handle: `session.start`, `prompt.submit`, `command.before`, `tool.after`, `compact.before`, `compact.after`, `section.close` or `task.close`.
 _Avoid_: hook (for the neutral event), trigger
 
 **Dispatcher**:
@@ -70,6 +70,10 @@ _Avoid_: brief, notes, journal
 **Handoff**:
 A short view of a Task Record that a fresh session reads to continue the work.
 _Avoid_: summary, context dump
+
+**Checkpoint**:
+The summary a harness wrote when it compacted a session that works on a Task, kept next to the Task Record; the newest one tells where the session stood.
+_Avoid_: snapshot, save point
 
 **Plan**:
 A tracked list of the steps of a larger piece of work, with the state of each step.

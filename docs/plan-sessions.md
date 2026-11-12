@@ -2,7 +2,7 @@
 title: "Sessions: continuity across days and many parallel sessions"
 description: "Idle checkpoints, a recap after days away, a board of all sessions with cleanup, workspace presets and an autonomous compaction mode."
 type: plan
-status: proposed
+status: active
 topics: [agents, tooling]
 ---
 
@@ -28,12 +28,12 @@ recap below takes another name.
 The built-in idle compaction does the work; kalfa gives it the Task's focus
 and keeps what it wrote.
 
-**Done when:** a compaction in a session with an open Task carries the Task's goal, Decisions and Next into the summary, and the summary is in the Task Record afterwards, proven in a real session.
+**Done when:** a compaction in a session with an open Task carries the Task's goal, Decisions and Next into the summary, and the summary is the Task's Checkpoint afterwards, proven in a real session.
 
-- [ ] Claude Adapter: map PreCompact and PostCompact to Core events.
-- [ ] PreCompact prints the summary focus from the open Task Record (goal, Done when, Decisions, Next).
-- [ ] PostCompact saves `compact_summary` into the Task Record as a checkpoint, with its trigger and time.
-- [ ] Set `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` to the meter's GUARD_FROM (100k) through `kalfa build`, and report it in `kalfa doctor`.
+- [x] Claude Adapter: map PreCompact and PostCompact to Core events.
+- [x] PreCompact prints the summary focus from the open Task Record (goal, Done when, Decisions, Next).
+- [x] PostCompact saves `compact_summary` as the Task's Checkpoint, with its trigger and time, next to the Task Record.
+- [x] Set `CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS` to 100k (the meter's GUARD_FROM, and the lowest Claude Code takes) through `kalfa install`, and report it in `kalfa doctor`.
 - [ ] Prove it with a manual `/compact` in a scratch repo, then with one real idle compaction.
 
 ## 2. Recap after days away

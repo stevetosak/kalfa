@@ -15,6 +15,8 @@ import { claudeUser } from './user.ts';
 export { CLAUDE_HOOKS };
 
 const SHELL_TOOL = 'Bash';
+/** Claude Code reads at most this much PreCompact output as summary instructions. */
+const COMPACT_INSTRUCTIONS_MAX = 10_000;
 
 const base = z.looseObject({
 	hook_event_name: z.string(),
@@ -30,6 +32,8 @@ const payloads = {
 	'prompt.submit': base.extend({ prompt: z.string() }),
 	'command.before': base.extend({ tool_name: z.string(), tool_input: z.looseObject({ command: z.string().optional() }) }),
 	'tool.after': base.extend({ tool_name: z.string(), duration_ms: z.number().optional() }),
+	'compact.before': base.extend({ trigger: z.string(), custom_instructions: z.string().nullish() }),
+	'compact.after': base.extend({ trigger: z.string(), compact_summary: z.string() }),
 };
 
 function parse<S extends z.ZodType>(schema: S, payload: unknown, hook: string): z.infer<S> {
@@ -59,12 +63,31 @@ function toEvent(name: CoreEventName, payload: unknown): CoreEvent | undefined {
 			const { tool_name, duration_ms } = parse(payloads[name], payload, hook);
 			return { ...common, name, tool: tool_name, durationMs: duration_ms };
 		}
+		case 'compact.before': {
+			const { trigger, custom_instructions } = parse(payloads[name], payload, hook);
+			return { ...common, name, trigger, ...(custom_instructions ? { instructions: custom_instructions } : {}) };
+		}
+		case 'compact.after': {
+			const { trigger, compact_summary } = parse(payloads[name], payload, hook);
+			return { ...common, name, trigger, summary: compact_summary };
+		}
 		default:
 			return undefined;
 	}
 }
 
+/**
+ * PreCompact reads plain stdout as more summary instructions, so the context
+ * goes out as text and a notice goes to stderr (shown in the transcript view).
+ */
+function renderCompactFocus(result: DispatchResult): HookOutput {
+	const focus = result.context.join('\n\n');
+	const cut = focus.length > COMPACT_INSTRUCTIONS_MAX ? `${focus.slice(0, COMPACT_INSTRUCTIONS_MAX - 1)}…` : focus;
+	return { stdout: cut || undefined, stderr: result.notice.length ? result.notice.join('\n') : undefined, exitCode: 0 };
+}
+
 function render(event: CoreEvent, result: DispatchResult): HookOutput {
+	if (event.name === 'compact.before') return renderCompactFocus(result);
 	const hookEventName = CLAUDE_HOOKS[event.name]?.hook;
 	const output: Record<string, unknown> = {};
 	const context = result.context.join('\n\n');
@@ -73,7 +96,7 @@ function render(event: CoreEvent, result: DispatchResult): HookOutput {
 
 	if (event.name === 'command.before' && block) {
 		output.hookSpecificOutput = { hookEventName, permissionDecision: 'deny', permissionDecisionReason: block };
-	} else {
+	} else if (event.name !== 'compact.after') {
 		if (event.name === 'prompt.submit' && block) Object.assign(output, { decision: 'block', reason: block });
 		const specific = {
 			...(context ? { additionalContext: context } : {}),
@@ -89,7 +112,7 @@ const sessionArgs = ({ name, prompt, model }: SessionStart) => ['-n', name, ...(
 
 export const claudeAdapter: Adapter = {
 	name: 'claude',
-	capabilities: new Set<Capability>(['context-injection', 'command-block', 'transcript', 'task-list', 'status-line', 'background-agent', 'usage', 'turn-stop']),
+	capabilities: new Set<Capability>(['context-injection', 'command-block', 'transcript', 'task-list', 'status-line', 'background-agent', 'usage', 'turn-stop', 'compaction']),
 	// Claude Code sets CLAUDECODE=1 for the commands it runs.
 	detect: (env) => env.CLAUDECODE === '1',
 	toEvent,
