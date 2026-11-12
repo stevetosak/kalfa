@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import type { Adapter } from '../../adapters/adapter.ts';
 import { activeModules, dispatch } from '../../core/dispatcher.ts';
 import { KalfaError } from '../../core/errors.ts';
-import { recordContextSize } from '../../core/context-size.ts';
+import { NEAR_CAP, recordContextSize } from '../../core/context-size.ts';
 import { type CoreEventName, type DispatchResult, isCoreEventName } from '../../core/events.ts';
 import { EVENT_TABLE, isTableFresh, machineEventTablePath, writeEventTable, writeMachineEventTable } from '../../core/fast-path.ts';
 import type { HandlerContext, ModuleDefinition } from '../../core/modules.ts';
@@ -50,11 +50,12 @@ function refreshEventTables(force: boolean, context: HandlerContext, registry: R
 	}
 }
 
-/** Warns the Operator when the context passes the harness's cap, and records the session start's size for `kalfa doctor`. */
+/** Warns the Operator when the context nears or passes the harness's cap, and records the session start's size for `kalfa doctor`. */
 function checkContextSize(event: CoreEventName, adapter: Adapter, root: string | undefined, result: DispatchResult, env: NodeJS.ProcessEnv): void {
 	const chars = result.context.join('\n\n').length;
 	const cap = adapter.contextCap;
 	if (cap !== undefined && chars > cap) result.notice.push(`kalfa: the context for ${event} is ${chars} characters, over the ${adapter.name} cap of ${cap}; the agent sees only its start (kalfa doctor)`);
+	else if (cap !== undefined && chars > cap * NEAR_CAP) result.notice.push(`kalfa: the context for ${event} is ${chars} characters, near the ${adapter.name} cap of ${cap}; close finished Tasks and Plans, or run the memory upkeep (kalfa doctor)`);
 	if (event === 'session.start') recordContextSize(env, root, adapter.name, { chars, cap, at: new Date().toISOString() });
 }
 

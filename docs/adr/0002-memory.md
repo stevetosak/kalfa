@@ -192,6 +192,7 @@ in the hook: the Project layer, the Recap, the Plans, the Tasks, recall and the
 deferred items. The Adapter states its cap, and the report is fitted under it
 with room left for the other Modules: rules always load, and the Project
 layer's index lines fill what the Recap, the Plans and the Tasks leave, the
-rest going to the Stored tier. A report that still passes the cap prints a
-line to the Operator, and `kalfa doctor` shows the size of the report against
-the cap.
+rest going to the Stored tier. The open Tasks other than the branch's are
+named in one line each, only the three most recently written, with a count of
+the rest. A report past nine tenths of the cap prints a line to the Operator
+at that session start, and `kalfa doctor` shows its size against the cap.

@@ -14,6 +14,7 @@
 // for the Stored tier (ADR 0002). Where the harness loads kalfa's instruction
 // file, the Personal layer comes from it instead, and the report is fitted
 // under the Adapter's cap on one hook's context (amendment 2026-11-12).
+import { statSync } from 'node:fs';
 import { writeCheckpoint } from '../core/checkpoint.ts';
 import { currentBranch } from '../core/git.ts';
 import { type Layer, type LayerScan, memoryHome, scanLayer, sessionLayers } from '../core/memory/home.ts';
@@ -55,6 +56,9 @@ function planReport(project: Project): ReportPart {
 /** Characters of the hook's context the session report leaves for the other Modules (recall, deferred items). */
 const OTHER_MODULES_ROOM = 1500;
 
+/** Open Tasks other than the branch's that the session report names, the most recently written first. */
+const OTHER_TASKS_SHOWN = 3;
+
 /** After these the session goes on with the work it had, so the Handoff loads at once. */
 const RELOAD_SOURCES: ReadonlySet<SessionStartSource> = new Set(['compact', 'fork']);
 
@@ -81,14 +85,17 @@ function taskReport(project: Project, event: Extract<CoreEvent, { name: 'session
 	if (own && event.source === 'clear') return clearReport(project, own, event.sessionId);
 	if (own && RELOAD_SOURCES.has(event.source)) return { context: handoffContext(own), summary: `Handoff of Task ${own.id} loaded again` };
 
-	const lines = open.map((r) => {
-		const next = r.sections.at(-1)?.parts.get('Next');
-		const doneWhen = r.header['done-when'];
-		return `- ${r.id}: ${r.header.goal} (${r.sections.length} Section(s))${doneWhen ? `\n  Done when: ${doneWhen}` : ''}${next ? `\n  Next: ${next.split('\n')[0]}` : ''}`;
-	});
+	// The branch's Task in full; of the others only the most recently written, in one line each.
+	const nextOf = (r: TaskRecord) => r.sections.at(-1)?.parts.get('Next')?.split('\n')[0];
+	const others = open.filter((r) => r !== own).sort((a, b) => statSync(b.path).mtimeMs - statSync(a.path).mtimeMs);
+	const shown = others.slice(0, OTHER_TASKS_SHOWN);
+	const lines = [
+		...(own ? [`- ${own.id}: ${own.header.goal} (${own.sections.length} Section(s))${own.header['done-when'] ? `\n  Done when: ${own.header['done-when']}` : ''}${nextOf(own) ? `\n  Next: ${nextOf(own)}` : ''}`] : []),
+		...shown.map((r) => `- ${r.id}: ${r.header.goal}${nextOf(r) ? `\n  Next: ${nextOf(r)}` : ''}`),
+		...(others.length > shown.length ? [`- … and ${others.length - shown.length} more open (kalfa task list)`] : []),
+	];
 	const hint = 'Record each closed Section with `kalfa section close "<title>"` (parts on stdin); close the Task with `kalfa task close` once its Done when line holds.';
-	const others = open.length - (own ? 1 : 0);
-	const summary = [own ? `Task ${own.id} open on this branch (after /clear, "continue" loads its Handoff)` : undefined, others ? plural(others, own ? 'other open Task' : 'open Task') : undefined]
+	const summary = [own ? `Task ${own.id} open on this branch (after /clear, "continue" loads its Handoff)` : undefined, others.length ? plural(others.length, own ? 'other open Task' : 'open Task') : undefined]
 		.filter(Boolean)
 		.join(' · ');
 	return { context: [`Open Tasks in this repository (kalfa task show --task <id>):`, ...lines, hint].join('\n'), summary };

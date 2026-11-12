@@ -1,15 +1,19 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { claudeAdapter } from '../src/adapters/claude/adapter.ts';
+import { hookCommand } from '../src/cli/commands/hook.ts';
 import { installCommand, uninstallCommand } from '../src/cli/commands/install.ts';
 import { memoryCommand } from '../src/cli/commands/memory.ts';
+import { taskCommand } from '../src/cli/commands/task.ts';
 import { contextSizeLine, contextSizes, recordContextSize } from '../src/core/context-size.ts';
 import { DEFAULT_SETTINGS } from '../src/core/settings.ts';
+import { recordPath } from '../src/core/task-record.ts';
 import { coreModule } from '../src/modules/core.ts';
-import { captureIo, gitRepo, tempRepo } from './helpers.ts';
+import { fakeAdapter, registry } from './fakes.ts';
+import { captureIo, gitRepo, tempDir, tempRepo } from './helpers.ts';
 
 const pkg = tempRepo({ 'package.json': '{}\n', 'dist/kalfa-hook': '', 'dist/adapters/claude/status-tap': '' });
 const adapters = new Map([['claude', claudeAdapter]]);
@@ -96,4 +100,40 @@ test('the hook records the session start size; doctor reads it against the cap',
 	assert.equal(contextSizeLine('claude', size), 'claude: 9500 of 10000 characters at the last session start (2026-11-12 20:00); warning: near the cap');
 	assert.match(contextSizeLine('claude', { ...size, chars: 18064 }), /problem: over the cap/);
 	assert.match(contextSizeLine('claude', { ...size, chars: 6000 }), /within the cap$/);
+});
+
+test('the hook warns from 90% of the cap and above it, and records the size', async () => {
+	const sized = (chars: number) => ({ name: 'core', handlers: { 'session.start': () => ({ context: 'x'.repeat(chars) }) } });
+	const notice = async (chars: number) => {
+		const home = tempDir();
+		const hook = hookCommand(new Map([['fake', { ...fakeAdapter, contextCap: 1000 }]]), registry(sized(chars)));
+		const io = captureIo(home, { HOME: home }, JSON.stringify({ cwd: home }));
+		await hook.run(['fake', 'session.start'], io);
+		assert.equal(contextSizes({ HOME: home }, undefined).fake!.chars, chars);
+		return (JSON.parse(io.stdout.join('')) as { notice: string[] }).notice.join('\n');
+	};
+	assert.equal(await notice(800), '');
+	assert.match(await notice(950), /950 characters, near the fake cap of 1000; close finished Tasks/);
+	assert.match(await notice(1200), /1200 characters, over the fake cap of 1000; the agent sees only its start/);
+});
+
+test('the session report shows the branch Task in full and only the three most recent others, in one line each', async () => {
+	const root = gitRepo({ 'kalfa.yaml': 'schema: 1\n', '.gitignore': '.kalfa/\n' });
+	execFileSync('git', ['-C', root, 'checkout', '-q', '-b', 'feat/own']);
+	const env = { HOME: tempDir() };
+	const task = taskCommand(new Map([['fake', fakeAdapter]]), registry(coreModule));
+	await task.run(['start', '--done-when', 'it works', 'Own work'], captureIo(root, env));
+	for (const n of [1, 2, 3, 4, 5]) {
+		await task.run(['start', '--task', `other-${n}`, '--done-when', `x${n}`, `Other work ${n}`], captureIo(root, env));
+		const then = new Date(Date.now() - (10 - n) * 60_000);
+		utimesSync(recordPath(root, `other-${n}`), then, then);
+	}
+	const report = await coreModule.handlers['session.start']!(
+		{ name: 'session.start', source: 'startup', harness: 'fake', cwd: root },
+		{ project: { root, file: { schema: 1, modules: [], plans: [], settings: {} } }, settings: DEFAULT_SETTINGS, env, capabilities: new Set() } as never,
+	);
+	const context = report!.context!;
+	assert.match(context, /- feat-own: Own work \(0 Section\(s\)\)\n {2}Done when: it works\n- other-5: Other work 5\n- other-4: Other work 4\n- other-3: Other work 3\n- … and 2 more open \(kalfa task list\)/);
+	assert.doesNotMatch(context, /Done when: x/);
+	assert.match(report!.notice!, /5 other open Tasks/);
 });
