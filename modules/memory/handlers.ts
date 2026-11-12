@@ -1,7 +1,8 @@
 // The memory Module's code (ADR 0002): recall at session start from the open
 // Task, recall on each prompt when a setting turns it on, and at Task close
 // the copy of the Task Record into the Memory home and its Memory candidates
-// into the inbox, in one commit.
+// into the inbox, in one commit, plus the upkeep proposals for a layer over
+// its budget.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CoreEvent, HandlerResult } from '../../src/core/events.ts';
@@ -11,8 +12,9 @@ import { type GateContext, type HandlerContext, type ModuleDefinition, moduleSet
 import type { Project } from '../../src/core/project.ts';
 import { memoryBudgets, type Settings } from '../../src/core/settings.ts';
 import { CANDIDATES_PART, parseRecord, readRecord, type TaskRecord, taskIdOf } from '../../src/core/task-record.ts';
+import { budgetProblem } from '../../src/core/memory/standing.ts';
 import { candidateFiles, readInbox, splitCandidates } from './inbox.ts';
-import { lint } from './lint.ts';
+import { duplicateFindings, type Finding, findingLine, lint } from './lint.ts';
 import { hitLine, openIndex } from './search.ts';
 import { type MemorySettings, memorySettings } from './settings.ts';
 import type { SourceScope } from './sources.ts';
@@ -122,6 +124,40 @@ export function candidateQuestion(task: string, ids: readonly { id: string; cand
 	].join('\n');
 }
 
+/** What the agent proposes for one layer over its budget at Task close. */
+export interface Upkeep {
+	layer: string;
+	/** How far over its budget the layer is. */
+	problem: string;
+	duplicates: Finding[];
+	/** The layer's active open items, for the agent to say which are finished. */
+	open: { id: string; summary: string }[];
+}
+
+/** The upkeep of every layer a session here sees that is over its budget (ADR 0002, amendment 2026-11-08). */
+export function upkeepHere(project: Project | undefined, coreSettings: Settings, env: NodeJS.ProcessEnv): Upkeep[] {
+	const scans = sessionLayers(memoryHome(env), project).map((layer) => ({ layer, scan: scanLayer(layer) }));
+	const duplicates = duplicateFindings({ scans });
+	return scans.flatMap(({ layer, scan }) => {
+		const problem = budgetProblem(layer, scan.records, memoryBudgets(coreSettings));
+		if (!problem) return [];
+		const open = scan.records.filter((r) => r.header.status === 'active' && r.header.type === 'open').map((r) => ({ id: r.id, summary: r.header.summary }));
+		return [{ layer: layer.label, problem, duplicates: duplicates.filter((f) => f.layer === layer.label), open }];
+	});
+}
+
+/** The upkeep part of the Task-close question; it goes into the same one question as the Memory candidates. */
+export function upkeepQuestion(upkeep: readonly Upkeep[]): string {
+	return [
+		'Memory upkeep: a layer below is over its budget, so some of its records are Stored and do not load. Put proposals in the same ONE question to the Operator: merge each likely duplicate (`kalfa memory supersede`), and close each open item whose work you can show is done (`kalfa memory close <id> "<reason>"`). Act only on the Operator\'s yes; no work waits on the answer.',
+		...upkeep.flatMap((u) => [
+			`- ${u.problem}`,
+			...u.duplicates.map((f) => `  ${findingLine(f)}`),
+			...u.open.map((o) => `  - open item ${u.layer}/${o.id}: ${o.summary}`),
+		]),
+	].join('\n');
+}
+
 function taskClose(event: CoreEvent, context: HandlerContext): HandlerResult | undefined {
 	if (event.name !== 'task.close' || !context.project) return undefined;
 	const project = context.project;
@@ -138,8 +174,13 @@ function taskClose(event: CoreEvent, context: HandlerContext): HandlerResult | u
 		{ write: [{ path: copy, text }, ...inbox.map(({ path, text: body }) => ({ path, text: body }))] },
 		`close task ${record.id} (${key}): copy the record${inbox.length ? `, ${plural(inbox.length, 'candidate')} to the inbox` : ''}`,
 	);
-	const notice = `kalfa: memory: Task Record copied to the Memory home${inbox.length ? `; ${plural(inbox.length, 'Memory candidate')} in the inbox` : ''}`;
-	return inbox.length ? { context: candidateQuestion(record.id, inbox), notice } : { notice };
+	const upkeep = upkeepHere(project, context.settings, context.env);
+	const notice = [
+		`kalfa: memory: Task Record copied to the Memory home${inbox.length ? `; ${plural(inbox.length, 'Memory candidate')} in the inbox` : ''}`,
+		...(upkeep.length ? [`kalfa: memory: upkeep proposed for ${upkeep.map((u) => u.layer).join(', ')} (over budget)`] : []),
+	].join('\n');
+	const questions = [...(inbox.length ? [candidateQuestion(record.id, inbox)] : []), ...(upkeep.length ? [upkeepQuestion(upkeep)] : [])];
+	return questions.length ? { context: questions.join('\n\n'), notice } : { notice };
 }
 
 export const memoryModule = {

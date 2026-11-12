@@ -120,3 +120,42 @@ such a file. The scoping is Claude Code's; a harness without it loads every
 part. The platform Module is not part of the kalfa package: it lives in the
 infrastructure repository it describes, and kalfa finds it through the machine
 setting `module-dirs` (ADR 0001, amendment of the same day).
+
+## Amendment 2026-11-08: budgets decide what loads, never what is stored
+
+The rule that refused a write over budget made memory the Operator's work. The
+budgets had been set a little above the measured size, so every layer was full
+from the first day; within a week the project layer of the infrastructure
+repository refused a rule the Operator had just stated, the opposite of "what
+the Operator states is written at once". The session start never needed the
+refusal: it already loaded every rule and left out the index lines that did not
+fit. The history showed the cost of the refusal instead: 64 supersedes, many of
+them merges made only to free bytes, and summaries cut down to "Body has all",
+an index line that tells the agent nothing.
+
+**A write is never refused for space.** `add`, `supersede` and `activate` store
+the record whatever the layer holds; only the length of a rule is still
+checked, because it is about a rule being exact, not about room.
+
+**A layer has two tiers.** The Loaded tier is every active rule and the index
+lines that fit the budget; the Stored tier is every other active record. A
+Stored record is not lost and not hidden: the session start names how many
+there are and how to reach them, and recall at the session start and on demand
+searches them with everything else. The budget is now only the price of the
+context, so the project layer's default is 8192 B.
+
+**The Loaded tier is ranked by use.** A record's rank is the later of the day
+it was last confirmed and the day it was last used: read with `kalfa memory
+show`, or returned by `kalfa memory search`. Automatic recall does not count, so
+a record does not keep itself loaded. The days of use live in the cache folder,
+one file per layer, outside the Memory home: they change on every read, and
+their loss only falls back to the confirmed date.
+
+**Upkeep happens at Task close.** When a layer is over budget, the Task-close
+question also carries the agent's proposals to merge likely duplicates and to
+close finished open items. The Operator answers once; no work waits on it.
+
+**Deferred work is not memory.** A deferred item is work the Operator has not
+taken on, so it moves from the Memory records to a deferred list that the
+`plans` Module keeps in the Memory home, private as the Project layer is, and
+reports at the session start beside the Plans.

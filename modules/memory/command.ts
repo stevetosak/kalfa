@@ -4,13 +4,14 @@ import { addRecord, layerName, type MemoryExtension, recordType } from '../../sr
 import { parseCommandArgs, UsageError } from '../../src/cli/command.ts';
 import type { Io } from '../../src/cli/io.ts';
 import { requireModule } from '../../src/cli/project.ts';
-import { commitHome, memoryHome, personalLayer, projectLayerOfKey } from '../../src/core/memory/home.ts';
+import { commitHome, memoryHome, personalLayer, projectLayerOfKey, sessionLayers } from '../../src/core/memory/home.ts';
+import { markUsed } from '../../src/core/memory/usage.ts';
 import { loadProject, type Project } from '../../src/core/project.ts';
 import { loadSettings } from '../../src/core/settings.ts';
 import { findCandidate, readInbox } from './inbox.ts';
 import { findingLine } from './lint.ts';
 import { lintHere, settingsOf, sourceScope } from './handlers.ts';
-import { openIndex } from './search.ts';
+import { type Hit, openIndex } from './search.ts';
 
 const DEFAULT_LIMIT = 10;
 
@@ -19,6 +20,18 @@ function moduleHere(io: Io): Project | undefined {
 	const project = loadProject(io.cwd);
 	requireModule(project, 'memory', io.env);
 	return project;
+}
+
+/**
+ * Marks the Memory records among the hits as used, per layer (ADR 0002,
+ * amendment 2026-11-08). Only this command does it: the session recall shows
+ * hits nobody asked for, so they are not a use.
+ */
+function markHitsUsed(hits: readonly Hit[], project: Project | undefined, env: NodeJS.ProcessEnv): void {
+	for (const layer of sessionLayers(memoryHome(env), project)) {
+		const ids = hits.flatMap((hit) => (hit.record?.layer === layer.label ? [hit.record.id] : []));
+		markUsed(layer, ids, env);
+	}
 }
 
 async function search(args: string[], io: Io): Promise<number> {
@@ -32,6 +45,7 @@ async function search(args: string[], io: Io): Promise<number> {
 	const index = openIndex(sourceScope(project, settings, io.env));
 	for (const problem of index.problems) io.err(`kalfa memory search: left out: ${problem}`);
 	const hits = index.search(query, limit);
+	markHitsUsed(hits, project, io.env);
 	if (!hits.length) io.out('no hits');
 	for (const hit of hits) io.out(`[${hit.kind}] ${hit.title}\n    ${hit.ref}${hit.snippet ? `\n    ${hit.snippet}` : ''}`);
 	return 0;

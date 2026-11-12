@@ -12,16 +12,19 @@ import { memoryExtension } from '../../modules/memory/command.ts';
 import { memoryModule } from '../../modules/memory/handlers.ts';
 import { meterCommand } from '../../modules/meter/command.ts';
 import { meterModule } from '../../modules/meter/handlers.ts';
+import { deferCommand } from '../../modules/plans/command.ts';
+import { plansModule } from '../../modules/plans/handlers.ts';
 import { coreModule } from './core.ts';
 
 /** The Modules this kalfa ships with handlers, by name; the Core is one of them. */
-export const modules: ReadonlyMap<string, ModuleDefinition> = new Map([coreModule, docsModule, guardrailsModule, herdrModule, memoryModule, meterModule].map((m) => [m.name, m]));
+export const modules: ReadonlyMap<string, ModuleDefinition> = new Map([coreModule, docsModule, guardrailsModule, herdrModule, memoryModule, meterModule, plansModule].map((m) => [m.name, m]));
 
-/** The Modules' own CLI commands, `kalfa <module> …`; each says whether it needs its Module on in the repository. */
+/** The Modules' own CLI commands, `kalfa <name> …` (the Module's name, or a verb of its own); each says whether it needs its Module on in the repository. */
 export const moduleCommands: Record<string, (adapters: ReadonlyMap<string, Adapter>) => Command> = {
 	docs: () => docsCommand(),
 	herdr: (adapters) => herdrCommand(adapters),
 	meter: (adapters) => meterCommand(adapters),
+	defer: () => deferCommand(),
 };
 
 /** The Modules' subcommands of the Core's `kalfa memory`; each checks that its Module is on. */

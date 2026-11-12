@@ -8,7 +8,8 @@ import { sectionCommand, taskCommand } from '../../src/cli/commands/task.ts';
 import { dispatch } from '../../src/core/dispatcher.ts';
 import { KalfaError } from '../../src/core/errors.ts';
 import { handledEvents } from '../../src/core/fast-path.ts';
-import { memoryHome, personalLayer, scanLayer } from '../../src/core/memory/home.ts';
+import { memoryHome, personalLayer, projectLayerOfKey, scanLayer } from '../../src/core/memory/home.ts';
+import { readUsage } from '../../src/core/memory/usage.ts';
 import { renderMemoryRecord } from '../../src/core/memory/record.ts';
 import type { HandlerContext } from '../../src/core/modules.ts';
 import { loadProject } from '../../src/core/project.ts';
@@ -154,6 +155,22 @@ test('search finds docs, archives, records and Task Records, and reads the cache
 	assert.match(out.out, /\[doc\] docs\/other\.md › Gateway\n {4}docs\/other\.md:1/);
 });
 
+test('kalfa memory search marks the records it returns as used, and the recall does not', async () => {
+	const { repo, env } = machine();
+	await memory(repo, env, ['add', '--type', 'fact', '--layer', 'project', '--summary', 'The walrus gateway needs kluster.']);
+	await memory(repo, env, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'The walrus laptop runs Ubuntu.']);
+	await memory(repo, env, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'Envoy times out at 15 s.']);
+	const project = projectLayerOfKey(memoryHome(env), KEY);
+	const personal = personalLayer(memoryHome(env));
+	const prompt = { name: 'prompt.submit', harness: 'fake', cwd: repo, prompt: 'how does the walrus gateway and the walrus laptop work' } as const;
+	const recall = await memoryModule.handlers['prompt.submit']?.(prompt, contextOf(repo, env));
+	assert.match(String(recall?.context), /walrus gateway/);
+	assert.deepEqual(readUsage(project, env), {}, 'the recall is not a use');
+	assert.equal((await memory(repo, env, ['search', 'walrus'])).code, 0);
+	assert.deepEqual(Object.keys(readUsage(project, env)), ['the-walrus-gateway-needs-kluster']);
+	assert.deepEqual(Object.keys(readUsage(personal, env)), ['the-walrus-laptop-runs-ubuntu'], 'only the hits, in their own layer');
+});
+
 test('search keeps a closed record and marks it', async () => {
 	const { repo, env } = machine();
 	await memory(repo, env, ['add', '--type', 'open', '--layer', 'project', '--summary', 'Wire the zeppelin gateway.']);
@@ -180,6 +197,23 @@ test('task close copies the record into the Memory home and puts the candidates 
 	);
 	assert.deepEqual(homeLog(env), [`close task feat-rotation (${KEY}): copy the record, 2 candidates to the inbox`]);
 	assert.match(close.out, /Ask the Operator ONE question[\s\S]*- project-feat-rotation-1: The rotation needs kluster\./);
+});
+
+test('task close proposes upkeep only for a layer over its budget: its duplicates and its open items', async () => {
+	const { repo, env } = machine('memory:\n  project:\n    index-bytes: 120\n');
+	await memory(repo, env, ['add', '--type', 'open', '--layer', 'project', '--summary', 'Wire the zeppelin gateway to Envoy.']);
+	await memory(repo, env, ['add', '--type', 'fact', '--layer', 'project', '--summary', 'The zeppelin gateway runs on Envoy.']);
+	await memory(repo, env, ['add', '--type', 'fact', '--layer', 'project', '--summary', 'The zeppelin gateway runs on Envoy proxy.']);
+	await memory(repo, env, ['add', '--type', 'open', '--layer', 'personal', '--summary', 'Buy a new keyboard.']);
+	await startTask(repo, env, 'none');
+	const close = await run(taskCommand(adapters, modules), repo, env, ['close'], '**Done when:** holds — the test ran.\n');
+	assert.equal(close.code, 0, close.error ?? close.err);
+	assert.doesNotMatch(close.out, /Ask the Operator ONE question/, 'no candidates, no candidate question');
+	assert.match(close.out, /Memory upkeep: [\s\S]*- the github\.com\/someone\/project layer holds \d+ B of index lines \(limit 120 B; \d Stored\)/);
+	assert.match(close.out, /likely a duplicate of github\.com\/someone\/project\/the-zeppelin-gateway-runs-on-envoy/);
+	assert.match(close.out, /open item github\.com\/someone\/project\/wire-the-zeppelin-gateway-to-envoy: Wire the zeppelin gateway to Envoy\./);
+	assert.doesNotMatch(close.out, /keyboard/, 'the personal layer is within its budget');
+	assert.match(close.err + close.out, /upkeep proposed for github\.com\/someone\/project \(over budget\)/);
 });
 
 test('session start recalls for the open Task without its own record, and counts the inbox', async () => {

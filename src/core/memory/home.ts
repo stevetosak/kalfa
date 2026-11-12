@@ -75,6 +75,11 @@ export function sessionLayers(home: string, project: Project | undefined): Layer
 	return project ? [personalLayer(home), projectLayer(home, project)] : [personalLayer(home)];
 }
 
+/** The folder of a layer's deferred items (the `plans` Module's list); scanLayer does not read it. */
+export function deferredDir(layer: Layer): string {
+	return join(layer.dir, 'deferred');
+}
+
 export function recordPath(layer: Layer, id: string): string {
 	return join(layer.dir, `${id}.md`);
 }

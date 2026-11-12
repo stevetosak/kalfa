@@ -1,20 +1,22 @@
-// Standing memory: what each layer puts into a session, under its budget.
-// Every active rule loads in full; facts, decisions and open items load as
-// one index line each, the most recently confirmed first, until the layer's
-// index bytes are used. Over budget, nothing is refused at a session's start:
-// the rules all load, and the report names what was left out (ADR 0002).
+// Standing memory: what each layer puts into a session, under its budget
+// (ADR 0002, amendment 2026-11-08). A layer has two tiers. The Loaded tier is
+// every active rule in full and the index lines that fit the layer's bytes,
+// the most recently used or confirmed first. The Stored tier is every other
+// active record: kept, searchable, and named at the session start. A budget
+// decides only what loads; nothing is ever refused for space.
 import type { LayerBudget, MemoryBudgets } from '../settings.ts';
 import type { Layer } from './home.ts';
 import { type MemoryRecord, ruleText } from './record.ts';
+import type { Usage } from './usage.ts';
 
 export interface LayerView {
 	layer: Layer;
 	rules: MemoryRecord[];
-	/** The index lines that fit the budget, in load order. */
+	/** The Loaded index lines, in load order. */
 	index: string[];
-	/** Index lines left out by the budget. */
-	dropped: number;
-	/** Active records over the layer's limits. */
+	/** The Stored tier: active records whose index line did not fit, in rank order. */
+	stored: MemoryRecord[];
+	/** Active rules over the layer's rule count (they all load). */
 	overRules: number;
 	indexBytes: number;
 }
@@ -23,25 +25,31 @@ export const indexLine = (record: MemoryRecord): string => `- [${record.header.t
 
 export const bytes = (text: string): number => Buffer.byteLength(text, 'utf8');
 
-const newestConfirmed = (a: MemoryRecord, b: MemoryRecord) =>
-	b.header.confirmed.localeCompare(a.header.confirmed) || b.header.created.localeCompare(a.header.created) || a.id.localeCompare(b.id);
+/** The day a record ranks by: the later of its last use and its last confirmation. */
+export const rankDay = (record: MemoryRecord, usage: Usage): string => {
+	const used = usage[record.id];
+	return used && used > record.header.confirmed ? used : record.header.confirmed;
+};
 
-export function layerView(layer: Layer, records: readonly MemoryRecord[], budget: LayerBudget): LayerView {
+const byRank = (usage: Usage) => (a: MemoryRecord, b: MemoryRecord) =>
+	rankDay(b, usage).localeCompare(rankDay(a, usage)) || b.header.created.localeCompare(a.header.created) || a.id.localeCompare(b.id);
+
+export function layerView(layer: Layer, records: readonly MemoryRecord[], budget: LayerBudget, usage: Usage = {}): LayerView {
 	const active = records.filter((r) => r.header.status === 'active');
 	const rules = active.filter((r) => r.header.type === 'rule');
 	const index: string[] = [];
+	const stored: MemoryRecord[] = [];
 	let used = 0;
-	let dropped = 0;
-	for (const record of active.filter((r) => r.header.type !== 'rule').sort(newestConfirmed)) {
+	for (const record of active.filter((r) => r.header.type !== 'rule').sort(byRank(usage))) {
 		const line = indexLine(record);
 		const cost = bytes(line) + 1;
-		if (used + cost > budget['index-bytes']) dropped += 1;
+		if (used + cost > budget['index-bytes']) stored.push(record);
 		else {
 			index.push(line);
 			used += cost;
 		}
 	}
-	return { layer, rules, index, dropped, overRules: Math.max(0, rules.length - budget.rules), indexBytes: used };
+	return { layer, rules, index, stored, overRules: Math.max(0, rules.length - budget.rules), indexBytes: used };
 }
 
 /** The layer's budget from the machine settings. */
@@ -50,21 +58,21 @@ export function budgetOf(layer: Layer, budgets: MemoryBudgets): LayerBudget {
 }
 
 /**
- * Why a layer would break its budget once `records` are its records, or
- * `undefined` when it fits. The CLI refuses such a write; the agent then
- * supersedes or merges records first.
+ * How far a layer is over its budget, or `undefined` when everything loads.
+ * Never a reason to refuse a write: the lint and the upkeep at Task close
+ * report it.
  */
 export function budgetProblem(layer: Layer, records: readonly MemoryRecord[], budgets: MemoryBudgets): string | undefined {
 	const budget = budgetOf(layer, budgets);
 	const view = layerView(layer, records, budget);
 	const problems: string[] = [];
 	if (view.overRules) problems.push(`${view.rules.length} active rules (limit ${budget.rules})`);
-	if (view.dropped) {
+	if (view.stored.length) {
 		const all = records.filter((r) => r.header.status === 'active' && r.header.type !== 'rule');
 		const need = all.reduce((sum, r) => sum + bytes(indexLine(r)) + 1, 0);
-		problems.push(`${need} B of index lines (limit ${budget['index-bytes']} B)`);
+		problems.push(`${need} B of index lines (limit ${budget['index-bytes']} B; ${view.stored.length} Stored)`);
 	}
-	return problems.length ? `the ${layer.label} layer would hold ${problems.join(' and ')}` : undefined;
+	return problems.length ? `the ${layer.label} layer holds ${problems.join(' and ')}` : undefined;
 }
 
 function indent(text: string): string {
@@ -80,13 +88,17 @@ export function renderLayer(view: LayerView): string {
 	const blocks: string[] = [];
 	if (view.rules.length) blocks.push(['Rules:', ...view.rules.map((r) => `- ${indent(ruleText(r)).trimStart()} (${r.id})`)].join('\n'));
 	if (view.index.length) blocks.push(['Index (the body: kalfa memory show <id>):', ...view.index].join('\n'));
+	if (view.stored.length) {
+		const n = view.stored.length;
+		blocks.push(
+			`Stored: ${n} more active record${n === 1 ? '' : 's'}, not loaded; recall searches them. Before you rely on memory for a subject, run \`kalfa memory search "<words>"\` (or \`kalfa memory list --layer ${view.layer.name}\`).`,
+		);
+	}
 	return blocks.length ? `${title}\n${blocks.join('\n\n')}` : '';
 }
 
-/** One line for the Operator when a layer is over its budget. */
+/** One line for the Operator when a layer's rules are over their count; the Stored tier is normal and needs no line. */
 export function overBudgetNotice(view: LayerView, budget: LayerBudget): string | undefined {
-	const parts: string[] = [];
-	if (view.overRules) parts.push(`${view.rules.length} rules, limit ${budget.rules} (all loaded; move or merge rules)`);
-	if (view.dropped) parts.push(`${view.dropped} index line(s) left out (limit ${budget['index-bytes']} B)`);
-	return parts.length ? `kalfa: memory: the ${view.layer.label} layer is over budget: ${parts.join('; ')}` : undefined;
+	if (!view.overRules) return undefined;
+	return `kalfa: memory: the ${view.layer.label} layer has ${view.rules.length} rules, limit ${budget.rules} (all loaded; the upkeep at Task close proposes merges)`;
 }

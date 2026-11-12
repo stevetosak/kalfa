@@ -1,6 +1,7 @@
 // `kalfa memory`: the only way the agent writes a Memory record (ADR 0002).
-// Each write is checked, dated, refused when it takes a layer over its
-// Standing-memory budget, and committed in the Memory home. What the Operator
+// Each write is checked, dated and committed in the Memory home. A write is
+// never refused for space: a budget decides only what loads, and a record
+// past it is Stored (amendment 2026-11-08). What the Operator
 // states is written at once; what the agent finds goes through a Memory
 // candidate first (the `memory` Module's part, not this command's).
 import { existsSync, readFileSync } from 'node:fs';
@@ -19,7 +20,7 @@ import {
 	writeRecords,
 } from '../../core/memory/home.ts';
 import { checkHeader, type MemoryRecord, RECORD_STATUSES, RECORD_TYPES, type RecordHeader, type RecordType, ruleText, slugOf } from '../../core/memory/record.ts';
-import { budgetProblem } from '../../core/memory/standing.ts';
+import { markUsed } from '../../core/memory/usage.ts';
 import { loadProject } from '../../core/project.ts';
 import { loadSettings, memoryBudgets } from '../../core/settings.ts';
 import { type Command, parseCommandArgs, UsageError } from '../command.ts';
@@ -36,7 +37,8 @@ export function layerName(value: string | undefined): LayerName | undefined {
 	return value;
 }
 
-function layerFor(io: Io, name: LayerName): Layer {
+/** The layer named by --layer, as this directory sees it. */
+export function layerFor(io: Io, name: LayerName): Layer {
 	const home = memoryHome(io.env);
 	if (name === 'personal') return personalLayer(home);
 	const project = loadProject(io.cwd);
@@ -45,7 +47,7 @@ function layerFor(io: Io, name: LayerName): Layer {
 }
 
 /** The layers to look in for an id: the one named, else every layer this directory sees. */
-function layersFor(io: Io, name: LayerName | undefined): Layer[] {
+export function layersFor(io: Io, name: LayerName | undefined): Layer[] {
 	return name ? [layerFor(io, name)] : sessionLayers(memoryHome(io.env), loadProject(io.cwd));
 }
 
@@ -73,19 +75,12 @@ function checkRule(record: MemoryRecord, io: Io): void {
 	if (length > limit) throw new KalfaError(`a rule is short and exact: this one is ${length} characters (limit ${limit}); move the reasons into a fact or decision`);
 }
 
-function checkBudget(io: Io, layer: Layer, records: readonly MemoryRecord[]): void {
-	const problem = budgetProblem(layer, records, memoryBudgets(loadSettings(io.env)));
-	if (problem) throw new KalfaError(`refused: ${problem}. Supersede or merge records first (kalfa memory list --layer ${layer.name})`);
-}
-
 /** Refuses a write to a record that no longer counts: superseded or closed. */
 function refuseRetired(record: MemoryRecord, action: string): void {
 	const { status } = record.header;
 	if (status === 'superseded') throw new KalfaError(`'${record.id}' is already superseded by '${record.header['superseded-by']}'; ${action} that one`);
 	if (status === 'closed') throw new KalfaError(`'${record.id}' is closed; add a new record instead`);
 }
-
-const replace = (records: readonly MemoryRecord[], next: MemoryRecord) => [...records.filter((r) => r.id !== next.id), next];
 
 /** Parses a --type value. */
 export function recordType(value: string | undefined): RecordType {
@@ -106,7 +101,7 @@ export interface NewRecord {
 /**
  * Checks and writes one new record in `layer` as one commit, with any other
  * change of the Memory home (`also`, e.g. the inbox file it came from).
- * Refused over the rule length or the layer's budget.
+ * Refused only over the rule length, never for space.
  */
 export function addRecord(io: Io, layer: Layer, input: NewRecord, also: HomeChange = {}): MemoryRecord & { layer: Layer; path: string } {
 	if (!input.summary?.trim()) throw new UsageError('give --summary "<one line>"');
@@ -124,7 +119,6 @@ export function addRecord(io: Io, layer: Layer, input: NewRecord, also: HomeChan
 	});
 	const record: MemoryRecord = { id: input.id ?? uniqueId(records, slugOf(header.summary)), header, body: (input.body ?? '').trim() };
 	checkRule(record, io);
-	checkBudget(io, layer, [...records, record]);
 	const [path] = writeRecords(memoryHome(io.env), [{ layer, record }], `add ${input.type} ${record.id} (${layer.label})`, also);
 	return { ...record, layer, path: path! };
 }
@@ -174,7 +168,6 @@ const subcommands: Record<string, MemorySubcommand> = {
 		if (records.some((r) => r.id === next.id)) throw new KalfaError(`'${next.id}' already exists in the ${layer.label} layer`);
 		const retired: MemoryRecord = { ...old, header: checkHeader({ ...old.header, status: 'superseded', 'superseded-by': next.id }) };
 		checkRule(next, io);
-		checkBudget(io, layer, [...replace(records, retired), next]);
 		writeRecords(
 			memoryHome(io.env),
 			[
@@ -221,8 +214,7 @@ const subcommands: Record<string, MemorySubcommand> = {
 	/**
 	 * Proposed records become active: the named ones, or every proposed record
 	 * of the layers in scope. The Operator's review is the check, so the
-	 * confirmed date is today. Every layer's budget is checked before anything
-	 * is written; then one commit per layer.
+	 * confirmed date is today. One commit per layer.
 	 */
 	async activate(args, io) {
 		const { values, positionals } = parseCommandArgs(args, layerOption, true);
@@ -230,7 +222,7 @@ const subcommands: Record<string, MemorySubcommand> = {
 		const plans = layersFor(io, layerName(values.layer)).map((layer) => {
 			const records = readLayer(layer);
 			const chosen = records.filter((r) => r.header.status === 'proposed' && (!ids.length || ids.includes(r.id)));
-			return { layer, records, chosen };
+			return { layer, chosen };
 		});
 		const found = new Set(plans.flatMap((p) => p.chosen.map((r) => r.id)));
 		const missing = ids.filter((id) => !found.has(id));
@@ -238,12 +230,7 @@ const subcommands: Record<string, MemorySubcommand> = {
 		const date = today();
 		const writes = plans
 			.filter((p) => p.chosen.length)
-			.map(({ layer, records, chosen }) => {
-				const active = chosen.map((r): MemoryRecord => ({ ...r, header: { ...r.header, status: 'active', confirmed: date } }));
-				const byId = new Map(active.map((r) => [r.id, r]));
-				checkBudget(io, layer, records.map((r) => byId.get(r.id) ?? r));
-				return { layer, active };
-			});
+			.map(({ layer, chosen }) => ({ layer, active: chosen.map((r): MemoryRecord => ({ ...r, header: { ...r.header, status: 'active', confirmed: date } })) }));
 		if (!writes.length) {
 			io.out('no proposed records here');
 			return 0;
@@ -260,6 +247,7 @@ const subcommands: Record<string, MemorySubcommand> = {
 		const [id, ...extra] = positionals;
 		if (!id || extra.length) throw new UsageError('give one id');
 		const { layer } = findRecord(io, id, layerName(values.layer));
+		markUsed(layer, [id], io.env);
 		const path = recordPath(layer, id);
 		const history = recordHistory(memoryHome(io.env), path, id);
 		io.out(`${path} (${layer.label})\n\n${readFileSync(path, 'utf8').trimEnd()}${history.length ? `\n\nHistory:\n${history.map((h) => `- ${h}`).join('\n')}` : ''}`);

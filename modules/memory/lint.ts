@@ -51,7 +51,8 @@ function recordFindings(layer: Layer, records: readonly MemoryRecord[], input: L
 	return findings;
 }
 
-function duplicateFindings(input: LintInput): Finding[] {
+/** Pairs of active records, across the layers, whose summaries say much the same. */
+export function duplicateFindings(input: Pick<LintInput, 'scans'>): Finding[] {
 	const active = input.scans.flatMap(({ layer, scan }) =>
 		scan.records.filter((r) => r.header.status === 'active').map((record) => ({ layer, record, words: wordsOf(record.header.summary) })),
 	);

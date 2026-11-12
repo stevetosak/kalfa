@@ -1,19 +1,21 @@
-// What the memory Module searches (ADR 0002): the Memory records of the
-// layers a session sees, the Task Records (the repository's and the copies in
+// What the memory Module searches (ADR 0002): the Memory records and the
+// deferred items (the plans Module's list) of the layers a session sees, the
+// Task Records (the repository's and the copies in
 // the Memory home), the repository's tracked Markdown and the old archives.
-// Each file becomes one or more chunks: a record is one chunk, a Task Record
+// Each file becomes one or more chunks: a record or an item is one chunk, a Task Record
 // one per Section, a Markdown file one per heading (long ones split again).
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { globSync } from 'tinyglobby';
 import { KalfaError } from '../../src/core/errors.ts';
-import { memoryHome, projectTasksDir, sessionLayers } from '../../src/core/memory/home.ts';
+import { deferredDir, memoryHome, projectTasksDir, sessionLayers } from '../../src/core/memory/home.ts';
 import { parseMemoryRecord } from '../../src/core/memory/record.ts';
 import type { Project } from '../../src/core/project.ts';
 import { parseRecord, tasksDir } from '../../src/core/task-record.ts';
+import { parseItem } from '../plans/deferred.ts';
 
-export const SOURCE_KINDS = ['memory', 'task', 'doc', 'archive'] as const;
+export const SOURCE_KINDS = ['memory', 'deferred', 'task', 'doc', 'archive'] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 
 export interface SourceFile {
@@ -37,6 +39,14 @@ export interface Chunk {
 	ref: string;
 	/** For a Task Record chunk: the Task's id. */
 	task?: string;
+	/** For a Memory record chunk: its id and its layer's label, so a search can mark it used. */
+	record?: RecordRef;
+}
+
+/** A Memory record by its id and the label of its layer (`personal`, or the project key). */
+export interface RecordRef {
+	id: string;
+	layer: string;
 }
 
 /** A Markdown file larger than this is not indexed (a generated page, a dump). */
@@ -78,7 +88,10 @@ export function listSources(scope: SourceScope): SourceFile[] {
 		files.push({ path, kind, label, refPath: inRepo ? relative(root, path) : path, ...stat });
 	};
 	const home = memoryHome(scope.env);
-	for (const layer of sessionLayers(home, scope.project)) for (const name of markdownIn(layer.dir)) add(join(layer.dir, name), 'memory', layer.label);
+	for (const layer of sessionLayers(home, scope.project)) {
+		for (const name of markdownIn(layer.dir)) add(join(layer.dir, name), 'memory', layer.label);
+		for (const name of markdownIn(deferredDir(layer))) add(join(deferredDir(layer), name), 'deferred', layer.label);
+	}
 
 	const project = scope.project;
 	if (!project) return files;
@@ -171,6 +184,22 @@ function memoryChunks(file: SourceFile, text: string): Chunk[] {
 			title: `${record.header.type}${mark}: ${record.header.summary}`,
 			text: record.body,
 			ref: `kalfa memory show ${id} (${file.label})`,
+			record: { id, layer: file.label },
+		},
+	];
+}
+
+function deferredChunks(file: SourceFile, text: string): Chunk[] {
+	const id = basename(file.path, '.md');
+	const { header, body } = parseItem(text, file.path, id);
+	const mark = header.status === 'open' ? '' : ` (${header.status})`;
+	return [
+		{
+			id: `${file.path}#0`,
+			kind: 'deferred',
+			title: `deferred${mark}: ${header.summary}`,
+			text: [header.condition ? `When: ${header.condition}` : '', body].filter(Boolean).join('\n'),
+			ref: `kalfa defer show ${id} (${file.label})`,
 		},
 	];
 }
@@ -210,6 +239,7 @@ export function chunksOf(file: SourceFile, problems: string[]): Chunk[] {
 	try {
 		const text = readFileSync(file.path, 'utf8');
 		if (file.kind === 'memory') return memoryChunks(file, text);
+		if (file.kind === 'deferred') return deferredChunks(file, text);
 		if (file.kind === 'task') return taskChunks(file, text);
 		return markdownChunks(file, text);
 	} catch (error) {

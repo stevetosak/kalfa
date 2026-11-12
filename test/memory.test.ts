@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { memoryCommand } from '../src/cli/commands/memory.ts';
 import { KalfaError } from '../src/core/errors.ts';
-import { keyFromRemote, memoryHome, personalLayer, projectKey, readLayer } from '../src/core/memory/home.ts';
+import { keyFromRemote, memoryHome, personalLayer, projectKey, projectLayerOfKey, readLayer } from '../src/core/memory/home.ts';
+import { readUsage } from '../src/core/memory/usage.ts';
 import { parseMemoryRecord, renderMemoryRecord, slugOf } from '../src/core/memory/record.ts';
 import { layerView, renderLayer } from '../src/core/memory/standing.ts';
 import { coreModule } from '../src/modules/core.ts';
@@ -80,15 +81,14 @@ test('add needs a layer, a known type and a summary; the project layer needs a r
 	assert.match(outside.error ?? '', /needs a git repository/);
 });
 
-test('a write over the rule count or the index bytes is refused; a proposed record does not count', async () => {
+test('a write is never refused for space: over the rule count or the index bytes it is stored', async () => {
 	const { repo, env } = machine('schema: 1\nmodules: []\nmemory:\n  personal: {rules: 1, index-bytes: 60}\n');
-	assert.equal((await memory(env, repo, ['add', '--type', 'rule', '--layer', 'personal', '--summary', 'Rule one.'])).code, 0);
-	const second = await memory(env, repo, ['add', '--type', 'rule', '--layer', 'personal', '--summary', 'Rule two.']);
-	assert.match(second.error ?? '', /2 active rules \(limit 1\)/);
-	assert.equal((await memory(env, repo, ['add', '--type', 'rule', '--layer', 'personal', '--summary', 'Rule two.', '--proposed'])).code, 0);
-	assert.equal((await memory(env, repo, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'A short fact.'])).code, 0);
-	const long = await memory(env, repo, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'A second fact that does not fit.']);
-	assert.match(long.error ?? '', /B of index lines \(limit 60 B\)/);
+	for (const [type, summary] of [['rule', 'Rule one.'], ['rule', 'Rule two.'], ['fact', 'A short fact.'], ['fact', 'A second fact that does not fit.']]) {
+		const out = await memory(env, repo, ['add', '--type', type!, '--layer', 'personal', '--summary', summary!]);
+		assert.equal(out.code, 0, out.error);
+	}
+	assert.equal((await memory(env, repo, ['supersede', 'a-short-fact', '--summary', 'A short fact, now much longer than the budget allows.'])).code, 0);
+	assert.equal(readLayer(personalLayer(memoryHome(env))).filter((r) => r.header.status === 'active').length, 4);
 });
 
 test('a rule longer than rule-chars is refused', async () => {
@@ -117,8 +117,10 @@ test('confirm needs a proof, dates the record and writes the proof into the hist
 	const { repo, env } = machine();
 	await memory(env, repo, ['add', '--type', 'fact', '--layer', 'project', '--summary', 'A fact.']);
 	assert.match((await memory(env, repo, ['confirm', 'a-fact'])).error ?? '', /proof/);
+	assert.deepEqual(readUsage(projectLayerOfKey(memoryHome(env), 'github.com/someone/project'), env), {}, 'nothing is used before a show');
 	assert.equal((await memory(env, repo, ['confirm', 'a-fact', 'read', 'it', 'back'])).code, 0);
 	const show = await memory(env, repo, ['show', 'a-fact']);
+	assert.deepEqual(Object.keys(readUsage(projectLayerOfKey(memoryHome(env), 'github.com/someone/project'), env)), ['a-fact'], 'show marks the record used');
 	assert.match(show.out, /History:\n- \d{4}-\d\d-\d\d confirm a-fact: read it back\n- \d{4}-\d\d-\d\d add fact a-fact/);
 });
 
@@ -139,7 +141,7 @@ test('close needs a reason, takes the record out of the session start and keeps 
 	}
 });
 
-test('activate makes proposed records active, one commit per layer, and checks every budget first', async () => {
+test('activate makes proposed records active, one commit per layer', async () => {
 	const { repo, env } = machine('schema: 1\nmodules: []\nmemory:\n  personal: {rules: 2}\n');
 	for (const summary of ['Rule one.', 'Rule two.']) await memory(env, repo, ['add', '--type', 'rule', '--layer', 'personal', '--summary', summary, '--proposed']);
 	await memory(env, repo, ['add', '--type', 'fact', '--layer', 'project', '--summary', 'A fact.', '--proposed']);
@@ -164,9 +166,8 @@ test('activate makes proposed records active, one commit per layer, and checks e
 	assert.equal((await memory(env, repo, ['activate'])).out, 'no proposed records here');
 
 	await memory(env, repo, ['add', '--type', 'rule', '--layer', 'personal', '--summary', 'Rule three.', '--proposed']);
-	const over = await memory(env, repo, ['activate']);
-	assert.match(over.error ?? '', /3 active rules \(limit 2\)/);
-	assert.equal(readLayer(personalLayer(memoryHome(env))).find((r) => r.id === 'rule-three')?.header.status, 'proposed', 'nothing is written over budget');
+	assert.equal((await memory(env, repo, ['activate'])).code, 0, 'over the rule count it is still activated');
+	assert.equal(readLayer(personalLayer(memoryHome(env))).find((r) => r.id === 'rule-three')?.header.status, 'active');
 });
 
 test('an id in two layers needs --layer; hand edits are committed on their own first', async () => {
@@ -191,7 +192,7 @@ test('list shows the active records of every layer this directory sees', async (
 	assert.match((await memory(env, repo, ['list', '--status', 'proposed'])).out, /proposed-rule/);
 });
 
-test('the layer view loads every rule, fills the index newest-confirmed first, and reports what it left out', () => {
+test('the layer view loads every rule, fills the index by the later of use and confirmation, and Stores the rest', () => {
 	const layer = personalLayer('/nowhere');
 	const rec = (id: string, type: string, confirmed: string, status = 'active') =>
 		({ id, header: { schema: 1, type, status, summary: `${id} summary`, created: '2026-01-01', confirmed }, body: '' }) as never;
@@ -202,8 +203,12 @@ test('the layer view loads every rule, fills the index newest-confirmed first, a
 	assert.equal(view.rules.length, 2);
 	assert.equal(view.overRules, 1);
 	assert.deepEqual(view.index, ['- [decision] new summary (new)']);
-	assert.equal(view.dropped, 1);
+	assert.deepEqual(view.stored.map((r: { id: string }) => r.id), ['old']);
 	assert.match(renderLayer(view), /^Personal layer\nRules:\n- r1 summary \(r1\)\n- r2 summary \(r2\)\n\nIndex/);
+	assert.match(renderLayer(view), /Stored: 1 more active record, not loaded; .*kalfa memory search/);
+	const records = [rec('old', 'fact', '2026-02-01'), rec('new', 'decision', '2026-03-01')];
+	const used = layerView(layer, records, { rules: 1, 'index-bytes': 40 }, { old: '2026-05-01' });
+	assert.deepEqual(used.index, ['- [fact] old summary (old)'], 'a record used later than the other was confirmed ranks first');
 });
 
 test('session.start injects Standing memory, also outside a repository, and names a layer over budget', async () => {
@@ -224,5 +229,10 @@ test('session.start injects Standing memory, also outside a repository, and name
 
 	const tight = await context({ root: repo, file: undefined }, { ...DEFAULT_SETTINGS, memory: { personal: { rules: 0 as never } } } as never);
 	assert.match(tight?.context ?? '', /Stage files by name/, 'an over-budget rule still loads');
-	assert.match(tight?.notice ?? '', /the personal layer is over budget: 1 rules, limit 0/);
+	assert.match(tight?.notice ?? '', /the personal layer has 1 rules, limit 0 \(all loaded/);
+
+	const small = await context({ root: repo, file: undefined }, { ...DEFAULT_SETTINGS, memory: { project: { 'index-bytes': 10 } } } as never);
+	assert.match(small?.context ?? '', /Stored: 1 more active record/);
+	assert.match(small?.notice ?? '', /memory: 1 rule, 0 index lines, 1 Stored/);
+	assert.doesNotMatch(small?.notice ?? '', /over budget/, 'a Stored tier is normal, not an alarm');
 });
