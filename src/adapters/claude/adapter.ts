@@ -26,7 +26,7 @@ const base = z.looseObject({
 });
 
 const payloads = {
-	'session.start': base.extend({ source: z.enum(['startup', 'resume', 'clear', 'compact']) }),
+	'session.start': base.extend({ source: z.enum(['startup', 'resume', 'clear', 'compact', 'fork']) }),
 	'prompt.submit': base.extend({ prompt: z.string() }),
 	'command.before': base.extend({ tool_name: z.string(), tool_input: z.looseObject({ command: z.string().optional() }) }),
 	'tool.after': base.extend({ tool_name: z.string(), duration_ms: z.number().optional() }),

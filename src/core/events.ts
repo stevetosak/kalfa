@@ -22,7 +22,7 @@ interface EventBase {
 	subagent?: boolean;
 }
 
-export type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact';
+export type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact' | 'fork';
 
 export type CoreEvent = EventBase &
 	(

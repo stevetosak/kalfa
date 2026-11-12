@@ -207,6 +207,22 @@ export function listRecords(root: string): TaskRecord[] {
 		.map((name) => parseRecord(readFileSync(join(dir, name), 'utf8'), join(dir, name), name.slice(0, -3)));
 }
 
+const firstLine = (text: string | undefined) => text?.split('\n').find((line) => line.trim())?.trim();
+
+/** The few lines the Operator reads after /clear: what was done, where the work stands, what is next. */
+export function briefView(record: TaskRecord): string {
+	const { header, sections } = record;
+	const last = sections.at(-1);
+	const state = last ? `${last.title}: ${firstLine(last.parts.get('Found')) ?? firstLine(last.parts.get('Done')) ?? 'nothing recorded'}` : undefined;
+	return [
+		`Task ${record.id}: ${header.goal}`,
+		...(header['done-when'] ? [`  Done when: ${header['done-when']}`] : []),
+		`  Done: ${sections.length ? sections.map((s) => s.title).join('; ') : 'no Section closed yet'}`,
+		...(state ? [`  State: ${state}`] : []),
+		`  Next: ${firstLine(record.close?.get('Next') ?? last?.parts.get('Next')) ?? 'not recorded'}`,
+	].join('\n');
+}
+
 /** The short view a fresh session reads to go on with the Task. */
 export function handoffView(record: TaskRecord): string {
 	const { header, sections } = record;

@@ -31,6 +31,14 @@ test('the event table lists each handled event once, in Core event order', () =>
 	assert.equal(readFileSync(writeEventTable(root, [a, b]), 'utf8'), 'session.start\ncommand.before\ntool.after\n');
 });
 
+test('an event a Module handles only on a wake is in no event table', () => {
+	const woken = { name: 'woken', handlers: { 'prompt.submit': () => undefined, 'session.start': () => undefined }, wakeOnly: ['prompt.submit' as const] };
+	assert.deepEqual(handledEvents([woken]), ['session.start']);
+	const meter = { name: 'meter', handlers: { 'prompt.submit': () => undefined }, filters: { 'prompt.submit': '/meter' } };
+	const root = gitRepo({ '.gitignore': '.kalfa/\n' });
+	assert.equal(readFileSync(writeEventTable(root, [woken, meter]), 'utf8'), 'session.start\nprompt.submit\t(/meter)\n', 'the wake-only Module takes no filter away');
+});
+
 test('an event keeps its filter only while every Module that handles it has one', () => {
 	const push = { name: 'push', handlers: { 'command.before': () => undefined }, filters: { 'command.before': 'git[[:space:]]' } };
 	const pr = { name: 'pr', handlers: { 'command.before': () => undefined }, filters: { 'command.before': 'gh[[:space:]]+pr' } };

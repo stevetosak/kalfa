@@ -149,7 +149,7 @@ test('the idle guard offers the open Task of the branch, else a fresh session', 
 	const project = { root, file: undefined };
 	assert.equal(freshStart(project), '/clear starts a fresh, small session.');
 	writeRecord(root, { id: 'feat-x', header: { schema: 1, goal: 'g', status: 'open', started: '2026-10-27' }, sections: [] });
-	assert.match(freshStart(project), /^Task feat-x is open: record the Section with `kalfa section close`, then \/clear shows its Handoff/);
+	assert.match(freshStart(project), /^Task feat-x is open: record the Section with `kalfa section close`, then \/clear shows its brief and "continue" loads its Handoff/);
 	assert.equal(freshStart(undefined), '/clear starts a fresh, small session.');
 });
 

@@ -40,6 +40,12 @@ for (const version of versions) {
 			assert.equal(claudeAdapter.toEvent('command.before', { ...preToolUse, agent_id: 'a1' })?.subagent, true);
 			assert.equal(claudeAdapter.toEvent('command.before', preToolUse)?.subagent, undefined);
 		});
+		const sessionStart = JSON.parse(readFileSync(join(FIXTURES, version, 'SessionStart.json'), 'utf8'));
+		test('every SessionStart source in the hook docs is taken, fork too', () => {
+			for (const source of ['startup', 'resume', 'clear', 'compact', 'fork'] as const) {
+				assert.deepEqual(claudeAdapter.toEvent('session.start', { ...sessionStart, source }), { ...expected['session.start'], source });
+			}
+		});
 		test('a hook wired to the wrong event is refused', () => {
 			assert.throws(() => claudeAdapter.toEvent('session.start', preToolUse), { name: 'KalfaError', message: /wired to the PreToolUse hook; it belongs on SessionStart/ });
 		});

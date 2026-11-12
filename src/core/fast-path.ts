@@ -8,6 +8,8 @@
 // raw payload must match (the Modules' filters joined; see ModuleDefinition),
 // then optionally a tab and the context size from which Node runs anyway (the
 // smallest `minContext`; the regex is empty when only that counts).
+// An event a Module handles only on a wake (`wakeOnly`) is in no table: the
+// shim starts Node for it when its wake marker exists (core/wake.ts).
 import { mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CORE_EVENTS, type CoreEventName } from './events.ts';
@@ -17,15 +19,20 @@ import { privateDir } from './private-dir.ts';
 
 export const EVENT_TABLE = 'events';
 
-/** The events a handler runs for here; `context` applies the Modules' `when` gates. */
+/** The Module's handler runs without a wake: the shim starts Node for it on its own. */
+function shimRuns(module: ModuleDefinition, name: CoreEventName, context: GateContext | undefined): boolean {
+	return handlesEvent(module, name, context) && !module.wakeOnly?.includes(name);
+}
+
+/** The events a handler runs for here without a wake; `context` applies the Modules' `when` gates. */
 export function handledEvents(modules: Iterable<ModuleDefinition>, context?: GateContext): CoreEventName[] {
 	const list = [...modules];
-	return CORE_EVENTS.filter((name) => list.some((m) => handlesEvent(m, name, context)));
+	return CORE_EVENTS.filter((name) => list.some((m) => shimRuns(m, name, context)));
 }
 
 /** One event table line: the event, and its conditions unless a Module that handles it has none. */
 function tableLine(name: CoreEventName, modules: ModuleDefinition[], context: GateContext | undefined): string {
-	const handling = modules.filter((m) => handlesEvent(m, name, context));
+	const handling = modules.filter((m) => shimRuns(m, name, context));
 	if (handling.some((m) => m.filters?.[name] === undefined && m.minContext?.[name] === undefined)) return name;
 	const filters = handling.flatMap((m) => (m.filters?.[name] === undefined ? [] : [`(${m.filters[name]})`]));
 	const sizes = handling.flatMap((m) => (m.minContext?.[name] === undefined ? [] : [m.minContext[name]]));
