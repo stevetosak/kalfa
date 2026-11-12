@@ -121,6 +121,10 @@ _Avoid_: memory store, memory dir
 The memory that must be in every session where it applies: the in-scope part of the three Memory layers, under their budgets. The Core owns it, so it never depends on a Module being on.
 _Avoid_: always-on memory, context
 
+**Instruction file**:
+The file a harness loads in full at every session start, where kalfa writes the Personal layer's Loaded tier, because a hook's context has a cap the layer passes. `kalfa install` writes it first; every `kalfa memory` command and every session start renew it. For Claude Code it is `~/.claude/rules/kalfa-memory.md`.
+_Avoid_: rules file, CLAUDE.md, memory file
+
 **Memory record**:
 One piece of memory in one file, of one type: a rule (how to act; a Lesson is a rule), a fact (how something is), a decision (what was chosen and why) or an open item (left open on purpose). It has a status and the date it was last confirmed, a newer record can supersede it, and a record whose work is done, or that no longer applies, is closed: it stops loading, and search still finds it. Its layer is its scope.
 _Avoid_: memory entry, note, memory file

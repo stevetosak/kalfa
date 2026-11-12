@@ -94,6 +94,8 @@ function setStatusLine(data: Data, tap: string | undefined): Data {
 
 export const claudeUser: UserFiles = {
 	settings: '.claude/settings.json',
+	// Claude Code loads every file in ~/.claude/rules/ in full, before the project's rules.
+	instructions: '.claude/rules/kalfa-memory.md',
 	hooks: setHooks,
 	statusLine: setStatusLine,
 	approvals: claudeApprovals,

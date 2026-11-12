@@ -11,6 +11,7 @@ export const CAPABILITIES = {
 	usage: 'kalfa can read the token use of each request, and so the size of the context',
 	'turn-stop': "a hook can end the agent's turn after a tool ran",
 	compaction: 'a hook can tell the harness what its context summary must keep, and reads the summary after',
+	'instruction-file': 'the harness loads a user file of instructions in full at every session start',
 } as const;
 
 export type Capability = keyof typeof CAPABILITIES;

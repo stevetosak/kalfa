@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import type { Adapter } from '../../adapters/adapter.ts';
 import { activeModules, dispatch } from '../../core/dispatcher.ts';
 import { KalfaError } from '../../core/errors.ts';
-import { isCoreEventName } from '../../core/events.ts';
+import { recordContextSize } from '../../core/context-size.ts';
+import { type CoreEventName, type DispatchResult, isCoreEventName } from '../../core/events.ts';
 import { EVENT_TABLE, isTableFresh, machineEventTablePath, writeEventTable, writeMachineEventTable } from '../../core/fast-path.ts';
 import type { HandlerContext, ModuleDefinition } from '../../core/modules.ts';
 import { PRIVATE_DIR } from '../../core/private-dir.ts';
@@ -49,6 +50,14 @@ function refreshEventTables(force: boolean, context: HandlerContext, registry: R
 	}
 }
 
+/** Warns the Operator when the context passes the harness's cap, and records the session start's size for `kalfa doctor`. */
+function checkContextSize(event: CoreEventName, adapter: Adapter, root: string | undefined, result: DispatchResult, env: NodeJS.ProcessEnv): void {
+	const chars = result.context.join('\n\n').length;
+	const cap = adapter.contextCap;
+	if (cap !== undefined && chars > cap) result.notice.push(`kalfa: the context for ${event} is ${chars} characters, over the ${adapter.name} cap of ${cap}; the agent sees only its start (kalfa doctor)`);
+	if (event === 'session.start') recordContextSize(env, root, adapter.name, { chars, cap, at: new Date().toISOString() });
+}
+
 async function runHook(args: string[], io: Io, adapters: ReadonlyMap<string, Adapter>, registry: ReadonlyMap<string, ModuleDefinition>): Promise<number> {
 	const [harness, name, ...rest] = args;
 	if (!harness || !name || rest.length) throw new KalfaError(`usage: ${USAGE}`);
@@ -69,11 +78,12 @@ async function runHook(args: string[], io: Io, adapters: ReadonlyMap<string, Ada
 	const root = repoRootOf(event.cwd);
 	const project: Project | undefined = orNotice(() => loadProject(event.cwd), root ? { root, file: undefined } : undefined, notices);
 	const settings: Settings = orNotice(() => loadSettings(io.env), DEFAULT_SETTINGS, notices);
-	const context: HandlerContext = { project, settings, env: io.env, capabilities: adapter.capabilities, usage: adapter.usage };
+	const context: HandlerContext = { project, settings, env: io.env, capabilities: adapter.capabilities, usage: adapter.usage, contextCap: adapter.contextCap };
 
 	const result = await dispatch(event, registry, context);
 	result.notice.unshift(...notices);
 	refreshEventTables(event.name === 'session.start', context, registry, result.notice);
+	checkContextSize(event.name, adapter, project?.root, result, io.env);
 
 	const out = adapter.render(event, result);
 	if (out.stdout) io.out(out.stdout);

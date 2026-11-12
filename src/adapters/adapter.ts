@@ -36,6 +36,11 @@ export interface Adapter {
 	 * size of the session in a hook payload without starting Node.
 	 */
 	usage?: UsageSource;
+	/**
+	 * The most characters the agent reads of one hook's context; past it the
+	 * harness shows only the start. `undefined` when it has no cap.
+	 */
+	contextCap?: number;
 }
 
 /**
@@ -61,6 +66,12 @@ export interface UserFiles {
 	approvals: ApprovalLayout;
 	/** The settings `kalfa install` sets to kalfa's value; `uninstall` puts back the value each had. */
 	owned?: readonly OwnedSetting[];
+	/**
+	 * The instruction file, relative to HOME, that the harness loads in full at
+	 * every session start (the `instruction-file` Capability); kalfa writes the
+	 * Personal layer's Loaded tier into it (ADR 0002, amendment 2026-11-12).
+	 */
+	instructions?: string;
 }
 
 /** One user setting kalfa sets, such as the switch that turns off the harness's own memory. */

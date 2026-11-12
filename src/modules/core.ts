@@ -11,14 +11,17 @@
 // with the Recap instead of the list of open Tasks.
 // Standing memory: the Personal layer in every session, and the project's
 // layer inside a repository: the Loaded tier under their budgets, and a line
-// for the Stored tier (ADR 0002).
+// for the Stored tier (ADR 0002). Where the harness loads kalfa's instruction
+// file, the Personal layer comes from it instead, and the report is fitted
+// under the Adapter's cap on one hook's context (amendment 2026-11-12).
 import { writeCheckpoint } from '../core/checkpoint.ts';
 import { currentBranch } from '../core/git.ts';
-import { memoryHome, scanLayer, sessionLayers } from '../core/memory/home.ts';
-import { budgetOf, layerView, overBudgetNotice, renderLayer } from '../core/memory/standing.ts';
+import { type Layer, type LayerScan, memoryHome, scanLayer, sessionLayers } from '../core/memory/home.ts';
+import { refreshInstructions } from '../core/memory/instructions.ts';
+import { budgetOf, type LayerView, layerView, overBudgetNotice, renderLayer } from '../core/memory/standing.ts';
 import { readUsage } from '../core/memory/usage.ts';
 import { lastActivity, idleDays, markSession, recapTask, recapView } from '../core/recap.ts';
-import { memoryBudgets, recapAfterDays, type Settings } from '../core/settings.ts';
+import { type MemoryBudgets, memoryBudgets, recapAfterDays, type Settings } from '../core/settings.ts';
 import { isContinueWord } from '../core/continue-word.ts';
 import type { CoreEvent, HandlerResult, SessionStartSource } from '../core/events.ts';
 import type { ModuleManifest } from '../core/module-source.ts';
@@ -48,6 +51,9 @@ function planReport(project: Project): ReportPart {
 		notice: problems.length ? `kalfa: Plans: ${problems.join('; ')}` : undefined,
 	};
 }
+
+/** Characters of the hook's context the session report leaves for the other Modules (recall, deferred items). */
+const OTHER_MODULES_ROOM = 1500;
 
 /** After these the session goes on with the work it had, so the Handoff loads at once. */
 const RELOAD_SOURCES: ReadonlySet<SessionStartSource> = new Set(['compact', 'fork']);
@@ -111,10 +117,40 @@ function recapReport(project: Project, settings: Settings, event: Extract<CoreEv
 	};
 }
 
-function memoryReport(project: Project | undefined, settings: Settings, env: NodeJS.ProcessEnv): ReportPart {
+const MEMORY_HEADER = 'Standing memory (kalfa memory). Write a record only through `kalfa memory add|supersede|confirm`; what you find yourself is a Memory candidate first.';
+/** What a layer's index heading costs, with the blank line before it. */
+const INDEX_HEADING = 'Index (the body: kalfa memory show <id>):'.length + 3;
+
+/**
+ * The layers' views. Within `room` characters the rules and the Stored line
+ * always load, and the index lines fill what is left, in layer order, each
+ * layer still under its own budget.
+ */
+function fitViews(scans: { layer: Layer; scan: LayerScan }[], budgets: MemoryBudgets, env: NodeJS.ProcessEnv, room: number | undefined): LayerView[] {
+	const viewOf = (layer: Layer, records: LayerScan['records'], indexBytes?: number) => {
+		const budget = budgetOf(layer, budgets);
+		return layerView(layer, records, indexBytes === undefined ? budget : { ...budget, 'index-bytes': Math.max(0, Math.min(budget['index-bytes'], indexBytes)) }, readUsage(layer, env));
+	};
+	if (room === undefined) return scans.map(({ layer, scan }) => viewOf(layer, scan.records));
+	const fixed = scans.reduce((sum, { layer, scan }) => sum + renderLayer(viewOf(layer, scan.records, 0)).length + 2 + INDEX_HEADING, 0);
+	let left = room - MEMORY_HEADER.length - fixed;
+	return scans.map(({ layer, scan }) => {
+		const view = viewOf(layer, scan.records, left);
+		left -= view.indexBytes;
+		return view;
+	});
+}
+
+/**
+ * Standing memory for the session report. `personal: false` leaves out the
+ * Personal layer, which the instruction file loads; `room` is the most
+ * characters it may take.
+ */
+function memoryReport(project: Project | undefined, settings: Settings, env: NodeJS.ProcessEnv, fit: { personal: boolean; room?: number }): ReportPart {
 	const budgets = memoryBudgets(settings);
-	const scans = sessionLayers(memoryHome(env), project).map((layer) => ({ layer, scan: scanLayer(layer) }));
-	const views = scans.map(({ layer, scan }) => layerView(layer, scan.records, budgetOf(layer, budgets), readUsage(layer, env)));
+	const layers = sessionLayers(memoryHome(env), project).filter((layer) => fit.personal || layer.name !== 'personal');
+	const scans = layers.map((layer) => ({ layer, scan: scanLayer(layer) }));
+	const views = fitViews(scans, budgets, env, fit.room);
 	const blocks = views.map(renderLayer).filter(Boolean);
 	// A broken file is left out and named; the other records still load.
 	const unreadable = scans.flatMap(({ scan }) => scan.problems.map((p) => `kalfa: memory: left out: ${p}`));
@@ -122,11 +158,10 @@ function memoryReport(project: Project | undefined, settings: Settings, env: Nod
 	const rules = views.reduce((n, v) => n + v.rules.length, 0);
 	const lines = views.reduce((n, v) => n + v.index.length, 0);
 	const stored = views.reduce((n, v) => n + v.stored.length, 0);
+	const file = fit.personal ? '' : ' (+ the Personal layer from the instruction file)';
 	return {
-		context: blocks.length
-			? ['Standing memory (kalfa memory). Write a record only through `kalfa memory add|supersede|confirm`; what you find yourself is a Memory candidate first.', ...blocks].join('\n\n')
-			: undefined,
-		summary: blocks.length ? `memory: ${plural(rules, 'rule')}, ${plural(lines, 'index line')}${stored ? `, ${stored} Stored` : ''}` : undefined,
+		context: blocks.length ? [MEMORY_HEADER, ...blocks].join('\n\n') : undefined,
+		summary: blocks.length || file ? `memory: ${plural(rules, 'rule')}, ${plural(lines, 'index line')}${stored ? `, ${stored} Stored` : ''}${file}` : undefined,
 		notice: notices.length ? notices.join('\n') : undefined,
 	};
 }
@@ -135,13 +170,16 @@ function memoryReport(project: Project | undefined, settings: Settings, env: Nod
  * The agent gets the full report; the Operator sees one line of what it
  * holds (harnesses show a notice to the Operator, not the context).
  */
-const sessionReport: Handler = (event, { project, settings, env }) => {
+const sessionReport: Handler = (event, { project, settings, env, capabilities, contextCap }) => {
 	if (event.name !== 'session.start') return undefined;
+	// The Personal layer loads from the instruction file when it is current.
+	const personal = !(capabilities.has('instruction-file') && refreshInstructions(env, settings, event.harness).length);
 	// The Recap comes first: a harness can show only the start of a long report.
 	const recap = project ? recapReport(project, settings, event) : undefined;
-	const parts = recap
-		? [recap, memoryReport(project, settings, env), planReport(project!)]
-		: [memoryReport(project, settings, env), ...(project ? [planReport(project), taskReport(project, event)] : [])];
+	const rest = recap ? [recap, planReport(project!)] : project ? [planReport(project), taskReport(project, event)] : [];
+	const used = rest.reduce((sum, part) => sum + (part.context ? part.context.length + 2 : 0), 0);
+	const memory = memoryReport(project, settings, env, { personal, room: contextCap === undefined ? undefined : contextCap - OTHER_MODULES_ROOM - used });
+	const parts = recap ? [recap, memory, rest[1]!] : [memory, ...rest];
 	const context = parts.map((p) => p.context).filter(Boolean).join('\n\n');
 	const summary = parts.map((p) => p.summary).filter(Boolean).join(' · ');
 	const notice = [summary ? `kalfa: ${summary}` : undefined, ...parts.map((p) => p.notice)].filter(Boolean).join('\n');

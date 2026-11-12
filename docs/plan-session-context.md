@@ -41,6 +41,6 @@ the Loaded tier reaches the model is a design choice.
 
 **Done when:** in a real session on this machine the model sees every Loaded rule, the session report and the Recap without reading a file, and `kalfa doctor` warns when the session context passes the harness's limit.
 
-- [ ] Apply the choice from part 2.
-- [ ] The Claude Adapter knows the limit; `kalfa doctor` shows the session context size against it.
+- [x] Apply the choice from part 2.
+- [x] The Claude Adapter knows the limit; `kalfa doctor` shows the session context size against it.
 - [ ] Prove it with a scratch session: a rule at the end of the Loaded tier is quoted without a file read.

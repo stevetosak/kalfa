@@ -1,6 +1,7 @@
 // `kalfa install` / `uninstall`: kalfa's hooks, the status-tap and the machine
 // Modules' approvals in the user settings of every harness whose Adapter has
-// them. The hooks and the tap run the built files of the kalfa that installs
+// them, and the instruction file with the Personal layer where a harness has
+// one. The hooks and the tap run the built files of the kalfa that installs
 // them, so run `kalfa install` again after the package moves.
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ import { planApprovals } from '../../core/approvals.ts';
 import { KalfaError } from '../../core/errors.ts';
 import { applyUser, NOTHING, readInstallState, type UserWants, writeInstallState } from '../../core/install.ts';
 import { machineCacheDir } from '../../core/machine-paths.ts';
+import { personalInstructions } from '../../core/memory/instructions.ts';
 import type { ModuleDirs } from '../../core/module-dirs.ts';
 import { loadModuleSource } from '../../core/module-source.ts';
 import { loadSettings } from '../../core/settings.ts';
@@ -28,13 +30,16 @@ function built(path: string): string {
 
 /** What `kalfa install` wants in each harness's user settings; `kalfa doctor` compares the settings with it. */
 export function installWants(env: NodeJS.ProcessEnv, moduleDirs: ModuleDirs, packageRoot: string): (adapter: Adapter) => UserWants {
-	const sources = loadSettings(env).modules.map((name) => loadModuleSource(moduleDirs(env), name));
+	const settings = loadSettings(env);
+	const sources = settings.modules.map((name) => loadModuleSource(moduleDirs(env), name));
+	const instructions = personalInstructions(env, settings);
 	const shim = quote([built(join(packageRoot, 'dist', 'kalfa-hook'))]);
 	return (adapter) => ({
 		hook: (event) => `${shim} ${adapter.name} ${event}`,
 		tap: quote([built(join(packageRoot, 'dist', 'adapters', adapter.name, 'status-tap'))]),
 		approvals: planApprovals(sources, adapter.user!.approvals),
 		ownedSettings: true,
+		...(adapter.capabilities.has('instruction-file') ? { instructions } : {}),
 	});
 }
 
@@ -72,7 +77,7 @@ function run(adapters: ReadonlyMap<string, Adapter>, io: Io, wants: (adapter: Ad
 
 export function installCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs, packageRoot: () => string): Command {
 	return {
-		summary: "Write kalfa's hooks, the status-line tap and the machine Modules' approvals into the harnesses' user settings, and set the settings kalfa owns (their own memory off, idle compaction)",
+		summary: "Write kalfa's hooks, the status-line tap, the machine Modules' approvals and the Personal layer's instruction file into the harnesses' user settings, and set the settings kalfa owns (their own memory off, idle compaction)",
 		usage: 'kalfa install [--dry-run]',
 		async run(args, io) {
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' } });

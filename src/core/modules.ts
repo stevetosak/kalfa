@@ -16,6 +16,8 @@ export interface HandlerContext {
 	capabilities: ReadonlySet<Capability>;
 	/** The token use of the session, from an Adapter with the `usage` Capability. */
 	usage?: UsageSource;
+	/** The Adapter's cap on one hook's context (`Adapter.contextCap`). */
+	contextCap?: number;
 }
 
 /** What decides whether a handler runs here: the project and the machine settings, nothing from the event. */
