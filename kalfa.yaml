@@ -3,3 +3,4 @@ modules: []
 plans:
   - docs/plan.md
   - docs/plan-sessions.md
+  - docs/plan-session-context.md
