@@ -2,7 +2,7 @@
 title: "Session context: every Loaded record in view at session start"
 description: "Claude Code shows the model only a 2 KB preview of a long SessionStart context, so most of Standing memory does not load; fit the context to the harness or load it another way."
 type: plan
-status: proposed
+status: active
 topics: [memory, agents]
 ---
 
@@ -27,15 +27,15 @@ the Loaded tier reaches the model is a design choice.
 
 **Done when:** the limit is known as a number, with how Claude Code counts it (per hook command or per event, characters or bytes) and what the model sees past it, proven with a scratch session.
 
-- [ ] Find the threshold with sized outputs from a scratch SessionStart hook.
-- [ ] Check whether two hook commands on SessionStart each get their own limit.
-- [ ] Check whether `@` imports in CLAUDE.md and the other context paths have a limit of their own.
+- [x] Find the threshold with sized outputs from a scratch SessionStart hook.
+- [x] Check whether two hook commands on SessionStart each get their own limit.
+- [x] Check whether `@` imports in CLAUDE.md and the other context paths have a limit of their own.
 
 ## 2. Decide how the session context fits
 
 **Done when:** a grill has chosen how the Loaded tier and the session report reach the model within the limit, and the choice is recorded in an amendment to ADR 0002.
 
-- [ ] Decide in a grill: one budget for the whole report, a split over several hook commands, the rules in a generated file that CLAUDE.md imports, or a mix.
+- [x] Decide in a grill: one budget for the whole report, a split over several hook commands, the rules in a generated file that CLAUDE.md imports, or a mix.
 
 ## 3. Fit it and report it
 
