@@ -209,6 +209,9 @@ export function listRecords(root: string): TaskRecord[] {
 
 const firstLine = (text: string | undefined) => text?.split('\n').find((line) => line.trim())?.trim();
 
+/** The first line of the last Section's Next part; `undefined` before the first Section. */
+export const nextStep = (record: TaskRecord): string | undefined => record.sections.at(-1)?.parts.get('Next')?.split('\n')[0];
+
 /** The few lines the Operator reads after /clear: what was done, where the work stands, what is next. */
 export function briefView(record: TaskRecord): string {
 	const { header, sections } = record;

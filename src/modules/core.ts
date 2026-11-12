@@ -29,7 +29,7 @@ import type { ModuleManifest } from '../core/module-source.ts';
 import { CORE_MODULE, type Handler, type ModuleDefinition } from '../core/modules.ts';
 import { findPlans, isOpenPlan, planSummary } from '../core/plans.ts';
 import type { Project } from '../core/project.ts';
-import { briefView, compactFocus, handoffView, listRecords, readRecord, type TaskRecord, taskIdOf } from '../core/task-record.ts';
+import { briefView, compactFocus, handoffView, listRecords, nextStep, readRecord, type TaskRecord, taskIdOf } from '../core/task-record.ts';
 import { setWake, takeWake } from '../core/wake.ts';
 
 /** One part of the session report: what the agent reads, and a short summary the Operator sees. */
@@ -86,12 +86,11 @@ function taskReport(project: Project, event: Extract<CoreEvent, { name: 'session
 	if (own && RELOAD_SOURCES.has(event.source)) return { context: handoffContext(own), summary: `Handoff of Task ${own.id} loaded again` };
 
 	// The branch's Task in full; of the others only the most recently written, in one line each.
-	const nextOf = (r: TaskRecord) => r.sections.at(-1)?.parts.get('Next')?.split('\n')[0];
 	const others = open.filter((r) => r !== own).sort((a, b) => statSync(b.path).mtimeMs - statSync(a.path).mtimeMs);
 	const shown = others.slice(0, OTHER_TASKS_SHOWN);
 	const lines = [
-		...(own ? [`- ${own.id}: ${own.header.goal} (${own.sections.length} Section(s))${own.header['done-when'] ? `\n  Done when: ${own.header['done-when']}` : ''}${nextOf(own) ? `\n  Next: ${nextOf(own)}` : ''}`] : []),
-		...shown.map((r) => `- ${r.id}: ${r.header.goal}${nextOf(r) ? `\n  Next: ${nextOf(r)}` : ''}`),
+		...(own ? [`- ${own.id}: ${own.header.goal} (${own.sections.length} Section(s))${own.header['done-when'] ? `\n  Done when: ${own.header['done-when']}` : ''}${nextStep(own) ? `\n  Next: ${nextStep(own)}` : ''}`] : []),
+		...shown.map((r) => `- ${r.id}: ${r.header.goal}${nextStep(r) ? `\n  Next: ${nextStep(r)}` : ''}`),
 		...(others.length > shown.length ? [`- … and ${others.length - shown.length} more open (kalfa task list)`] : []),
 	];
 	const hint = 'Record each closed Section with `kalfa section close "<title>"` (parts on stdin); close the Task with `kalfa task close` once its Done when line holds.';
