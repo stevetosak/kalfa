@@ -114,20 +114,22 @@ export const NO_DECISIONS = 'kalfa: this Section has no **Decisions:** part. If 
 export function sectionCommand(adapters: ReadonlyMap<string, Adapter>, registry: ReadonlyMap<string, ModuleDefinition>): Command {
 	return {
 		summary: 'Record a closed Section in the Task Record (its parts as Markdown on stdin)',
-		usage: 'kalfa section close "<title>" [--task <id>] <<\'EOF\'\n**Done:** …\n**Found:** …\n**Next:** …\nEOF',
+		usage: 'kalfa section close "<title>" [--task <id>] [--no-reset <requests left>] <<\'EOF\'\n**Done:** …\n**Found:** …\n**Next:** …\nEOF',
 		async run(args, io) {
 			const [sub, ...rest] = args;
 			if (sub !== 'close') throw new UsageError(sub ? `unknown subcommand '${sub}'` : 'give a subcommand');
-			const { values, positionals } = parseCommandArgs(rest, taskOption, true);
+			const { values, positionals } = parseCommandArgs(rest, { ...taskOption, 'no-reset': { type: 'string' } }, true);
 			const title = positionals.join(' ').trim();
 			if (!title) throw new UsageError('give the Section title');
+			const noReset = values['no-reset'] === undefined ? undefined : Number(values['no-reset']);
+			if (noReset !== undefined && !(Number.isInteger(noReset) && noReset >= 0)) throw new UsageError(`--no-reset takes the requests you expect are left, a whole number; not ${values['no-reset']}`);
 			const project = requireProject(io);
 			const record = openRecord(project, taskId(project, values.task));
 			const section = { title, parts: sectionParts(await io.stdin(), project.file?.modules ?? []) };
 			const path = writeRecord(project.root, { ...record, sections: [...record.sections, section] });
 			io.out(`Section "${title}" recorded in ${path}`);
 			if (!section.parts.has('Decisions')) io.err(NO_DECISIONS);
-			report(await raise({ name: 'section.close', task: record.id, record: path, section }, project, io, adapters, registry), io);
+			report(await raise({ name: 'section.close', task: record.id, record: path, section, ...(noReset !== undefined && { noReset }) }, project, io, adapters, registry), io);
 			return 0;
 		},
 	};

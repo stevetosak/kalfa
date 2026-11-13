@@ -71,7 +71,7 @@ test('/meter sets the compact point for one session and is never sent', () => {
 	const on = meter('/meter on', { level: 0, compactAt: null }, 160_000);
 	assert.deepEqual([on.state.compactAt, on.state.level], [COMPACT_AT, 1], 'turned on past the compact point, the current level counts as told');
 	assert.match(meter('/meter', raised.state).verdict.action === 'block' ? (meter('/meter', raised.state).verdict as { reason: string }).reason : '', /compact point 300k/);
-	assert.match(parseMeter('/meter lots', COMPACT_AT)?.error ?? '', /off, on, or a compact point/);
+	assert.match(parseMeter('/meter lots', COMPACT_AT)?.error ?? '', /off, on, auto, or a compact point/);
 	assert.match(parseMeter('/meter 80k', COMPACT_AT)?.error ?? '', /100k or more/);
 	assert.equal(parseMeter('/metering', COMPACT_AT), undefined);
 	assert.equal(parseMeter('please /meter off', COMPACT_AT), undefined);

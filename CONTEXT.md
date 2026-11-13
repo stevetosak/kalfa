@@ -113,6 +113,14 @@ _Avoid_: main worktree, primary clone
 The list of every agent session in every Workspace, with its Task, state, context, idle time, cache state and Next.
 _Avoid_: dashboard, overview
 
+**Auto mode**:
+A mode of one session, turned on only for an autonomous run, in which the session resets itself at Section boundaries past the compact point instead of asking the Operator to compact.
+_Avoid_: autonomous compaction (for the mode), smart compaction, autopilot
+
+**Reset**:
+A Section close, a `/clear` and a continue word in one session, so the work goes on from the Task Record with a small context; in Auto mode it happens without the Operator.
+_Avoid_: compaction (a `/compact` is not a Reset), restart, handoff
+
 ### Memory
 
 **Memory layer**:

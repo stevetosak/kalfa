@@ -115,6 +115,8 @@ export const claudeAdapter: Adapter = {
 	capabilities: new Set<Capability>(['context-injection', 'command-block', 'transcript', 'task-list', 'status-line', 'background-agent', 'usage', 'turn-stop', 'compaction', 'instruction-file']),
 	// Claude Code sets CLAUDECODE=1 for the commands it runs.
 	detect: (env) => env.CLAUDECODE === '1',
+	// Not portable: Claude Code gives its commands the session id; another harness may not.
+	currentSession: (env) => env.CLAUDE_CODE_SESSION_ID || undefined,
 	toEvent,
 	render,
 	project: claudeProject,

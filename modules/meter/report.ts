@@ -5,7 +5,8 @@
 // a session's start against rewrites after a pause.
 import type { RequestRecord, SessionUsage, Trigger } from '../../src/core/usage.ts';
 import { BASELINE, COMPACT_AT, IDLE_MS } from './budget.ts';
-import { carryCost, requestCost } from './pricing.ts';
+import { carryCost, requestCost, writeCost } from './pricing.ts';
+import type { ResetEntry } from './reset.ts';
 
 /** A cache write this large is the whole context, not the newest turn. */
 const FULL_WRITE = 40_000;
@@ -152,7 +153,52 @@ export function topSessions(sessions: SessionUsage[], top: number): string[] {
 	];
 }
 
-export function report(sessions: SessionUsage[], top = 15, compactAt = COMPACT_AT): string {
+export function report(sessions: SessionUsage[], top = 15, compactAt = COMPACT_AT, resetLog: ResetEntry[] = []): string {
 	if (sessions.length === 0) return 'No requests in this period.';
-	return [overview(sessions), contextBands(sessions, compactAt), wakeups(sessions), cacheWrites(sessions), topSessions(sessions, top)].map((part) => part.join('\n')).join('\n\n');
+	return [overview(sessions), contextBands(sessions, compactAt), wakeups(sessions), cacheWrites(sessions), resets(resetLog, sessions), topSessions(sessions, top)]
+		.filter((part) => part.length)
+		.map((part) => part.join('\n'))
+		.join('\n\n');
+}
+
+/**
+ * Auto mode's Resets, measured: the cost is the cache write of the new
+ * session's first request; each request of the new session then saves
+ * reading the difference between the old context and the new start. A skip
+ * shows the agent's estimate against the requests that really followed, up
+ * to the session's next logged Section close.
+ */
+export function resets(entries: ResetEntry[], sessions: SessionUsage[]): string[] {
+	if (entries.length === 0) return [];
+	const byId = new Map(sessions.map((s) => [s.id, s]));
+	const count = (kind: ResetEntry['kind']) => entries.filter((e) => e.kind === kind).length;
+	const lines = [`Resets (Auto mode): ${count('reset')} done, ${count('skip')} skipped, ${count('failed')} failed.`];
+	for (const e of entries) {
+		const head = `  ${new Date(e.at).toISOString().slice(0, 16)} ${e.task} ${k(e.context)}`;
+		const estimate = e.payback === undefined ? '' : `, estimate ${e.payback}`;
+		if (e.kind === 'failed') {
+			lines.push(`${head}  failed: ${e.reason ?? 'no reason'}`);
+			continue;
+		}
+		if (e.kind === 'skip') {
+			// Each later Section close of the session is logged too and decides again, so a skip counts only up to it.
+			const until = entries.find((n) => n.from === e.from && n.at > e.at)?.at ?? Infinity;
+			const after = byId.get(e.from)?.requests.filter((r) => r.at > e.at && r.at <= until).length;
+			lines.push(`${head}  skipped: ${e.estimate} requests expected, ${after === undefined ? 'session not found' : `${after} followed`}${estimate}`);
+			continue;
+		}
+		const next = e.to ? byId.get(e.to) : undefined;
+		const first = next?.requests[0];
+		if (!next || !first) {
+			lines.push(`${head}  reset; the new session is not in this period's transcripts`);
+			continue;
+		}
+		const cost = writeCost(e.model, first);
+		const perRequest = carryCost(e.model, e.context - first.context);
+		const saved = perRequest * next.requests.length;
+		const needs = perRequest > 0 ? Math.ceil(cost / perRequest) : undefined;
+		const verdict = saved >= cost ? `paid back after ${needs}` : `not paid back yet (needs ${needs ?? '?'})`;
+		lines.push(`${head}→${k(first.context)}  cost ${dollars(cost)}  saved ${dollars(saved)} over ${next.requests.length} requests  ${verdict}${estimate}`);
+	}
+	return lines;
 }

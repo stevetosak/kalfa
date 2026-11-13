@@ -28,6 +28,8 @@ export interface Adapter {
 	user?: UserFiles;
 	/** Where this harness finds skills and commands, for `kalfa doctor`; `undefined` when kalfa cannot tell. */
 	skills?: SkillLookup;
+	/** The session a command runs inside, from the environment the harness gives its commands; `undefined` when it does not say. */
+	currentSession?(env: NodeJS.ProcessEnv): string | undefined;
 	/** How a new session of this harness starts; `undefined` when kalfa cannot start one. */
 	session?: SessionLaunch;
 	/**
