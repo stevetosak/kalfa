@@ -10,7 +10,7 @@ import { basename, join } from 'node:path';
 import { checkpointsDir, lastCheckpoint } from './checkpoint.ts';
 import { commitsSince, currentBranch, headTime } from './git.ts';
 import { findPlans, isOpenPlan, openAnywhere, parsePlan, planSummary, progressOf } from './plans.ts';
-import { PRIVATE_DIR, privateDir } from './private-dir.ts';
+import { stateDir, statePath } from './private-dir.ts';
 import { listRecords, recentDecisions, type TaskRecord, taskIdOf } from './task-record.ts';
 
 /** The Decisions of at most this many Sections, within DECISIONS_MAX characters. */
@@ -26,7 +26,7 @@ const newest = (times: (number | undefined)[]) => times.reduce<number | undefine
 /** The time of the last work in the repository: the HEAD commit, a Task Record or a Checkpoint written. */
 export function lastWork(root: string): Date | undefined {
 	const records = listRecords(root).map((r) => mtime(r.path));
-	const base = join(root, PRIVATE_DIR, 'checkpoints');
+	const base = statePath(root, 'checkpoints');
 	const checkpoints = existsSync(base) ? readdirSync(base).flatMap((task) => readdirSync(checkpointsDir(root, task)).map((f) => mtime(join(checkpointsDir(root, task), f)))) : [];
 	const time = newest([headTime(root)?.getTime(), ...records, ...checkpoints]);
 	return time === undefined ? undefined : new Date(time);
@@ -34,7 +34,7 @@ export function lastWork(root: string): Date | undefined {
 
 /** The last work, or the last session start when that is newer: a session with no commit is still activity. */
 export function lastActivity(root: string): Date | undefined {
-	const stamp = join(root, PRIVATE_DIR, SESSION_STAMP);
+	const stamp = statePath(root, SESSION_STAMP);
 	const time = newest([lastWork(root)?.getTime(), existsSync(stamp) ? mtime(stamp) : undefined]);
 	return time === undefined ? undefined : new Date(time);
 }
@@ -42,7 +42,7 @@ export function lastActivity(root: string): Date | undefined {
 /** Records that a session started now; skipped where git does not ignore `.kalfa/`. */
 export function markSession(root: string): void {
 	try {
-		writeFileSync(join(privateDir(root), SESSION_STAMP), `${new Date().toISOString()}\n`);
+		writeFileSync(join(stateDir(root), SESSION_STAMP), `${new Date().toISOString()}\n`);
 	} catch {
 		// No private folder: no stamp, and the next start counts from the last work.
 	}
