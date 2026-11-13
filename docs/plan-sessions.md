@@ -85,5 +85,5 @@ thresholds can be tuned from measured data.
 - [x] The skip: the meter note and `section close` give the payback point; `section close --no-reset <requests left>` skips, and the skip is recorded with that estimate. `task close` never resets.
 - [x] Past the compact point plus COMPACT_NOW_AFTER the meter tells the agent to close a Section now, with the in-flight state in Found and Next; auto mode never types `/compact`.
 - [x] Each reset and skip goes to `resets.jsonl` in the machine cache; `kalfa meter usage` gets a Resets part: cost, saving so far, payback reached.
-- [ ] Prove it in a real session: one autonomous run past the compact point.
-- [ ] Supersede the compact-not-handoff memory rule for auto mode.
+- [x] Prove it in a real session: one autonomous run past the compact point. In a scratch repository with the compact point at 100k, the agent skipped twice with `--no-reset`, then reset at 130k: the waiter outlived its Bash call, `/clear` gave a new session id, Auto mode moved to it, and `continue` loaded the Handoff, so the new session finished the Task from 47k. The first Reset cost $0.16 and pays back after 10 requests; the estimate said 41, because it assumes the new start is not cached.
+- [x] Supersede the compact-not-handoff memory rule for auto mode.

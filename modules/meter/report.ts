@@ -165,7 +165,8 @@ export function report(sessions: SessionUsage[], top = 15, compactAt = COMPACT_A
  * Auto mode's Resets, measured: the cost is the cache write of the new
  * session's first request; each request of the new session then saves
  * reading the difference between the old context and the new start. A skip
- * shows the agent's estimate against the requests that really followed.
+ * shows the agent's estimate against the requests that really followed, up
+ * to the session's next logged Section close.
  */
 export function resets(entries: ResetEntry[], sessions: SessionUsage[]): string[] {
 	if (entries.length === 0) return [];
@@ -180,7 +181,9 @@ export function resets(entries: ResetEntry[], sessions: SessionUsage[]): string[
 			continue;
 		}
 		if (e.kind === 'skip') {
-			const after = byId.get(e.from)?.requests.filter((r) => r.at > e.at).length;
+			// Each later Section close of the session is logged too and decides again, so a skip counts only up to it.
+			const until = entries.find((n) => n.from === e.from && n.at > e.at)?.at ?? Infinity;
+			const after = byId.get(e.from)?.requests.filter((r) => r.at > e.at && r.at <= until).length;
 			lines.push(`${head}  skipped: ${e.estimate} requests expected, ${after === undefined ? 'session not found' : `${after} followed`}${estimate}`);
 			continue;
 		}

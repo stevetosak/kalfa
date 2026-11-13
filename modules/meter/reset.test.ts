@@ -134,14 +134,17 @@ test('the Resets part measures cost and saving from the new session, and a skip 
 		[
 			{ ...base, at: NOW, kind: 'reset', from: 'old', to: 'new' },
 			{ ...base, at: NOW, kind: 'skip', from: 'kept', estimate: 4 },
+			{ ...base, at: NOW + 5, kind: 'skip', from: 'kept', estimate: 1 },
 			{ ...base, at: NOW, kind: 'failed', from: 'x', reason: '/clear showed no new session id' },
 		],
 		sessions,
 	);
-	assert.equal(lines[0], 'Resets (Auto mode): 1 done, 1 skipped, 1 failed.');
+	assert.equal(lines[0], 'Resets (Auto mode): 1 done, 2 skipped, 1 failed.');
 	// $0.56 written; 90k less read a request is $0.018, over 40 requests $0.72.
 	assert.match(lines[1]!, /160k→70k {2}cost \$0\.56 {2}saved \$0\.72 over 40 requests {2}paid back after 32, estimate 28/);
-	assert.match(lines[2]!, /skipped: 4 requests expected, 2 followed/);
-	assert.match(lines[3]!, /failed: \/clear showed no new session id/);
+	// The session's next close at NOW + 5 ends the first skip's count.
+	assert.match(lines[2]!, /skipped: 4 requests expected, 1 followed/);
+	assert.match(lines[3]!, /skipped: 1 requests expected, 1 followed/);
+	assert.match(lines[4]!, /failed: \/clear showed no new session id/);
 	assert.deepEqual(resets([], sessions), []);
 });
