@@ -7,7 +7,8 @@
 import { accessSync, constants } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { basename, delimiter, join } from 'node:path';
-import type { SessionLaunch } from '../../src/adapters/adapter.ts';
+import type { SessionLaunch, SessionStart } from '../../src/adapters/adapter.ts';
+import { mainCheckout } from '../../src/core/private-dir.ts';
 import type { Launcher } from './successor.ts';
 
 /** Runs the herdr CLI and returns its stdout; throws on a non-zero exit. */
@@ -23,7 +24,7 @@ export const START_TIMEOUT_MS = 60_000;
 
 const NAME_LIMIT = 32;
 
-interface Opened {
+export interface Opened {
 	workspace: string;
 	tab: string;
 	pane: string;
@@ -68,60 +69,82 @@ const idOf = (value: unknown, key: string): string => {
 	return id;
 };
 
-/** A new tab in the project's workspace, or a new workspace when the project has none. */
-function openTab(exec: HerdrExec, cwd: string, project: string, title: string): Opened {
+/** The workspace of a repository: the one labelled with its main checkout's folder name. */
+export const workspaceLabel = (root: string) => basename(mainCheckout(root));
+
+/** The id of the workspace with this label, if Herdr has one. */
+export function findWorkspace(exec: HerdrExec, label: string): string | undefined {
 	const { workspaces } = parse(exec(['workspace', 'list'])).result as { workspaces: { workspace_id: string; label: string }[] };
-	const existing = workspaces.find((w) => w.label === project);
-	if (existing) {
-		const { result } = parse(exec(['tab', 'create', '--workspace', existing.workspace_id, '--cwd', cwd, '--label', title, '--no-focus']));
-		return { workspace: existing.workspace_id, tab: idOf(result.tab, 'tab_id'), pane: idOf(result.root_pane, 'pane_id') };
+	return workspaces.find((w) => w.label === label)?.workspace_id;
+}
+
+/** A new tab titled `title` in `workspace`, or in a new workspace labelled `label` when there is none. */
+export function newTab(exec: HerdrExec, workspace: string | undefined, label: string, cwd: string, title: string): Opened {
+	if (workspace) {
+		const { result } = parse(exec(['tab', 'create', '--workspace', workspace, '--cwd', cwd, '--label', title, '--no-focus']));
+		return { workspace, tab: idOf(result.tab, 'tab_id'), pane: idOf(result.root_pane, 'pane_id') };
 	}
-	const { result } = parse(exec(['workspace', 'create', '--cwd', cwd, '--label', project, '--no-focus']));
+	const { result } = parse(exec(['workspace', 'create', '--cwd', cwd, '--label', label, '--no-focus']));
 	const opened = { workspace: idOf(result.workspace, 'workspace_id'), tab: idOf(result.tab, 'tab_id'), pane: idOf(result.root_pane, 'pane_id') };
 	exec(['tab', 'rename', opened.tab, title]);
 	return opened;
 }
 
-function liveNames(exec: HerdrExec): Set<string> {
+/** A new tab in the repository's workspace, or a new workspace when it has none. */
+function openTab(exec: HerdrExec, cwd: string, title: string): Opened {
+	const label = workspaceLabel(cwd);
+	return newTab(exec, findWorkspace(exec, label), label, cwd, title);
+}
+
+export function liveNames(exec: HerdrExec): Set<string> {
 	const { agents } = parse(exec(['agent', 'list'])).result as { agents: { name?: string }[] };
 	return new Set(agents.flatMap((a) => (a.name ? [a.name] : [])));
 }
 
 /** Focus is a convenience: a failure is reported, never fatal, since the session runs. */
-function focus(exec: HerdrExec, opened: Opened): string {
+export function focus(exec: HerdrExec, opened: Pick<Opened, 'workspace'> & Partial<Pick<Opened, 'tab'>>): string {
 	try {
 		exec(['workspace', 'focus', opened.workspace]);
-		exec(['tab', 'focus', opened.tab]);
+		if (opened.tab) exec(['tab', 'focus', opened.tab]);
 		return 'focus moved there';
 	} catch (error) {
 		return `focus did not move (${errorText(error)})`;
 	}
 }
 
-/** `kind` is the harness as Herdr names it (`herdr agent start --kind`); kalfa's Adapter names match. */
+/**
+ * Starts the harness `kind` as a Herdr agent in the pane of `opened`; Herdr's
+ * names for harnesses match kalfa's Adapters. `taken` holds the agent names
+ * in use, and gets the new one. Returns what happened, for the Operator;
+ * `where` names the tab in that text.
+ */
+export function startAgent(exec: HerdrExec, opened: Opened, kind: string, session: SessionLaunch, start: SessionStart, where: string, taken: Set<string>): string {
+	const agent = agentName(start.name, taken);
+	taken.add(agent);
+	try {
+		exec(['agent', 'start', agent, '--kind', kind, '--pane', opened.pane, '--timeout', String(START_TIMEOUT_MS), '--', ...session.interactive(start)]);
+	} catch (error) {
+		const text = errorText(error);
+		// Blocked at start: the harness runs and waits at a question, most often the trust prompt of a new folder.
+		if (text.includes('agent_not_ready')) return `${kind} started as agent ${agent} in ${where}, but waits at a prompt: accept the trust prompt (or answer it) in that tab`;
+		// After `agent start`, an error does not prove that no session started.
+		throw new Error(`herdr agent start failed in ${where}; a session may run there, so look before starting another: ${text}`);
+	}
+	return `Started agent ${agent} (${kind}) in ${where}`;
+}
+
+/** The successor's launcher inside Herdr: a new tab in the repository's workspace. */
 export function herdrTab(kind: string, session: SessionLaunch, exec: HerdrExec = herdrCli): Launcher {
 	return (launch) => {
-		const project = basename(launch.cwd);
 		let opened: Opened;
-		let agent: string;
+		let taken: Set<string>;
 		try {
-			opened = openTab(exec, launch.cwd, project, launch.name);
-			agent = agentName(launch.name, liveNames(exec));
+			opened = openTab(exec, launch.cwd, launch.name);
+			taken = liveNames(exec);
 		} catch (error) {
 			throw new HerdrSetupError(`Herdr tab setup failed: ${errorText(error)}`);
 		}
-		const where = `tab "${launch.name}" (${opened.tab}) in workspace ${project} (${opened.workspace})`;
-		try {
-			exec(['agent', 'start', agent, '--kind', kind, '--pane', opened.pane, '--timeout', String(START_TIMEOUT_MS), '--', ...session.interactive(launch)]);
-		} catch (error) {
-			const text = errorText(error);
-			// Blocked at start: the harness runs and waits at a question, most often the trust prompt of a new folder.
-			if (text.includes('agent_not_ready')) {
-				return `${kind} started as agent ${agent} in ${where}, but waits at a prompt: accept the trust prompt (or answer it) in that tab; ${focus(exec, opened)}.`;
-			}
-			// After `agent start`, an error does not prove that no session started.
-			throw new Error(`herdr agent start failed in ${where}; a session may run there, so look before starting another: ${text}`);
-		}
-		return `Started agent ${agent} (${kind}) in ${where}; ${focus(exec, opened)}.`;
+		const where = `tab "${launch.name}" (${opened.tab}) in workspace ${workspaceLabel(launch.cwd)} (${opened.workspace})`;
+		return `${startAgent(exec, opened, kind, session, launch, where, taken)}; ${focus(exec, opened)}.`;
 	};
 }

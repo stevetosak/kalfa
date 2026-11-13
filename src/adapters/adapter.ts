@@ -85,10 +85,10 @@ export interface OwnedSetting {
 	why: string;
 }
 
-/** A new session: its name and the prompt it starts on. */
+/** A new session: its name and the prompt it starts on; without a prompt it waits for the Operator. */
 export interface SessionStart {
 	name: string;
-	prompt: string;
+	prompt?: string;
 	model?: string;
 }
 

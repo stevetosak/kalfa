@@ -6,7 +6,7 @@ import type { MemoryExtension } from '../cli/commands/memory.ts';
 import { docsCommand } from '../../modules/docs/command.ts';
 import { docsModule } from '../../modules/docs/handlers.ts';
 import { guardrailsModule } from '../../modules/guardrails/handlers.ts';
-import { boardCommand, herdrCommand } from '../../modules/herdr/command.ts';
+import { boardCommand, herdrCommand, spaceCommand } from '../../modules/herdr/command.ts';
 import { herdrModule } from '../../modules/herdr/handlers.ts';
 import { memoryExtension } from '../../modules/memory/command.ts';
 import { memoryModule } from '../../modules/memory/handlers.ts';
@@ -24,6 +24,7 @@ export const moduleCommands: Record<string, (adapters: ReadonlyMap<string, Adapt
 	docs: () => docsCommand(),
 	herdr: (adapters) => herdrCommand(adapters),
 	board: (adapters) => boardCommand(adapters),
+	space: (adapters) => spaceCommand(adapters),
 	meter: (adapters) => meterCommand(adapters),
 	defer: () => deferCommand(),
 };
