@@ -64,7 +64,7 @@ and keeps what it wrote.
 - [x] Private state in the main checkout: a worktree's Task Records, Checkpoints and session stamp go to the main checkout's `.kalfa/`; the event table and wake markers stay in each checkout, where the hook shim looks.
 - [x] Preset format in the herdr Module's machine settings (never `kalfa.yaml`): `presets` of ordered tabs, each `agent: <adapter>` or `run: <command>` with one pane, a `default-preset`, and `space-dirs` for bare repository names.
 - [x] `kalfa space open <repo> [--preset <name>]`: the Workspace labelled with the repository's folder name; a new one gets the preset's tabs and focus; an existing one is focused, and gets tabs only with an explicit `--preset`.
-- [ ] `--task <branch> "<goal>" --done-when "<check>" [--plan <path>]`: `git fetch`, a worktree in `<parent>/<repo>.worktrees/<task>` on a new branch from the remote default branch (or the existing branch), the Task Record, then the preset's tabs in the repository's Workspace, labelled with the Task id, the agent tab on the successor prompt. An existing Task needs only `--task`.
+- [x] `--task <branch> "<goal>" --done-when "<check>" [--plan <path>]`: `git fetch`, a worktree in `<parent>/<repo>.worktrees/<task>` on a new branch from the remote default branch (or the existing branch), the Task Record, then the preset's tabs in the repository's Workspace, labelled with the Task id, the agent tab on the successor prompt. An existing Task needs only `--task`.
 
 Worktree cleanup after a Task closes is a deferred item, not a step here.
 
