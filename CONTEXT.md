@@ -95,6 +95,24 @@ _Avoid_: Lesson candidate, learning, takeaway
 An accepted rule that came from a fault, with a link to the proof of that fault.
 _Avoid_: learning, takeaway
 
+### Sessions
+
+**Workspace**:
+The Herdr workspace of one repository, labelled with the repository's folder name; its tabs hold the agent sessions and tools of that repository and of its worktrees.
+_Avoid_: space, project window, session group
+
+**Preset**:
+A named, ordered list of tabs (agent tabs and command tabs) that a Workspace opens with; it is the Operator's own, kept in the machine settings.
+_Avoid_: layout, template, profile
+
+**Main checkout**:
+The repository's first working folder, the one its worktrees point back to; it holds the private state of every worktree's Tasks.
+_Avoid_: main worktree, primary clone
+
+**Board**:
+The list of every agent session in every Workspace, with its Task, state, context, idle time, cache state and Next.
+_Avoid_: dashboard, overview
+
 ### Memory
 
 **Memory layer**:
