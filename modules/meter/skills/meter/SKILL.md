@@ -1,8 +1,8 @@
 ---
 name: meter
-description: Sets the context meter for this session. `/meter off` stops the /compact reminders, `/meter 300k` moves the compact point, `/meter on` puts the project's compact point back, `/meter` alone shows the setting. Typed by the Operator only.
+description: Sets the context meter for this session. `/meter off` stops the /compact reminders, `/meter 300k` moves the compact point, `/meter on` puts the project's compact point back, `/meter auto` turns on Auto mode (inside Herdr, the session resets itself at the next Section close past the compact point), `/meter` alone shows the setting. Typed by the Operator only.
 disable-model-invocation: true
-argument-hint: off | on | <N>k
+argument-hint: off | on | auto | <N>k
 ---
 
 The kalfa `meter` Module answers `/meter` in the prompt hook, before the

@@ -51,6 +51,13 @@ export function requestCost(model: string, u: TokenUsage): Cost {
 	return { ...cost, total: cost.input + cost.output + cost.write + cost.read };
 }
 
+/** What one request's cache writes cost. */
+export function writeCost(model: string, request: { usage: TokenUsage }): number {
+	const p = pricesFor(model);
+	const { cacheWrite } = request.usage;
+	return p ? (cacheWrite['5m'] * WRITE_MULTIPLIER['5m'] + cacheWrite['1h'] * WRITE_MULTIPLIER['1h']) * perToken(p.input) : 0;
+}
+
 /** What writing `tokens` to the prompt cache costs, as after the cache expired. */
 export function rewriteCost(model: string, tokens: number, ttl: CacheTtl): number {
 	const p = pricesFor(model);
@@ -61,4 +68,15 @@ export function rewriteCost(model: string, tokens: number, ttl: CacheTtl): numbe
 export function carryCost(model: string, tokens: number): number {
 	const p = pricesFor(model);
 	return p ? tokens * perToken(p.read) : 0;
+}
+
+/**
+ * The requests after which a Reset at `context` has paid for itself: the new
+ * session writes `start` tokens to the cache once, then each request reads
+ * `context - start` fewer. An estimate: whether the start is already in the
+ * cache decides most of it, and the Resets part of the usage report measures it.
+ */
+export function paybackRequests(model: string, context: number, start: number): number | undefined {
+	const saving = carryCost(model, context - start);
+	return saving > 0 ? Math.ceil(rewriteCost(model, start, '1h') / saving) : undefined;
 }

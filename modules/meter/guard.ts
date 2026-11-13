@@ -10,14 +10,17 @@
 //   to remind the Operator to compact (at the end of the current Section
 //   first). `/meter off|on|<N>k` sets it for one session; the meter answers
 //   it itself, so the prompt never reaches the model.
+//   Auto mode (`/meter auto`, only inside Herdr): the session resets itself
+//   at the next Section close past the compact point (reset.ts), so the agent
+//   is told to close a Section, not to remind the Operator.
 //   Idle guard: after IDLE_MS without a request, from GUARD_FROM tokens,
 //   nothing writes the context again unasked: a typed prompt is held once; a
 //   Monitor expiry notice is dropped; a tool result that waited on the
 //   Operator ends the turn before the request.
 // The prompt and tool names below are Claude Code's; another harness adds its own.
 import type { LastRequest } from '../../src/core/usage.ts';
-import { COMPACT_NOW_AFTER, GUARD_FROM, IDLE_MS, REPEAT_EVERY } from './budget.ts';
-import { rewriteCost } from './pricing.ts';
+import { BASELINE, COMPACT_NOW_AFTER, GUARD_FROM, IDLE_MS, REPEAT_EVERY } from './budget.ts';
+import { paybackRequests, rewriteCost } from './pricing.ts';
 
 /** Tools whose run time is the Operator's answer, not work. */
 const OPERATOR_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
@@ -29,6 +32,8 @@ export interface MeterState {
 	guardedFor?: number;
 	/** This session's compact point, set by /meter: tokens, or null when the meter is off. Unset is the project's. */
 	compactAt?: number | null;
+	/** Auto mode: the session resets itself at a Section close past the compact point. */
+	auto?: boolean;
 }
 
 /**
@@ -44,33 +49,47 @@ export function meterLevel(context: number, compactAt: number | null): number {
 
 const k = (tokens: number) => `${Math.round(tokens / 1000)}k`;
 
-export function meterNote(context: number, level: number, compactAt: number): string {
+/** The reminder at a new level; in Auto mode the agent closes a Section and the session resets, with `payback` the estimate of when a Reset pays for itself. */
+export function meterNote(context: number, level: number, compactAt: number, auto?: { payback: number | undefined }): string {
+	if (auto) {
+		if (level === 1) {
+			const payback = auto.payback === undefined ? '' : ` A Reset pays back after about ${auto.payback} requests at this context (an estimate); if the Task needs fewer before it closes, pass \`--no-reset <requests left>\`.`;
+			return `Context: ${k(context)} tokens (compact point ${k(compactAt)}, Auto mode). Finish the current logical section, then commit and run \`kalfa section close\`: in Auto mode it resets this session when your turn ends (/clear, then "continue" loads the Handoff), without the Operator.${payback} Do not remind the operator to compact.`;
+		}
+		return `Context: ${k(context)} tokens, past the compact point (Auto mode). Close a Section now, even in the middle of a step: put the in-flight state (what is half done, the files, the next action) in Found and Next. \`kalfa section close\` then resets this session when your turn ends.`;
+	}
 	if (level === 1) {
 		return `Context: ${k(context)} tokens (compact point ${k(compactAt)}). Every request re-sends all of it. Finish the current logical section, then: commit, record it with \`kalfa section close\` if a Task is open, stop the monitors and background tasks you started, and remind the operator to run /compact. Do not hand off.`;
 	}
 	return `Context: ${k(context)} tokens, past the compact point. Remind the operator to run /compact now, before you start new work. Do not hand off.`;
 }
 
-/** The /meter prompt: `off`, `on`, `<N>k`, or nothing to show the setting. */
+/** The /meter prompt: `off`, `on`, `auto`, `<N>k`, or nothing to show the setting. */
 const METER = /^\/meter(?:\s+(\S+))?\s*$/;
 
-/** The setting a /meter prompt asks for; `undefined` when the prompt is not /meter. `on` is the project's compact point. */
-export function parseMeter(prompt: string, projectCompactAt: number): { compactAt?: number | null; show?: true; error?: string } | undefined {
+/**
+ * The setting a /meter prompt asks for; `undefined` when the prompt is not
+ * /meter. `on` is the project's compact point; `auto` keeps the compact
+ * point; `off` and `on` end Auto mode, a compact point keeps it (`auto` unset).
+ */
+export function parseMeter(prompt: string, projectCompactAt: number): { compactAt?: number | null; auto?: boolean; show?: true; error?: string } | undefined {
 	const m = METER.exec(prompt.trim());
 	if (!m) return undefined;
 	const arg = m[1]?.toLowerCase();
 	if (arg === undefined) return { show: true };
-	if (arg === 'off') return { compactAt: null };
-	if (arg === 'on') return { compactAt: projectCompactAt };
+	if (arg === 'off') return { compactAt: null, auto: false };
+	if (arg === 'on') return { compactAt: projectCompactAt, auto: false };
+	if (arg === 'auto') return { auto: true };
 	const n = /^(\d+)k$/.exec(arg);
-	if (!n) return { error: `/meter takes off, on, or a compact point such as 300k; not "${m[1]}".` };
+	if (!n) return { error: `/meter takes off, on, auto, or a compact point such as 300k; not "${m[1]}".` };
 	const tokens = Number(n[1]) * 1000;
 	if (tokens < GUARD_FROM) return { error: `/meter: the compact point is ${k(GUARD_FROM)} or more; below it the meter does not run.` };
 	return { compactAt: tokens };
 }
 
-function meterSetting(compactAt: number | null): string {
+function meterSetting(compactAt: number | null, auto?: boolean): string {
 	if (compactAt === null) return 'off for this session: no /compact reminders. The idle guard stays on';
+	if (auto) return `Auto mode for this session: past the compact point ${k(compactAt)}, the next Section close resets it (/clear, then continue) without you; from ${k(compactAt + COMPACT_NOW_AFTER)} the agent closes a Section at once. /meter on ends Auto mode`;
 	return `compact point ${k(compactAt)} for this session, then a reminder every ${k(REPEAT_EVERY)} from ${k(compactAt + COMPACT_NOW_AFTER)}`;
 }
 
@@ -98,6 +117,10 @@ export interface GuardInput {
 	compactAt: number;
 	/** What the Operator can do instead of going on here; read only when the idle guard speaks. */
 	fresh: () => string;
+	/** The session runs in a Herdr pane, so Auto mode can type its Reset. */
+	herdr?: boolean;
+	/** The tokens a fresh session starts with, for the payback estimate of Auto mode. */
+	start?: number;
 }
 
 export type Verdict = { action: 'allow'; note?: string } | { action: 'block'; reason: string; quiet: boolean } | { action: 'stop'; reason: string };
@@ -140,11 +163,15 @@ export function decide(input: GuardInput): { verdict: Verdict; state: MeterState
 	if (meter) {
 		// Answered here and never sent: a setting is not worth a request.
 		if (meter.error) return { verdict: { action: 'block', quiet: true, reason: meter.error }, state: input.state };
-		if (meter.show) return { verdict: { action: 'block', quiet: true, reason: `Context meter: ${meterSetting(compactPoint)}.` }, state: input.state };
-		const compactAt = meter.compactAt ?? null;
-		// The level the context is at now counts as told: the meter speaks at the next one.
-		const state = { ...input.state, compactAt, level: meterLevel(input.last.context, compactAt) };
-		return { verdict: { action: 'block', quiet: true, reason: `Context meter: ${meterSetting(compactAt)}. The context is ${k(input.last.context)} tokens.` }, state };
+		if (meter.show) return { verdict: { action: 'block', quiet: true, reason: `Context meter: ${meterSetting(compactPoint, input.state.auto)}.` }, state: input.state };
+		if (meter.auto && !input.herdr) return { verdict: { action: 'block', quiet: true, reason: '/meter auto: Auto mode types its Reset into the Herdr pane, and this session is not in one. The setting did not change.' }, state: input.state };
+		const auto = meter.auto ?? input.state.auto ?? false;
+		const compactAt = meter.compactAt === undefined ? (compactPoint ?? input.compactAt) : meter.compactAt;
+		// The level the context is at now counts as told; at /meter auto it does not, so a session past the compact point hears it next.
+		const level = meter.auto ? 0 : meterLevel(input.last.context, compactAt);
+		const { auto: _, ...rest } = input.state;
+		const state: MeterState = { ...rest, compactAt, level, ...(auto && { auto: true }) };
+		return { verdict: { action: 'block', quiet: true, reason: `Context meter: ${meterSetting(compactAt, state.auto)}. The context is ${k(input.last.context)} tokens.` }, state };
 	}
 	const idle = idleVerdict(input);
 	if (idle) {
@@ -152,7 +179,10 @@ export function decide(input: GuardInput): { verdict: Verdict; state: MeterState
 		return { verdict: idle, state: { ...input.state, guardedFor: seen } };
 	}
 	const level = meterLevel(input.last.context, compactPoint);
-	if (level > input.state.level) return { verdict: { action: 'allow', note: meterNote(input.last.context, level, compactPoint ?? input.compactAt) }, state: { ...input.state, level } };
+	if (level > input.state.level) {
+		const auto = input.state.auto ? { payback: paybackRequests(input.last.model, input.last.context, input.start ?? BASELINE) } : undefined;
+		return { verdict: { action: 'allow', note: meterNote(input.last.context, level, compactPoint ?? input.compactAt, auto) }, state: { ...input.state, level } };
+	}
 	// After a compact the context shrinks: start counting again.
 	return { verdict: { action: 'allow' }, state: { ...input.state, level: Math.min(level, input.state.level) } };
 }

@@ -239,3 +239,15 @@ test('a repository without Plans or Tasks gets no session report', async () => {
 	const context = { project: { root, file: { schema: 1 as const, modules: [], plans: [], settings: {} } }, settings: { schema: 1 as const, modules: [] }, env: { HOME: tempDir() }, capabilities: new Set<never>() };
 	assert.equal(await coreModule.handlers['session.start']!({ harness: 'fake', cwd: root, name: 'session.start', source: 'startup' }, context), undefined);
 });
+
+test('section close hands the handlers the session the harness names, and --no-reset', async () => {
+	const seen: unknown[] = [];
+	const spy = { name: 'docs', handlers: { 'section.close': (event: unknown) => void seen.push(event) } };
+	const withSession = new Map([['fake', { ...fakeAdapter, currentSession: (env: NodeJS.ProcessEnv) => env.FAKE_SESSION }]]);
+	const close = sectionCommand(withSession, registry(coreModule, spy));
+	const root = repo();
+	await task.run(['start', '--done-when', 'it works', 'Build'], captureIo(root, inHarness));
+	await close.run(['close', 'one', '--no-reset', '4'], captureIo(root, { ...inHarness, FAKE_SESSION: 's9' }, '**Done:** x\n'));
+	assert.deepEqual(seen.map((e) => [(e as { sessionId?: string }).sessionId, (e as { noReset?: number }).noReset]), [['s9', 4]]);
+	await assert.rejects(close.run(['close', 'two', '--no-reset', 'few'], captureIo(root, inHarness, '**Done:** x\n')), /--no-reset takes the requests/);
+});

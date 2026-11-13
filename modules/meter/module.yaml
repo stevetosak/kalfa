@@ -1,5 +1,5 @@
 schema: 1
-description: The context meter (reminds the Operator to compact), the idle guard (stops a cold session from writing its whole context again unasked), the usage-limit tap of the status line and the usage report.
+description: The context meter (reminds the Operator to compact, or in Auto mode resets the session itself at a Section close through Herdr), the idle guard (stops a cold session from writing its whole context again unasked), the usage-limit tap of the status line and the usage report.
 needs:
   - capability: usage
     without: no meter and no idle guard, because kalfa cannot see the context size

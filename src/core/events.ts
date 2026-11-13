@@ -39,8 +39,8 @@ export type CoreEvent = EventBase &
 		| { name: 'compact.before'; trigger: CompactTrigger; instructions?: string }
 		/** The harness has summarised the session; `summary` replaces the conversation from now on. */
 		| { name: 'compact.after'; trigger: CompactTrigger; summary: string }
-		/** Raised by `kalfa section close` after the Section is written. */
-		| { name: 'section.close'; task: string; record: string; section: Section }
+		/** Raised by `kalfa section close` after the Section is written; `noReset`: the agent skips an Auto mode Reset and estimates this many requests left. */
+		| { name: 'section.close'; task: string; record: string; section: Section; noReset?: number }
 		/** Raised by `kalfa task close` after the record is closed. */
 		| { name: 'task.close'; task: string; record: string }
 	);
