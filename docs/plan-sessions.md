@@ -70,15 +70,20 @@ Worktree cleanup after a Task closes is a deferred item, not a step here.
 
 ## 5. Autonomous compaction
 
-A per-session mode, never a project setting. Each reset must pay back its
-cost: at 150k tokens on Opus 5.5 a Section close, `/clear` and continue pays
-back after about 9 requests, a `/compact` after about 35 (estimates).
+A per-session mode, never a project setting. A grill on 2026-11-13 settled it:
+the reset is a Section close, `/clear` and continue, never a `/compact`,
+because a Section close is a summary the agent writes with the whole context
+for a few output tokens, and it stays in the Task Record. The payback point
+starts as an estimate; the cost of each real reset is recorded so that the
+thresholds can be tuned from measured data.
 
-**Done when:** a session in auto mode passes the compact point, resets at a Section boundary without the Operator, and goes on with the Task; the cost of each reset is recorded and stays below what it saves.
+**Done when:** a session in auto mode passes the compact point, resets at a Section boundary without the Operator, and goes on with the Task; the cost and the saving of each reset are measured from the transcripts and shown in `kalfa meter usage`.
 
-- [ ] `/meter auto` and `kalfa meter auto` for the agent when the Operator asks for an autonomous run; the mode is kept in the Task Record header.
-- [ ] At the compact point, at the next Section boundary: Section close, `/clear`, continue word, through Herdr; check the new session id, not the exit code.
-- [ ] Skip the reset when the remaining work is under the payback point.
-- [ ] `/compact` with the PreCompact focus only when no Section boundary comes within COMPACT_NOW_AFTER.
-- [ ] Record each reset's cost; the usage report cannot see the compaction request in the transcript, so measure it another way.
+- [x] Decide the trigger, the skip rule, the mode's place and the cost record in a grill.
+- [x] Auto mode: `/meter auto` (the Operator) and `kalfa meter auto` (the agent, only when the Operator asks for an autonomous run), kept in the per-session meter state; only inside Herdr.
+- [x] The reset: in auto mode past the compact point, with the Task open, `kalfa section close` starts a detached waiter: the pane goes idle or done, `/clear`, a new session id (checked through Herdr, not the exit code), the meter state carried to it, `continue`.
+- [x] The skip: the meter note and `section close` give the payback point; `section close --no-reset <requests left>` skips, and the skip is recorded with that estimate. `task close` never resets.
+- [x] Past the compact point plus COMPACT_NOW_AFTER the meter tells the agent to close a Section now, with the in-flight state in Found and Next; auto mode never types `/compact`.
+- [x] Each reset and skip goes to `resets.jsonl` in the machine cache; `kalfa meter usage` gets a Resets part: cost, saving so far, payback reached.
+- [ ] Prove it in a real session: one autonomous run past the compact point.
 - [ ] Supersede the compact-not-handoff memory rule for auto mode.
