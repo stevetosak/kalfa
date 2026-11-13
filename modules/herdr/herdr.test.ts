@@ -125,7 +125,7 @@ test('the launcher: Herdr only inside Herdr with herdr on PATH; a setup error fa
 });
 
 test('a harness without background sessions: outside Herdr the launcher says how to start one by hand', () => {
-	const noBackground: Adapter = { ...fakeAdapter, session: { program: 'fake', interactive: ({ prompt }) => [prompt] } };
+	const noBackground: Adapter = { ...fakeAdapter, session: { program: 'fake', interactive: ({ prompt }) => [prompt ?? ''] } };
 	assert.throws(() => defaultLauncher(noBackground, {})(launch), /not inside Herdr, and fake has no background sessions; start one in \/home\/op\/Projects\/kalfa on the prompt: Continue/);
 	assert.throws(() => defaultLauncher(fakeAdapter, {}), /kalfa cannot start a fake session/);
 });

@@ -41,6 +41,18 @@ function requirePlan(project: Project, path: string): void {
 
 const today = () => new Date().toLocaleDateString('sv-SE');
 
+/** Writes a new open Task Record on the checked-out branch and returns its path; refused when the id exists. */
+export function startTask(project: Project, id: string, task: { goal: string; doneWhen: string; plan?: string }): string {
+	if (task.plan) requirePlan(project, task.plan);
+	const existing = readRecord(project.root, id);
+	if (existing) throw new KalfaError(`Task '${id}' already exists (${existing.header.status}); name another with --task <id>`);
+	return writeRecord(project.root, {
+		id,
+		header: { schema: 1, goal: task.goal, branch: currentBranch(project.root), plan: task.plan, 'done-when': task.doneWhen, status: 'open', started: today() },
+		sections: [],
+	});
+}
+
 export function taskCommand(adapters: ReadonlyMap<string, Adapter>, registry: ReadonlyMap<string, ModuleDefinition>): Command {
 	const subcommands: Record<string, (args: string[], io: Io) => Promise<number>> = {
 		async start(args, io) {
@@ -51,15 +63,7 @@ export function taskCommand(adapters: ReadonlyMap<string, Adapter>, registry: Re
 			if (!doneWhen) throw new UsageError('give --done-when "<what is true when the Task is done>"; work found after it becomes an open record or a new Plan');
 			const project = requireProject(io);
 			const id = taskId(project, values.task);
-			if (values.plan) requirePlan(project, values.plan);
-			const existing = readRecord(project.root, id);
-			if (existing) throw new KalfaError(`Task '${id}' already exists (${existing.header.status}); name another with --task <id>`);
-			const path = writeRecord(project.root, {
-				id,
-				header: { schema: 1, goal, branch: currentBranch(project.root), plan: values.plan, 'done-when': doneWhen, status: 'open', started: today() },
-				sections: [],
-			});
-			io.out(`Task ${id} started: ${path}`);
+			io.out(`Task ${id} started: ${startTask(project, id, { goal, doneWhen, plan: values.plan })}`);
 			return 0;
 		},
 		async close(args, io) {

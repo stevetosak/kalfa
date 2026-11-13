@@ -108,7 +108,7 @@ function render(event: CoreEvent, result: DispatchResult): HookOutput {
 	return { stdout: Object.keys(output).length ? JSON.stringify(output) : undefined, exitCode: 0 };
 }
 
-const sessionArgs = ({ name, prompt, model }: SessionStart) => ['-n', name, ...(model ? ['--model', model] : []), prompt];
+const sessionArgs = ({ name, prompt, model }: SessionStart) => ['-n', name, ...(model ? ['--model', model] : []), ...(prompt ? [prompt] : [])];
 
 export const claudeAdapter: Adapter = {
 	name: 'claude',

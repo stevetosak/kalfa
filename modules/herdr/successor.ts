@@ -12,6 +12,8 @@ import { HerdrSetupError, herdrTab, inHerdr } from './launcher.ts';
 export interface Launch extends SessionStart {
 	/** The folder the session starts in: the repository root. */
 	cwd: string;
+	/** A successor always starts on its prompt. */
+	prompt: string;
 }
 
 /** Starts a session and returns what the starter printed. */

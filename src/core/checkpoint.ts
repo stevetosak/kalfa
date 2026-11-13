@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse, stringify } from 'yaml';
-import { PRIVATE_DIR, privateDir } from './private-dir.ts';
+import { stateDir, statePath } from './private-dir.ts';
 
 /** How many Checkpoints of one Task are kept. */
 export const CHECKPOINTS_KEPT = 5;
@@ -22,7 +22,7 @@ export interface Checkpoint {
 }
 
 export function checkpointsDir(root: string, task: string): string {
-	return join(root, PRIVATE_DIR, 'checkpoints', task);
+	return statePath(root, 'checkpoints', task);
 }
 
 /** `2026-11-12T20:05:07.123Z` → `20261112T200507Z`: sorts by time, safe in a file name. */
@@ -31,7 +31,7 @@ const safe = (word: string) => word.replace(/[^A-Za-z0-9_-]+/g, '-') || 'unknown
 
 /** Writes the Checkpoint and drops the oldest beyond CHECKPOINTS_KEPT; refused unless git ignores `.kalfa/`. Returns its path. */
 export function writeCheckpoint(root: string, checkpoint: Omit<Checkpoint, 'path'>): string {
-	privateDir(root);
+	stateDir(root);
 	const dir = checkpointsDir(root, checkpoint.task);
 	mkdirSync(dir, { recursive: true });
 	const path = join(dir, `${stamp(checkpoint.at)}-${safe(checkpoint.trigger)}.md`);

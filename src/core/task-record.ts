@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { stringify } from 'yaml';
 import { z } from 'zod';
 import { KalfaError } from './errors.ts';
-import { PRIVATE_DIR, privateDir } from './private-dir.ts';
+import { stateDir, statePath } from './private-dir.ts';
 import { parseVersioned, type VersionedFormat } from './versioned-file.ts';
 
 /** The Core's parts, in the order a Section prints them. Module parts are `<module>.<part>`. */
@@ -176,7 +176,7 @@ export function parseRecord(text: string, path: string, id: string): TaskRecord 
 }
 
 export function tasksDir(root: string): string {
-	return join(root, PRIVATE_DIR, 'tasks');
+	return statePath(root, 'tasks');
 }
 
 export function recordPath(root: string, id: string): string {
@@ -191,7 +191,7 @@ export function readRecord(root: string, id: string): TaskRecord | undefined {
 
 /** Writes the record; refused unless git ignores `.kalfa/`. */
 export function writeRecord(root: string, record: Omit<TaskRecord, 'path'>): string {
-	privateDir(root);
+	stateDir(root);
 	mkdirSync(tasksDir(root), { recursive: true });
 	const path = recordPath(root, record.id);
 	writeFileSync(path, renderRecord(record));
