@@ -66,8 +66,17 @@ with `git check-ref-format` before anything is made.
 
 **Done when:** the herdr Module ships a Herdr plugin whose actions "kalfa: New Task" and "kalfa: Open space" open the form in a popup, and `kalfa install` links it when `herdr` is on PATH and the herdr Module is on.
 
-- [ ] The plugin manifest, its actions and its popup pane in `modules/herdr/herdr-plugin/`.
+- [x] The plugin manifest, its actions and its popup pane in `modules/herdr/herdr-plugin/`.
 - [ ] `kalfa install` links the plugin and says so.
+
+The manifest names kalfa commands only, so the logic stays in tested code and
+`kalfa` must be on Herdr's PATH. Each action runs `kalfa space popup <pane>`,
+which opens that popup pane in the Workspace's folder from the plugin context;
+the pane runs `kalfa space new --mode new` (no mode question) or `--mode open`
+(an open Task or the Workspace) with `--hold-on-error`, because a popup closes
+when its command exits and an error would vanish unread. Ctrl+C exits 130 and
+closes the popup at once; the popup takes Escape as input, so only Ctrl+C
+cancels the form. The plugin is Linux and macOS only.
 
 ## 5. Proof and docs
 

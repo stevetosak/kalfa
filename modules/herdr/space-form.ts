@@ -25,6 +25,10 @@ export interface FormContext {
 
 type Mode = 'new' | 'open' | 'workspace';
 
+/** What the form opens: a new Task (no mode question), an open Task or the Workspace, or any of the three (default: a new Task). */
+export const FORM_STARTS = ['new', 'open'] as const;
+export type FormStart = (typeof FORM_STARTS)[number];
+
 /** The folder of the Herdr Workspace the form was opened from (the plugin context), else the current folder. */
 export function startFolder(env: NodeJS.ProcessEnv, cwd: string): string {
 	try {
@@ -147,20 +151,27 @@ async function askFirstPrompt(prompter: Prompter, task: boolean): Promise<FirstP
 	return { text: (await prompter.input('First prompt', { validate: required('prompt text') })).trim() };
 }
 
+/** The mode: asked only when more than one applies. */
+async function askMode(prompter: Prompter, start: FormStart | undefined, hasOpenTask: boolean): Promise<Mode> {
+	if (start === 'new') return 'new';
+	const modes: Choice<Mode>[] = [
+		...(start === undefined ? [{ value: 'new' as const, name: 'New Task', description: 'a worktree on a new branch, a Task Record and the Preset tabs' }] : []),
+		...(hasOpenTask ? [{ value: 'open' as const, name: 'Open Task', description: 'the worktree of an open Task and the Preset tabs' }] : []),
+		{ value: 'workspace', name: 'Workspace only', description: 'the Preset tabs in the main checkout' },
+	];
+	if (modes.length === 1) return modes[0]!.value;
+	return prompter.select('What to open', modes, { default: modes[0]!.value });
+}
+
 /** Asks the Operator for each value of a space, with its default, and builds the request. */
-export async function askSpace(prompter: Prompter, ctx: FormContext): Promise<SpaceRequest> {
+export async function askSpace(prompter: Prompter, ctx: FormContext, start?: FormStart): Promise<SpaceRequest> {
 	const presetNames = Object.keys(ctx.settings.presets);
 	if (!presetNames.length && !ctx.harness) throw new KalfaError('no Preset to open: add one under settings.herdr.presets in the machine settings (~/.config/kalfa/config.yaml)');
 
 	const main = await prompter.search('Repository', repoChoices(ctx));
 	/** An open Task without a branch has no worktree to open. */
 	const openTasks = listRecords(main).flatMap((record) => (record.header.status === 'open' && record.header.branch ? [{ id: record.id, goal: record.header.goal, branch: record.header.branch }] : []));
-	const modes: Choice<Mode>[] = [
-		{ value: 'new', name: 'New Task', description: 'a worktree on a new branch, a Task Record and the Preset tabs' },
-		...(openTasks.length ? [{ value: 'open' as const, name: 'Open Task', description: 'the worktree of an open Task and the Preset tabs' }] : []),
-		{ value: 'workspace', name: 'Workspace only', description: 'the Preset tabs in the main checkout' },
-	];
-	const mode = await prompter.select('What to open', modes, { default: 'new' });
+	const mode = await askMode(prompter, start, openTasks.length > 0);
 
 	const request: SpaceRequest = { main };
 	if (mode === 'new') {

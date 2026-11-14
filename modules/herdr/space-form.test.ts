@@ -64,11 +64,11 @@ function setup() {
 	return { ...repo, env };
 }
 
-async function form(answers: Answer[], env: NodeJS.ProcessEnv, workspaces: { workspace_id: string; label: string }[] = []) {
+async function form(answers: Answer[], env: NodeJS.ProcessEnv, workspaces: { workspace_id: string; label: string }[] = [], flags: string[] = []) {
 	const script = scripted(answers);
 	const herdr = fakeHerdr(workspaces);
 	const io = captureIo('/', env);
-	const code = await spaceCommand(new Map([['claude', claudeAdapter]]), { exec: herdr.exec, prompter: script.prompter }).run(['new'], io);
+	const code = await spaceCommand(new Map([['claude', claudeAdapter]]), { exec: herdr.exec, prompter: script.prompter }).run(['new', ...flags], io);
 	return { ...script, herdr, io, code, starts: herdr.calls.filter((c) => c[0] === 'agent' && c[1] === 'start') };
 }
 
@@ -141,7 +141,24 @@ test('space new refuses a bad branch name and takes no arguments; the command li
 	const { env } = setup();
 	await assert.rejects(form([DEFAULT, DEFAULT, 'bad..branch'], env), /not a valid branch name/);
 	const script = scripted([]);
-	await assert.rejects(spaceCommand(new Map(), { prompter: script.prompter }).run(['new', 'proj'], captureIo('/', env)), /takes no arguments/);
+	await assert.rejects(spaceCommand(new Map(), { prompter: script.prompter }).run(['new', 'proj'], captureIo('/', env)), /does not take positional arguments/);
 	assert.equal(spaceOpenCommand({ main: '/home/x/my repo' }, { HOME: '/home/x' }), "kalfa space open '~/my repo'");
 	assert.equal(spaceOpenCommand({ main: '/home/x/repo' }, { HOME: '/home/x' }), 'kalfa space open ~/repo');
+});
+
+test('space new --mode: new asks no mode; open offers an open Task or the Workspace; --hold-on-error keeps an error until Enter', async () => {
+	const { main, env } = setup();
+	const fresh = await form([DEFAULT, 'feat/side', 'Side work', 'it works', DEFAULT, DEFAULT, 'solo', DEFAULT, DEFAULT, true], env, [], ['--mode', 'new']);
+	assert.ok(!fresh.asked.some((q) => q.message === 'What to open'));
+	assert.ok(readRecord(main, 'feat-side'));
+
+	const open = await form([DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, false], env, [], ['--mode', 'open']);
+	assert.deepEqual(open.asked[1]!.choices, ['Open Task', 'Workspace only']);
+	assert.equal(open.asked[2]!.message, 'Task');
+
+	const held = await form([DEFAULT, 'bad..branch', DEFAULT], env, [], ['--mode', 'new', '--hold-on-error']);
+	assert.equal(held.code, 1);
+	assert.match(held.io.stderr.join('\n'), /kalfa space: .*not a valid branch name/);
+	assert.equal(held.asked.at(-1)!.message, 'Press Enter to close');
+	await assert.rejects(form([], env, [], ['--mode', 'later']), /--mode later: give new or open/);
 });

@@ -1,0 +1,38 @@
+# kalfa's Herdr plugin (the herdr Module). Its actions show in Herdr's pane
+# menu and run with no terminal, so each one only opens a popup pane in the
+# folder of the Workspace it was run from; the pane runs the form. Every
+# command is a kalfa command, so `kalfa` must be on Herdr's PATH.
+id = "kalfa"
+name = "kalfa"
+version = "0.1.0"
+min_herdr_version = "0.9.3"
+description = "Start a kalfa Task or open a repository's space from a Preset, through a form"
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "new-task"
+title = "kalfa: New Task"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["kalfa", "space", "popup", "new-task"]
+
+[[actions]]
+id = "open-space"
+title = "kalfa: Open space"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["kalfa", "space", "popup", "open-space"]
+
+[[panes]]
+id = "new-task"
+title = "kalfa: New Task"
+placement = "popup"
+width = "80%"
+height = "80%"
+command = ["kalfa", "space", "new", "--mode", "new", "--hold-on-error"]
+
+[[panes]]
+id = "open-space"
+title = "kalfa: Open space"
+placement = "popup"
+width = "80%"
+height = "80%"
+command = ["kalfa", "space", "new", "--mode", "open", "--hold-on-error"]

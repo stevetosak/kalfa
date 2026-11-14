@@ -19,7 +19,8 @@ import { cleanWorkspaces, diskLookups, finishedWorkspaces, readSnapshot, renderB
 import { errorText, type HerdrExec, herdrCli } from './launcher.ts';
 import { inquirerPrompter, type Prompter } from './prompter.ts';
 import { type FirstPrompt, type GitRun, gitRun, type ModelChoice, openSpace, resolveRepo, type SpaceContext, type SpaceRequest, spaceSettings } from './space.ts';
-import { askSpace, spaceOpenCommand } from './space-form.ts';
+import { openPopup, PLUGIN_PANES } from './plugin.ts';
+import { askSpace, FORM_STARTS, type FormStart, spaceOpenCommand } from './space-form.ts';
 import { continueTask, defaultLauncher, type Launcher } from './successor.ts';
 
 export const LIMIT_EXIT = 3;
@@ -117,6 +118,9 @@ export interface SpaceCommandDeps {
 /** The answer @inquirer/prompts gives when the Operator presses Ctrl+C. */
 const cancelled = (error: unknown) => error instanceof Error && error.name === 'ExitPromptError';
 
+/** The exit code of a form the Operator cancelled (as for SIGINT), so a popup closes at once. */
+export const CANCEL_EXIT = 130;
+
 /** `--model <model>` (every agent tab) and `--model <tab>=<model>` (one tab, by its label or Adapter). */
 export function parseModels(values: readonly string[] | undefined): ModelChoice | undefined {
 	if (!values?.length) return undefined;
@@ -152,7 +156,10 @@ export function spaceCommand(adapters: ReadonlyMap<string, Adapter>, deps: Space
 	return {
 		summary: "herdr Module: open a repository's Workspace in Herdr from a Preset; --task opens a worktree for a Task; new asks in a form",
 		usage: [
-			'kalfa space new   (a form: asks each value below with a default, shows the matching space open command, and opens it after a yes)',
+			'kalfa space new [--mode new|open] [--hold-on-error]',
+			'  a form: asks each value below with a default, shows the matching space open command, and opens it after a yes.',
+			'  --mode new: a new Task (no mode question); --mode open: an open Task or the Workspace. --hold-on-error: an error waits for Enter (a popup).',
+			`kalfa space popup <${PLUGIN_PANES.join('|')}>   (the Herdr plugin's action: opens that popup pane in the Workspace's folder)`,
 			'kalfa space open <repo> [--preset <name>] [--model [<tab>=]<model>]… [--prompt "<text>" | --no-prompt]',
 			'kalfa space open <repo> --task <branch> ["<goal>" --done-when "<finish line>" [--plan <path>] [--base <ref>]] [--preset <name>] [--model …] [--prompt … | --no-prompt]',
 			'  <repo>: a path, or a bare name looked up in settings.herdr.space-dirs. An open Workspace is only focused, unless --preset is given.',
@@ -163,7 +170,13 @@ export function spaceCommand(adapters: ReadonlyMap<string, Adapter>, deps: Space
 		].join('\n'),
 		async run(args, io) {
 			const [sub, ...rest] = args;
-			if (sub !== 'open' && sub !== 'new') throw new UsageError(sub ? `unknown subcommand '${sub}'` : 'give a subcommand');
+			if (sub !== 'open' && sub !== 'new' && sub !== 'popup') throw new UsageError(sub ? `unknown subcommand '${sub}'` : 'give a subcommand');
+			if (sub === 'popup') {
+				const [pane, ...extra] = rest;
+				if (!pane || extra.length) throw new UsageError(`kalfa space popup takes one pane: ${PLUGIN_PANES.join(' or ')}`);
+				io.out(openPopup(deps.exec ?? herdrCli, io.env, io.cwd, pane));
+				return 0;
+			}
 			const settings = spaceSettings(loadSettings(io.env), loadProject(io.cwd));
 			const context: SpaceContext = { settings, adapters, harness: currentHarness(adapters, io.env), exec: deps.exec ?? herdrCli, git: deps.git ?? gitRun };
 			if (sub === 'new') return spaceForm(rest, io, context, deps.prompter);
@@ -202,12 +215,14 @@ export function spaceCommand(adapters: ReadonlyMap<string, Adapter>, deps: Space
 }
 
 /** `kalfa space new`: the form's answers, the matching command, and the space after a yes. */
-async function spaceForm(args: readonly string[], io: Io, context: SpaceContext, given: Prompter | undefined): Promise<number> {
-	if (args.length) throw new UsageError('kalfa space new takes no arguments; it asks for each value');
+async function spaceForm(args: string[], io: Io, context: SpaceContext, given: Prompter | undefined): Promise<number> {
+	const { values } = parseCommandArgs(args, { mode: { type: 'string' }, 'hold-on-error': { type: 'boolean' } });
+	const start = values.mode;
+	if (start !== undefined && !(FORM_STARTS as readonly string[]).includes(start)) throw new UsageError(`--mode ${start}: give ${FORM_STARTS.join(' or ')}`);
 	if (!given && !(process.stdin.isTTY && process.stdout.isTTY)) throw new KalfaError('kalfa space new asks questions and needs a terminal; use kalfa space open with flags');
 	const prompter = given ?? inquirerPrompter;
 	try {
-		const request = await askSpace(prompter, { settings: context.settings, harness: context.harness, git: context.git, cwd: io.cwd, env: io.env });
+		const request = await askSpace(prompter, { settings: context.settings, harness: context.harness, git: context.git, cwd: io.cwd, env: io.env }, start as FormStart | undefined);
 		const command = spaceOpenCommand(request, io.env);
 		io.out(`The same with flags:\n  ${command}`);
 		if (!(await prompter.confirm('Open this space?', { default: true }))) {
@@ -217,8 +232,14 @@ async function spaceForm(args: readonly string[], io: Io, context: SpaceContext,
 		io.out(openSpace(request, context).join('\n'));
 		return 0;
 	} catch (error) {
-		if (!cancelled(error)) throw error;
-		io.err('Cancelled; nothing opened.');
+		if (cancelled(error)) {
+			io.err('Cancelled; nothing opened.');
+			return CANCEL_EXIT;
+		}
+		if (!values['hold-on-error']) throw error;
+		// A popup closes when its command exits: any error stays until the Operator has read it.
+		io.err(`kalfa space: ${error instanceof Error ? error.message : String(error)}`);
+		await prompter.input('Press Enter to close').catch(() => '');
 		return 1;
 	}
 }
