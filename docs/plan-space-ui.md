@@ -50,7 +50,8 @@ starts `kalfa` on nvm's Node 20, which runs it.
 
 **Done when:** `kalfa space new` asks for the repository, the mode, the Task fields, the Preset, each agent tab's model and first prompt, shows the matching `space open` command, and opens the space after a yes; tests drive it through a `Prompter` with set answers.
 
-- [ ] A `Prompter` interface over `@inquirer/prompts`; the form builds a `SpaceRequest` from its answers.
+- [x] A `Prompter` interface over `@inquirer/prompts`.
+- [ ] `kalfa space new`: the form builds a `SpaceRequest` from its answers, shows the matching `space open` command and runs `openSpace` after a yes.
 - [ ] Defaults: the focused Workspace's repository, New Task, the only active Plan (else none), origin's default branch, the `default-preset`, each tab's model, the successor prompt on the first agent tab.
 
 ## 4. The plugin
