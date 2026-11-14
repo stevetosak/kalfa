@@ -1,51 +1,14 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { claudeAdapter } from '../../src/adapters/claude/adapter.ts';
 import { UsageError } from '../../src/cli/command.ts';
 import { DEFAULT_SETTINGS } from '../../src/core/settings.ts';
 import { readRecord } from '../../src/core/task-record.ts';
-import { captureIo, gitRepo, tempDir } from '../../test/helpers.ts';
+import { captureIo } from '../../test/helpers.ts';
+import { cloned, fakeHerdr, git, machine } from '../../test/space-fixtures.ts';
 import { spaceCommand } from './command.ts';
 import { prepareWorktree, resolveRepo, spaceSettings, tabTitle } from './space.ts';
-
-const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { stdio: 'ignore' });
-
-/** `<dir>/origin.git` and its clone `<dir>/proj` (main checkout), with kalfa.yaml and the .kalfa/ ignore. */
-function cloned() {
-	const seed = realpathSync(gitRepo({ 'kalfa.yaml': 'schema: 1\n', '.gitignore': '.kalfa/\n' }));
-	git(seed, 'add', 'kalfa.yaml', '.gitignore');
-	git(seed, 'commit', '-q', '-m', 'init');
-	const dir = realpathSync(tempDir());
-	execFileSync('git', ['clone', '-q', '--bare', seed, join(dir, 'origin.git')]);
-	execFileSync('git', ['clone', '-q', join(dir, 'origin.git'), join(dir, 'proj')]);
-	return { dir, main: join(dir, 'proj'), origin: join(dir, 'origin.git') };
-}
-
-/** A fake herdr: records each call and answers like Herdr 0.9. */
-function fakeHerdr(workspaces: { workspace_id: string; label: string }[] = []) {
-	const calls: string[][] = [];
-	let n = 0;
-	const exec = (args: string[]) => {
-		calls.push(args);
-		const key = args.slice(0, 2).join(' ');
-		if (key === 'workspace list') return JSON.stringify({ result: { workspaces } });
-		if (key === 'agent list') return JSON.stringify({ result: { agents: [] } });
-		if (key === 'tab create') return JSON.stringify({ result: { tab: { tab_id: `t${++n}` }, root_pane: { pane_id: `p${n}` } } });
-		if (key === 'workspace create') return JSON.stringify({ result: { workspace: { workspace_id: 'w9' }, tab: { tab_id: `t${++n}` }, root_pane: { pane_id: `p${n}` } } });
-		return '{}';
-	};
-	return { exec, calls };
-}
-
-function machine(herdr: unknown) {
-	const config = tempDir();
-	mkdirSync(join(config, 'kalfa'), { recursive: true });
-	writeFileSync(join(config, 'kalfa/config.yaml'), JSON.stringify({ schema: 1, modules: ['herdr'], settings: { herdr } }));
-	return { HOME: tempDir(), XDG_CONFIG_HOME: config };
-}
 
 const presets = { 'default-preset': 'dev', presets: { dev: [{ agent: 'claude' }, { label: 'git', run: 'lazygit' }] } };
 

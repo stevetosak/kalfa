@@ -4,9 +4,11 @@
 // nothing started. `kalfa board` shows every agent session across the Herdr
 // workspaces and closes the finished ones (see board.ts). `kalfa space open`
 // opens a repository's Workspace from a Preset, and with `--task` a worktree
-// for that Task (see space.ts).
+// for that Task (see space.ts); `kalfa space new` asks for the same values in
+// a form (see space-form.ts).
 import type { Adapter } from '../../src/adapters/adapter.ts';
 import { type Command, parseCommandArgs, UsageError } from '../../src/cli/command.ts';
+import type { Io } from '../../src/cli/io.ts';
 import { openRecord, taskId } from '../../src/cli/commands/task.ts';
 import { requireModule, requireProject } from '../../src/cli/project.ts';
 import { KalfaError } from '../../src/core/errors.ts';
@@ -15,7 +17,9 @@ import { loadSettings } from '../../src/core/settings.ts';
 import { checkLimits, type LimitVerdict, limitsPath } from '../../src/core/usage-limits.ts';
 import { cleanWorkspaces, diskLookups, finishedWorkspaces, readSnapshot, renderBoard, type Snapshot } from './board.ts';
 import { errorText, type HerdrExec, herdrCli } from './launcher.ts';
-import { type FirstPrompt, type GitRun, gitRun, type ModelChoice, openSpace, resolveRepo, type SpaceRequest, spaceSettings } from './space.ts';
+import { inquirerPrompter, type Prompter } from './prompter.ts';
+import { type FirstPrompt, type GitRun, gitRun, type ModelChoice, openSpace, resolveRepo, type SpaceContext, type SpaceRequest, spaceSettings } from './space.ts';
+import { askSpace, spaceOpenCommand } from './space-form.ts';
 import { continueTask, defaultLauncher, type Launcher } from './successor.ts';
 
 export const LIMIT_EXIT = 3;
@@ -106,7 +110,12 @@ export function boardCommand(adapters: ReadonlyMap<string, Adapter>, deps: Board
 export interface SpaceCommandDeps {
 	exec?: HerdrExec;
 	git?: GitRun;
+	/** The form's questions; the terminal's when absent. */
+	prompter?: Prompter;
 }
+
+/** The answer @inquirer/prompts gives when the Operator presses Ctrl+C. */
+const cancelled = (error: unknown) => error instanceof Error && error.name === 'ExitPromptError';
 
 /** `--model <model>` (every agent tab) and `--model <tab>=<model>` (one tab, by its label or Adapter). */
 export function parseModels(values: readonly string[] | undefined): ModelChoice | undefined {
@@ -138,11 +147,12 @@ function parseFirstPrompt(text: string | undefined, none: boolean | undefined): 
 /** The harness this command runs in, if any. */
 export const currentHarness = (adapters: ReadonlyMap<string, Adapter>, env: NodeJS.ProcessEnv) => [...adapters.values()].find((a) => a.detect(env))?.name;
 
-/** `kalfa space open <repo>`: the repository's Workspace from a Preset; with `--task`, a worktree, a branch and a Task Record. */
+/** `kalfa space open <repo>`: the repository's Workspace from a Preset; with `--task`, a worktree, a branch and a Task Record. `kalfa space new`: the same, from a form. */
 export function spaceCommand(adapters: ReadonlyMap<string, Adapter>, deps: SpaceCommandDeps = {}): Command {
 	return {
-		summary: "herdr Module: open a repository's Workspace in Herdr from a Preset; --task opens a worktree for a Task",
+		summary: "herdr Module: open a repository's Workspace in Herdr from a Preset; --task opens a worktree for a Task; new asks in a form",
 		usage: [
+			'kalfa space new   (a form: asks each value below with a default, shows the matching space open command, and opens it after a yes)',
 			'kalfa space open <repo> [--preset <name>] [--model [<tab>=]<model>]… [--prompt "<text>" | --no-prompt]',
 			'kalfa space open <repo> --task <branch> ["<goal>" --done-when "<finish line>" [--plan <path>] [--base <ref>]] [--preset <name>] [--model …] [--prompt … | --no-prompt]',
 			'  <repo>: a path, or a bare name looked up in settings.herdr.space-dirs. An open Workspace is only focused, unless --preset is given.',
@@ -153,7 +163,11 @@ export function spaceCommand(adapters: ReadonlyMap<string, Adapter>, deps: Space
 		].join('\n'),
 		async run(args, io) {
 			const [sub, ...rest] = args;
-			if (sub !== 'open') throw new UsageError(sub ? `unknown subcommand '${sub}'` : 'give a subcommand');
+			if (sub !== 'open' && sub !== 'new') throw new UsageError(sub ? `unknown subcommand '${sub}'` : 'give a subcommand');
+			const settings = spaceSettings(loadSettings(io.env), loadProject(io.cwd));
+			const context: SpaceContext = { settings, adapters, harness: currentHarness(adapters, io.env), exec: deps.exec ?? herdrCli, git: deps.git ?? gitRun };
+			if (sub === 'new') return spaceForm(rest, io, context, deps.prompter);
+
 			const { values, positionals } = parseCommandArgs(
 				rest,
 				{
@@ -174,7 +188,6 @@ export function spaceCommand(adapters: ReadonlyMap<string, Adapter>, deps: Space
 			const doneWhen = values['done-when']?.replace(/\s+/g, ' ').trim();
 			if (!values.task && (goal || doneWhen || values.plan || values.base)) throw new UsageError('a goal, --done-when, --plan and --base go with --task');
 
-			const settings = spaceSettings(loadSettings(io.env), loadProject(io.cwd));
 			const request: SpaceRequest = {
 				main: resolveRepo(repo, io.cwd, settings['space-dirs'], io.env),
 				preset: values.preset,
@@ -182,9 +195,30 @@ export function spaceCommand(adapters: ReadonlyMap<string, Adapter>, deps: Space
 				models: parseModels(values.model),
 				firstPrompt: parseFirstPrompt(values.prompt, values['no-prompt']),
 			};
-			const context = { settings, adapters, harness: currentHarness(adapters, io.env), exec: deps.exec ?? herdrCli, git: deps.git ?? gitRun };
 			io.out(openSpace(request, context).join('\n'));
 			return 0;
 		},
 	};
+}
+
+/** `kalfa space new`: the form's answers, the matching command, and the space after a yes. */
+async function spaceForm(args: readonly string[], io: Io, context: SpaceContext, given: Prompter | undefined): Promise<number> {
+	if (args.length) throw new UsageError('kalfa space new takes no arguments; it asks for each value');
+	if (!given && !(process.stdin.isTTY && process.stdout.isTTY)) throw new KalfaError('kalfa space new asks questions and needs a terminal; use kalfa space open with flags');
+	const prompter = given ?? inquirerPrompter;
+	try {
+		const request = await askSpace(prompter, { settings: context.settings, harness: context.harness, git: context.git, cwd: io.cwd, env: io.env });
+		const command = spaceOpenCommand(request, io.env);
+		io.out(`The same with flags:\n  ${command}`);
+		if (!(await prompter.confirm('Open this space?', { default: true }))) {
+			io.out('Nothing opened.');
+			return 0;
+		}
+		io.out(openSpace(request, context).join('\n'));
+		return 0;
+	} catch (error) {
+		if (!cancelled(error)) throw error;
+		io.err('Cancelled; nothing opened.');
+		return 1;
+	}
 }

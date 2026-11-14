@@ -61,7 +61,7 @@ export function spaceSettings(machine: Settings, project: Project | undefined): 
 	return result.data;
 }
 
-const expandHome = (dir: string, env: NodeJS.ProcessEnv) => (dir.startsWith('~/') ? join(env.HOME || homedir(), dir.slice(2)) : dir);
+export const expandHome = (dir: string, env: NodeJS.ProcessEnv) => (dir.startsWith('~/') ? join(env.HOME || homedir(), dir.slice(2)) : dir);
 
 /** The main checkout of `<repo>`: a path (it has a `/`, or starts with `.` or `~`), or a bare name looked up in `space-dirs`. */
 export function resolveRepo(repo: string, cwd: string, dirs: readonly string[], env: NodeJS.ProcessEnv): string {
@@ -104,7 +104,7 @@ const succeeds = (git: GitRun, cwd: string, args: string[]) => {
 };
 
 /** The remote's default branch, e.g. `origin/main`. */
-function remoteDefault(git: GitRun, main: string): string {
+export function remoteDefault(git: GitRun, main: string): string {
 	try {
 		return git(main, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
 	} catch {
