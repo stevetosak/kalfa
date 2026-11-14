@@ -39,9 +39,12 @@ function isExecutable(path: string): boolean {
 	}
 }
 
+/** The herdr CLI is on PATH. */
+export const herdrOnPath = (env: NodeJS.ProcessEnv): boolean => (env.PATH ?? '').split(delimiter).some((dir) => dir !== '' && isExecutable(join(dir, 'herdr')));
+
 /** The command runs inside a Herdr pane and the herdr CLI is on PATH. */
 export function inHerdr(env: NodeJS.ProcessEnv): boolean {
-	return env.HERDR_ENV === '1' && (env.PATH ?? '').split(delimiter).some((dir) => dir !== '' && isExecutable(join(dir, 'herdr')));
+	return env.HERDR_ENV === '1' && herdrOnPath(env);
 }
 
 /** A name Herdr accepts (`[a-z][a-z0-9_-]{0,31}`) and no live agent has. */

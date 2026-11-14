@@ -67,7 +67,7 @@ with `git check-ref-format` before anything is made.
 **Done when:** the herdr Module ships a Herdr plugin whose actions "kalfa: New Task" and "kalfa: Open space" open the form in a popup, and `kalfa install` links it when `herdr` is on PATH and the herdr Module is on.
 
 - [x] The plugin manifest, its actions and its popup pane in `modules/herdr/herdr-plugin/`.
-- [ ] `kalfa install` links the plugin and says so.
+- [x] `kalfa install` links the plugin and says so.
 
 The manifest names kalfa commands only, so the logic stays in tested code and
 `kalfa` must be on Herdr's PATH. Each action runs `kalfa space popup <pane>`,
@@ -77,6 +77,17 @@ the pane runs `kalfa space new --mode new` (no mode question) or `--mode open`
 when its command exits and an error would vanish unread. Ctrl+C exits 130 and
 closes the popup at once; the popup takes Escape as input, so only Ctrl+C
 cancels the form. The plugin is Linux and macOS only.
+
+The link is the herdr Module's machine step, a part of `kalfa install` that
+lives outside the harnesses' settings. Herdr links the plugin from the
+package's own folder, so a new kalfa brings its new manifest with no second
+step. `herdr plugin link` is idempotent and a link from another folder
+replaces the old root, so install lists the plugin first and links only when
+the root differs; a `kalfa` plugin that Herdr installed from GitHub is the
+Operator's and stays. `install.yaml` records that the step ran, and uninstall,
+or an install with the Module off, undoes only a recorded step: an unrecorded
+step would let the smoke or a scratch config unlink the Operator's real
+plugin.
 
 ## 5. Proof and docs
 

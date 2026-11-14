@@ -18,7 +18,7 @@ import { captureIo, gitRepo, tempDir, tempRepo } from './helpers.ts';
 const pkg = tempRepo({ 'package.json': '{}\n', 'dist/kalfa-hook': '', 'dist/adapters/claude/status-tap': '' });
 const adapters = new Map([['claude', claudeAdapter]]);
 const install = installCommand(adapters, () => [], () => pkg);
-const uninstall = uninstallCommand(adapters);
+const uninstall = uninstallCommand(adapters, () => []);
 
 function machine() {
 	const home = tempRepo({ '.config/kalfa/config.yaml': 'schema: 1\nmodules: []\n' });

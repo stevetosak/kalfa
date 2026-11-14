@@ -2,14 +2,18 @@
 // Modules' approvals in the user settings of every harness whose Adapter has
 // them, and the instruction file with the Personal layer where a harness has
 // one. The hooks and the tap run the built files of the kalfa that installs
-// them, so run `kalfa install` again after the package moves.
+// them, so run `kalfa install` again after the package moves. A Module can
+// have its own part on the machine (a MachineStep, such as the herdr Module's
+// Herdr plugin); it runs after the settings, and install.yaml records it so
+// uninstall, or an install with the Module off, undoes only what install did.
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { quote } from 'shell-quote';
 import type { Adapter } from '../../adapters/adapter.ts';
 import { planApprovals } from '../../core/approvals.ts';
 import { KalfaError } from '../../core/errors.ts';
-import { applyUser, NOTHING, readInstallState, type UserWants, writeInstallState } from '../../core/install.ts';
+import { applyUser, type InstallState, NOTHING, readInstallState, type UserWants, writeInstallState } from '../../core/install.ts';
+import type { MachineStep } from '../../core/machine-step.ts';
 import { machineCacheDir } from '../../core/machine-paths.ts';
 import { personalInstructions } from '../../core/memory/instructions.ts';
 import type { ModuleDirs } from '../../core/module-dirs.ts';
@@ -54,11 +58,46 @@ export function pendingInstall(adapters: ReadonlyMap<string, Adapter>, env: Node
 		});
 }
 
+/** The Modules' own steps, and the Modules whose step install wants. */
+interface MachineWants {
+	steps: ReadonlyMap<string, MachineStep>;
+	moduleDirs: ModuleDirs;
+	want: readonly string[];
+}
+
+/**
+ * Installs the step of each Module in `want`, and undoes a step install ran
+ * before whose Module is no longer wanted; `state.steps` follows. A step that
+ * fails is reported, stays recorded, and the others still run; the exit code
+ * says so.
+ */
+function applySteps(machine: MachineWants, state: InstallState, io: Io, dryRun: boolean): number {
+	let code = 0;
+	for (const [name, step] of machine.steps) {
+		const install = machine.want.includes(name);
+		if (!install && !state.steps.includes(name)) continue;
+		io.out(`${name} Module:`);
+		const recorded = new Set(state.steps).add(name);
+		try {
+			const context = { env: io.env, moduleDir: loadModuleSource(machine.moduleDirs(io.env), name).dir, dryRun };
+			for (const line of install ? step.install(context) : step.uninstall(context)) io.out(`  ${line}`);
+			if (!install) recorded.delete(name);
+		} catch (error) {
+			const { stderr, message } = error as { stderr?: string | Buffer; message?: string };
+			io.err(`kalfa: the ${name} Module's step failed: ${String(stderr || message || error).trim()}`);
+			code = 1;
+		}
+		state.steps = [...recorded];
+	}
+	return code;
+}
+
 /**
  * Runs `wants` for every harness with user settings: first as a dry run for
  * all of them, so a problem in one writes nothing anywhere, then for real.
+ * The Modules' steps run after the settings.
  */
-function run(adapters: ReadonlyMap<string, Adapter>, io: Io, wants: (adapter: Adapter) => UserWants, dryRun: boolean, remove: boolean): number {
+function run(adapters: ReadonlyMap<string, Adapter>, io: Io, wants: (adapter: Adapter) => UserWants, machine: MachineWants, dryRun: boolean, remove: boolean): number {
 	const state = readInstallState(io.env);
 	const users = [...adapters.values()].filter((adapter) => adapter.user);
 	for (const adapter of users) applyUser(home(io.env), adapter.user!, wants(adapter), state.harnesses[adapter.name], { dryRun: true });
@@ -70,30 +109,33 @@ function run(adapters: ReadonlyMap<string, Adapter>, io: Io, wants: (adapter: Ad
 		else state.harnesses[adapter.name] = result.owned;
 	}
 	if (!users.length) io.out('no harness has user settings kalfa can write');
+	const code = applySteps(machine, state, io, dryRun);
 	if (dryRun) io.out('dry run: nothing was written');
 	else writeInstallState(io.env, state);
-	return 0;
+	return code;
 }
 
-export function installCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs, packageRoot: () => string): Command {
+export function installCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs, packageRoot: () => string, steps: ReadonlyMap<string, MachineStep> = new Map()): Command {
 	return {
-		summary: "Write kalfa's hooks, the status-line tap, the machine Modules' approvals and the Personal layer's instruction file into the harnesses' user settings, and set the settings kalfa owns (their own memory off, idle compaction)",
+		summary: "Write kalfa's hooks, the status-line tap, the machine Modules' approvals and the Personal layer's instruction file into the harnesses' user settings, set the settings kalfa owns (their own memory off, idle compaction), and run the machine Modules' own steps (the herdr Module links its Herdr plugin)",
 		usage: 'kalfa install [--dry-run]',
 		async run(args, io) {
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' } });
-			return run(adapters, io, installWants(io.env, moduleDirs, packageRoot()), values['dry-run'] ?? false, false);
+			const dryRun = values['dry-run'] ?? false;
+			const machine = { steps, moduleDirs, want: loadSettings(io.env).modules };
+			return run(adapters, io, installWants(io.env, moduleDirs, packageRoot()), machine, dryRun, false);
 		},
 	};
 }
 
-export function uninstallCommand(adapters: ReadonlyMap<string, Adapter>): Command {
+export function uninstallCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs, steps: ReadonlyMap<string, MachineStep> = new Map()): Command {
 	return {
-		summary: "Remove what kalfa install wrote, and kalfa's cache; the Operator's own entries stay",
+		summary: "Remove what kalfa install wrote, with what the Modules' own steps set up, and kalfa's cache; the Operator's own entries stay",
 		usage: 'kalfa uninstall [--dry-run]',
 		async run(args, io) {
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' } });
 			const dryRun = values['dry-run'] ?? false;
-			const code = run(adapters, io, () => NOTHING, dryRun, true);
+			const code = run(adapters, io, () => NOTHING, { steps, moduleDirs, want: [] }, dryRun, true);
 			// Everything in the cache folder is written again on use (event table, usage limits, pinned skills).
 			const cache = machineCacheDir(io.env);
 			if (existsSync(cache)) {

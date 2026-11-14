@@ -1,4 +1,5 @@
 import { moduleFolders } from '../core/module-source.ts';
+import type { MachineStep } from '../core/machine-step.ts';
 import type { ModuleDefinition } from '../core/modules.ts';
 import type { Adapter } from '../adapters/adapter.ts';
 import type { Command } from '../cli/command.ts';
@@ -8,6 +9,7 @@ import { docsModule } from '../../modules/docs/handlers.ts';
 import { guardrailsModule } from '../../modules/guardrails/handlers.ts';
 import { boardCommand, herdrCommand, spaceCommand } from '../../modules/herdr/command.ts';
 import { herdrModule } from '../../modules/herdr/handlers.ts';
+import { herdrPluginStep } from '../../modules/herdr/plugin.ts';
 import { memoryExtension } from '../../modules/memory/command.ts';
 import { memoryModule } from '../../modules/memory/handlers.ts';
 import { meterCommand } from '../../modules/meter/command.ts';
@@ -28,6 +30,9 @@ export const moduleCommands: Record<string, (adapters: ReadonlyMap<string, Adapt
 	meter: (adapters) => meterCommand(adapters),
 	defer: () => deferCommand(),
 };
+
+/** The Modules' own parts of `kalfa install` / `uninstall`, by Module name. */
+export const machineSteps: ReadonlyMap<string, MachineStep> = new Map([['herdr', herdrPluginStep()]]);
 
 /** The Modules' subcommands of the Core's `kalfa memory`; each checks that its Module is on. */
 export const memoryExtensions: readonly MemoryExtension[] = [memoryExtension];
