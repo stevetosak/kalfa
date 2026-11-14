@@ -118,3 +118,42 @@ test('space open --task: worktree, branch and Task Record in the main checkout; 
 	await space(reopened.exec, '--task', 'feat/x', '--preset', 'pair');
 	assert.equal(reopened.calls.filter((c) => c[0] === 'agent' && c[1] === 'start').length, 2, 'an open Task needs only --task');
 });
+
+test('space open --base: a new branch starts at the base (a local ref or a branch on origin); an existing branch ignores it', async () => {
+	const { main, origin } = cloned();
+	git(origin, 'branch', 'release', 'HEAD');
+	const made = prepareWorktree(main, 'feat/b', undefined, 'release');
+	assert.match(made.note, /new branch feat\/b from origin\/release/);
+	assert.match(prepareWorktree(main, 'feat/b', undefined, 'release').note, /--base release is not used, the branch exists/);
+	assert.throws(() => prepareWorktree(main, 'feat/c', undefined, 'nope'), /--base nope: no branch, tag or commit/);
+});
+
+test('space open --model and --prompt: models by tab key or for all; the first agent tab gets the prompt, or none', async () => {
+	const { dir } = cloned();
+	const env = machine({ presets: { pair: [{ agent: 'claude' }, { agent: 'claude', label: 'review', model: 'haiku' }] }, 'space-dirs': [dir] });
+	const space = async (...args: string[]) => {
+		const herdr = fakeHerdr();
+		await spaceCommand(new Map([['claude', claudeAdapter]]), { exec: herdr.exec }).run(['open', 'proj', '--preset', 'pair', ...args], captureIo('/', env));
+		return herdr.calls.filter((c) => c[0] === 'agent' && c[1] === 'start').map((c) => c.slice(c.indexOf('--') + 1));
+	};
+
+	assert.deepEqual(await space('--model', 'opus'), [['-n', 'proj', '--model', 'opus'], ['-n', 'review', '--model', 'opus']]);
+	assert.deepEqual(await space('--model', 'claude=sonnet'), [['-n', 'proj', '--model', 'sonnet'], ['-n', 'review', '--model', 'haiku']], 'a tab key wins; other tabs keep their own model');
+	await assert.rejects(space('--model', 'reveiw=opus'), /--model reveiw: no agent tab of that name/);
+
+	assert.deepEqual(await space('--prompt', 'Look at the failing test'), [['-n', 'proj', 'Look at the failing test'], ['-n', 'review', '--model', 'haiku']]);
+	await assert.rejects(space('--prompt', 'x', '--no-prompt'), /exclude each other/);
+
+	const task = fakeHerdr();
+	await spaceCommand(new Map([['claude', claudeAdapter]]), { exec: task.exec }).run(['open', 'proj', '--preset', 'pair', '--task', 'feat/q', 'Goal', '--done-when', 'done', '--no-prompt'], captureIo('/', env));
+	const lead = task.calls.find((c) => c[0] === 'agent' && c[1] === 'start')!;
+	assert.equal(lead.at(-1), 'feat-q', 'a Task with --no-prompt starts its agent on no prompt');
+});
+
+test('space open: an open Workspace that only gets focus refuses --model and --prompt; --base goes with --task', async () => {
+	const { dir } = cloned();
+	const env = machine({ ...presets, 'space-dirs': [dir] });
+	const open = fakeHerdr([{ workspace_id: 'w3', label: 'proj' }]);
+	await assert.rejects(spaceCommand(new Map([['claude', claudeAdapter]]), { exec: open.exec }).run(['open', 'proj', '--model', 'opus'], captureIo('/', env)), /only gets focus/);
+	await assert.rejects(spaceCommand(new Map([['claude', claudeAdapter]]), { exec: open.exec }).run(['open', 'proj', '--base', 'main'], captureIo('/', env)), /go with --task/);
+});
