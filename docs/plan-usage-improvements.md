@@ -37,12 +37,13 @@ places, and each part of this Plan removes one.
 
 **Done when:** inside a Herdr pane, with `auto: true` in the machine settings of the meter, a new session is in Auto mode without `/meter`; a Section close from 100k resets it unless the agent passes `--keep`, and below 100k nothing happens; `/meter on|off` ends Auto mode for that session; outside Herdr the meter reminds at the compact point as before; at a very large context the agent gets a note and nothing resets; the usage report shows each Reset's measured saving beside the estimate; local checks pass; proven once live.
 
-- [ ] Setting `auto` of the meter (default false; machine settings or `kalfa.yaml`). The session state keeps `auto: false` too, so `/meter on|off` overrides the setting for one session; outside a Herdr pane the setting does nothing.
-- [ ] Section close: in Auto mode, from `RESET_FROM` (100k) every close resets the session unless `--keep`; `--keep` replaces `--no-reset <requests left>` and is logged as a keep. `task close` still never resets.
-- [ ] No token-count trigger in Auto mode: the compact-point notes go. From `LARGE_AT` (300k), and again every 100k, the agent gets one note: the size, and that a Section close resets the session if the work has moved on. Outside Auto mode the reminders stay as they are.
-- [ ] Session start in Auto mode: one line that tells the agent to close a Section at each logical end, that the close resets the session, and when to pass `--keep`.
-- [ ] The usage report measures each Reset from the cost per request of the old session's last 20 requests against the new session's, beside the carried-context estimate; the payback estimate leaves the notes.
-- [ ] `auto: true` in this machine's settings; the meter skill and the Plan sessions text say what changed.
+- [x] Setting `auto` of the meter (default false; machine settings or `kalfa.yaml`). The session state keeps `auto: false` too, so `/meter on|off` overrides the setting for one session; outside a Herdr pane the setting does nothing.
+- [x] Section close: in Auto mode, from `RESET_FROM` (100k) every close resets the session unless `--keep`; `--keep` replaces `--no-reset <requests left>` and is logged as a keep. `task close` still never resets.
+- [x] No token-count trigger in Auto mode: the compact-point notes go. From `LARGE_AT` (300k), and again every 100k, the agent gets one note: the size, and that a Section close resets the session if the work has moved on. Outside Auto mode the reminders stay as they are.
+- [x] Session start in Auto mode: one line that tells the agent to close a Section at each logical end, that the close resets the session, and when to pass `--keep`.
+- [x] The usage report measures each Reset from the cost per request of the old session's last 20 requests against the new session's, beside the carried-context estimate; the payback estimate leaves the notes.
+- [x] The meter skill and the Plan sessions text say what changed.
+- [ ] `auto: true` in this machine's settings, after the merge and a build of the checkout the hooks run from: the settings schema is strict, so an older build refuses the key.
 - [ ] Prove it live: one session in a Herdr pane reaches Auto mode from the setting, resets at a Section close past 100k, and keeps its context with `--keep`.
 
 `RESET_FROM` and `LARGE_AT` are first values. A Reset writes a fresh start of

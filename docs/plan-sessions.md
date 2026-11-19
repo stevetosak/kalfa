@@ -77,6 +77,10 @@ for a few output tokens, and it stays in the Task Record. The payback point
 starts as an estimate; the cost of each real reset is recorded so that the
 thresholds can be tuned from measured data.
 
+The [usage improvements Plan](plan-usage-improvements.md) (part 1) later
+dropped the token-count trigger and the skip: Auto mode became a setting, and
+every Section close from 100k resets unless the agent passes `--keep`.
+
 **Done when:** a session in auto mode passes the compact point, resets at a Section boundary without the Operator, and goes on with the Task; the cost and the saving of each reset are measured from the transcripts and shown in `kalfa meter usage`.
 
 - [x] Decide the trigger, the skip rule, the mode's place and the cost record in a grill.
