@@ -43,7 +43,7 @@ places, and each part of this Plan removes one.
 - [x] Session start in Auto mode: one line that tells the agent to close a Section at each logical end, that the close resets the session, and when to pass `--keep`.
 - [x] The usage report measures each Reset from the cost per request of the old session's last 20 requests against the new session's, beside the carried-context estimate; the payback estimate leaves the notes.
 - [x] The meter skill and the Plan sessions text say what changed.
-- [ ] `auto: true` in this machine's settings, after the merge and a build of the checkout the hooks run from: the settings schema is strict, so an older build refuses the key.
+- [x] `auto: true` in this machine's settings, after the merge and a build of the checkout the hooks run from: the settings schema is strict, so an older build refuses the key.
 - [ ] Prove it live: one session in a Herdr pane reaches Auto mode from the setting, resets at a Section close past 100k, and keeps its context with `--keep`.
 
 `RESET_FROM` and `LARGE_AT` are first values. A Reset writes a fresh start of
