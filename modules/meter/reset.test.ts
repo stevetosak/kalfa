@@ -60,7 +60,7 @@ test('at session start in a Herdr pane the auto setting tells the agent the rule
 	const withAuto = { ...base, env, settings: { ...base.settings, settings: { meter: { auto: true } } } };
 	const start = (context: typeof base, sessionId = 's1') =>
 		meterModule.handlers['session.start']({ harness: 'claude', cwd: '/repo', name: 'session.start', source: 'startup', sessionId }, context);
-	assert.match((await start(withAuto))?.context ?? '', /^Auto mode \(kalfa meter\): Close a Section[\s\S]*from 100k[\s\S]*--keep/);
+	assert.match((await start(withAuto))?.context ?? '', /^Auto mode \(kalfa meter\): close a Section[\s\S]*from 100k[\s\S]*--keep/);
 	assert.equal(await start({ ...base, env }), undefined, 'the setting is off');
 	assert.equal(await start({ ...withAuto, env: { ...env, HERDR_PANE_ID: '' } }), undefined, 'not in a pane');
 	writeState(stateDir(env), 's2', { level: 0, auto: false });

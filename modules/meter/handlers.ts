@@ -11,7 +11,7 @@ import type { Project } from '../../src/core/project.ts';
 import { readRecord, taskIdOf } from '../../src/core/task-record.ts';
 import { inHerdr } from '../herdr/launcher.ts';
 import { COMPACT_AT, GUARD_FROM, RESET_FROM } from './budget.ts';
-import { AUTO_RULE, autoOn, decide, type Verdict } from './guard.ts';
+import { AUTO_START, autoOn, decide, type Verdict } from './guard.ts';
 import { claimPending, logReset, type SpawnWaiter, spawnWaiter } from './reset.ts';
 import { readState, stateDir, writeState } from './state.ts';
 
@@ -103,7 +103,7 @@ function sessionStart(event: CoreEvent, context: HandlerContext): HandlerResult 
 	if (event.name !== 'session.start' || event.subagent || !inHerdrPane(context.env)) return undefined;
 	const state = event.sessionId ? readState(stateDir(context.env), event.sessionId) : { level: 0 };
 	if (!autoOn(state, settingsOf(context).auto, true)) return undefined;
-	return { context: `Auto mode (kalfa meter): ${AUTO_RULE}` };
+	return { context: AUTO_START };
 }
 
 export function meterModuleWith(deps: ResetDeps) {

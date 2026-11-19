@@ -58,6 +58,9 @@ export function largeLevel(context: number): number {
 /** What Auto mode does, for the agent: at session start and in the note at a large context. */
 export const AUTO_RULE = `Close a Section (\`kalfa section close\`) at each logical end, when the work moves to another subject or part: from ${k(RESET_FROM)} the close resets this session when your turn ends (/clear, then "continue" loads the Handoff), without the Operator. Keep in Found and Next what the next work needs. Pass \`--keep\` only when the next work needs this session's details (e.g. more iteration on the same UI). Do not remind the operator to compact.`;
 
+/** The rule in one short line for session start, where every character counts against the harness's hook cap. */
+export const AUTO_START = `Auto mode (kalfa meter): close a Section at each logical end; from ${k(RESET_FROM)} the close resets this session. Pass \`--keep\` when the next work needs this session's details.`;
+
 /** Auto mode's note at a large context: the size, and the rule; nothing resets. */
 export function largeNote(context: number): string {
 	return `Context: ${k(context)} tokens (Auto mode). A large context is fine while the work needs its details. ${AUTO_RULE}`;
