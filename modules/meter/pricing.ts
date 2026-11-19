@@ -70,13 +70,3 @@ export function carryCost(model: string, tokens: number): number {
 	return p ? tokens * perToken(p.read) : 0;
 }
 
-/**
- * The requests after which a Reset at `context` has paid for itself: the new
- * session writes `start` tokens to the cache once, then each request reads
- * `context - start` fewer. An estimate: whether the start is already in the
- * cache decides most of it, and the Resets part of the usage report measures it.
- */
-export function paybackRequests(model: string, context: number, start: number): number | undefined {
-	const saving = carryCost(model, context - start);
-	return saving > 0 ? Math.ceil(rewriteCost(model, start, '1h') / saving) : undefined;
-}

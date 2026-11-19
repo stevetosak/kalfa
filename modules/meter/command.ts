@@ -66,9 +66,8 @@ function auto(adapters: ReadonlyMap<string, Adapter>, args: string[], io: Io): n
 	if (!session) throw new KalfaError('kalfa meter auto: the harness does not say which session this is, so Auto mode cannot be set; the Operator can type /meter auto');
 	if (arg !== 'off' && !(inHerdr(io.env) && io.env.HERDR_PANE_ID)) throw new KalfaError('kalfa meter auto: Auto mode types its Reset into the Herdr pane, and this session is not in one');
 	const dir = stateDir(io.env);
-	const { auto: _, ...state } = readState(dir, session);
-	writeState(dir, session, arg === 'off' ? state : { ...state, auto: true });
-	io.out(arg === 'off' ? 'Auto mode off for this session: the meter reminds the Operator to compact again.' : 'Auto mode on for this session: past the compact point, `kalfa section close` resets it when the turn ends (/clear, then continue). `kalfa meter auto off` or /meter on ends it.');
+	writeState(dir, session, { ...readState(dir, session), auto: arg !== 'off' });
+	io.out(arg === 'off' ? 'Auto mode off for this session: the meter reminds the Operator to compact again.' : 'Auto mode on for this session: from 100k every `kalfa section close` resets it when the turn ends (/clear, then continue), unless you pass --keep. `kalfa meter auto off` or /meter on ends it.');
 	return 0;
 }
 
