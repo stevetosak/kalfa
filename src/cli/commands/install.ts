@@ -117,7 +117,7 @@ function run(adapters: ReadonlyMap<string, Adapter>, io: Io, wants: (adapter: Ad
 
 export function installCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs, packageRoot: () => string, steps: ReadonlyMap<string, MachineStep> = new Map()): Command {
 	return {
-		summary: "Write kalfa's hooks, the status-line tap, the machine Modules' approvals and the Personal layer's instruction file into the harnesses' user settings, set the settings kalfa owns (their own memory off, idle compaction), and run the machine Modules' own steps (the herdr Module links its Herdr plugin)",
+		summary: "Write kalfa's hooks, the status-line tap, the machine Modules' approvals and the Personal layer's instruction file into the harnesses' user settings, set the settings kalfa owns (their own memory off, idle compaction), and run the machine Modules' own steps (the herdr Module links its Herdr plugin and binds its action to a Herdr key)",
 		usage: 'kalfa install [--dry-run]',
 		async run(args, io) {
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' } });

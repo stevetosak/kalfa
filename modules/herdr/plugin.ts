@@ -1,9 +1,10 @@
-// The herdr Module's Herdr plugin, in herdr-plugin/. Herdr lists its actions
-// in the pane menu and runs them with no terminal, so an action only opens one
-// of the plugin's popup panes (`kalfa space popup <pane>`), in the folder of
-// the Workspace it was run from; the pane has a terminal and runs the form
-// (`kalfa space new`). The manifest names kalfa commands only, so the logic
-// stays here, tested. The commands need `kalfa` on Herdr's PATH.
+// The herdr Module's Herdr plugin, in herdr-plugin/. Its one action runs from
+// a key binding (key-binding.ts; Herdr lists no plugin action in a menu) with
+// no terminal, so it only opens the plugin's popup pane (`kalfa space popup
+// <pane>`) in the folder of the Workspace it was run from; the pane has a
+// terminal and runs the form (`kalfa space new`), which asks what to open.
+// The manifest names kalfa commands only, so the logic stays here, tested.
+// The commands need `kalfa` on Herdr's PATH.
 import { join } from 'node:path';
 import { KalfaError } from '../../src/core/errors.ts';
 import type { MachineStep } from '../../src/core/machine-step.ts';
@@ -13,8 +14,11 @@ import { startFolder } from './space-form.ts';
 /** The plugin id in herdr-plugin/herdr-plugin.toml. */
 export const PLUGIN_ID = 'kalfa';
 
+/** The manifest's action, which the key binding runs. */
+export const PLUGIN_ACTION = 'space';
+
 /** The popup panes of the manifest, by id. */
-export const PLUGIN_PANES = ['new-task', 'open-space'] as const;
+export const PLUGIN_PANES = ['space'] as const;
 export type PluginPane = (typeof PLUGIN_PANES)[number];
 
 export const isPluginPane = (pane: string): pane is PluginPane => (PLUGIN_PANES as readonly string[]).includes(pane);
@@ -59,7 +63,7 @@ export function herdrPluginStep(exec: HerdrExec = herdrCli): MachineStep {
 				if (linked?.plugin_root === root) return [`plugin: linked from ${root}${linked.enabled ? '' : ' (disabled in Herdr)'}; nothing to change`];
 				if (!dryRun) exec(['plugin', 'link', root]);
 				const was = linked ? ` (was ${linked.plugin_root})` : '';
-				return [`plugin: link ${root}${was}; Herdr's pane menu shows the kalfa actions`];
+				return [`plugin: link ${root}${was}`];
 			}),
 		uninstall: ({ env, dryRun }) =>
 			withHerdr(env, () => {

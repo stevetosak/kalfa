@@ -1,6 +1,6 @@
 ---
 title: "Space from the Herdr UI: a guided form for Tasks and Presets"
-description: "A Herdr plugin action opens a popup form that starts a Task or opens a repository's Workspace from a Preset, with a default for every value."
+description: "A Herdr key runs a plugin action that opens a popup form that starts a Task or opens a repository's Workspace from a Preset, with a default for every value."
 type: plan
 status: active
 topics: [agents, tooling]
@@ -9,8 +9,8 @@ topics: [agents, tooling]
 `kalfa space open` makes a Task's worktree, branch and Task Record and opens a
 Preset's tabs, but every value is a flag, so in practice only the agent starts
 a Task or a space. This Plan gives the Operator the same path from the Herdr
-UI: a plugin action in Herdr's menu opens a popup pane, and the pane runs a
-guided form, `kalfa space new`. The form has no logic of its own; it builds
+UI: a Herdr key runs a plugin action that opens a popup pane, and the pane
+runs a guided form, `kalfa space new`. The form has no logic of its own; it builds
 the request the `space open` flags build and shows the matching command
 before it runs, so the agent's path and the Operator's path stay one code
 path.
@@ -30,8 +30,9 @@ whole feature stays in the herdr Module.
 
 - [x] Link a test plugin with one action and one popup pane; check the menu, the TTY, the context and `kalfa` with Node 24; unlink it.
 
-The spike on herdr 0.9.3 held on every point but one detail. Herdr's
-right-click pane menu lists the action. The action gets the focused
+The spike on herdr 0.9.3 held on every point but one detail. (Its
+report that the right-click pane menu lists the action was wrong; see
+part 4.) The action gets the focused
 Workspace's folder in `HERDR_PLUGIN_CONTEXT_JSON`, and `herdr plugin pane open
 --placement popup --cwd <dir>` gives a popup with a full TTY, in which Node's
 raw mode works. The pane's command starts in that `--cwd` folder, not in the
@@ -64,16 +65,24 @@ with `git check-ref-format` before anything is made.
 
 ## 4. The plugin
 
-**Done when:** the herdr Module ships a Herdr plugin whose actions "kalfa: New Task" and "kalfa: Open space" open the form in a popup, and `kalfa install` links it when `herdr` is on PATH and the herdr Module is on.
+**Done when:** the herdr Module ships a Herdr plugin whose action "kalfa: Space" opens the form in a popup, and `kalfa install` links it and binds the action to a key when `herdr` is on PATH and the herdr Module is on.
 
 - [x] The plugin manifest, its actions and its popup pane in `modules/herdr/herdr-plugin/`.
 - [x] `kalfa install` links the plugin and says so.
+- [x] `kalfa install` binds the action to `prefix+shift+a` in Herdr's config.
+
+Herdr 0.9.3 to 0.9.5 lists no plugin action in a menu: the right-click menus
+hold fixed items, and an action runs only from a `plugin_action` key binding
+or `herdr plugin action invoke`. The spike's report of the action in the pane
+menu was wrong; the first manifest's two actions had no way to run from the
+UI. The plugin now has one action, "kalfa: Space", whose form asks whether to
+start a new Task, open a Task or open the Workspace, so one key covers all
+three.
 
 The manifest names kalfa commands only, so the logic stays in tested code and
-`kalfa` must be on Herdr's PATH. Each action runs `kalfa space popup <pane>`,
-which opens that popup pane in the Workspace's folder from the plugin context;
-the pane runs `kalfa space new --mode new` (no mode question) or `--mode open`
-(an open Task or the Workspace) with `--hold-on-error`, because a popup closes
+`kalfa` must be on Herdr's PATH. The action runs `kalfa space popup space`,
+which opens the popup pane in the Workspace's folder from the plugin context;
+the pane runs `kalfa space new --hold-on-error`, because a popup closes
 when its command exits and an error would vanish unread. Ctrl+C exits 130 and
 closes the popup at once; the popup takes Escape as input, so only Ctrl+C
 cancels the form. The plugin is Linux and macOS only.
@@ -89,9 +98,19 @@ or an install with the Module off, undoes only a recorded step: an unrecorded
 step would let the smoke or a scratch config unlink the Operator's real
 plugin.
 
+Herdr has no command that adds a key binding, so the same step writes one
+`[[keys.command]]` entry into Herdr's `config.toml` (found as Herdr finds it:
+`HERDR_CONFIG_PATH`, then `XDG_CONFIG_HOME`, then `~/.config`) as a block
+between two marker comments. The markers make the block kalfa's: a second
+install replaces it in place, and uninstall removes only it. The new text is
+checked with `herdr config check` on a copy before the real file changes, so
+a fault never reaches the Operator's config; a `prefix+shift+a` the Operator
+binds outside the block stays, and install says so. A running Herdr loads the
+key after `prefix+shift+r` or `herdr server reload-config`.
+
 ## 5. Proof and docs
 
-**Done when:** one live run from Herdr's menu opens a Task from the form, and the Module docs and usage text describe the form and the new flags.
+**Done when:** one live run from the Herdr key opens a Task from the form, and the Module docs and usage text describe the form and the new flags.
 
-- [ ] One live run from the menu.
+- [ ] One live run from the Herdr key.
 - [ ] The Module docs and the usage text.

@@ -17,3 +17,11 @@ export interface MachineStep {
 	/** Removes the Module's part; returns the report lines. */
 	uninstall(context: MachineStepContext): string[];
 }
+
+/** One step made of several: install runs them in order, uninstall in reverse order. */
+export function machineStepOf(...steps: MachineStep[]): MachineStep {
+	return {
+		install: (context) => steps.flatMap((step) => step.install(context)),
+		uninstall: (context) => [...steps].reverse().flatMap((step) => step.uninstall(context)),
+	};
+}

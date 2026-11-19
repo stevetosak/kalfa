@@ -3,7 +3,7 @@ import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { captureIo, tempDir } from '../../test/helpers.ts';
-import { herdrPluginStep, PLUGIN_ID, PLUGIN_PANES, pluginRoot } from './plugin.ts';
+import { herdrPluginStep, PLUGIN_ACTION, PLUGIN_ID, PLUGIN_PANES, pluginRoot } from './plugin.ts';
 import { spaceCommand } from './command.ts';
 
 const manifest = readFileSync(join(import.meta.dirname, 'herdr-plugin', 'herdr-plugin.toml'), 'utf8');
@@ -20,11 +20,11 @@ function blocks(table: string): Record<string, unknown>[] {
 		})));
 }
 
-test('the plugin manifest: each action opens its own popup pane through kalfa space popup, and each pane runs the form', async () => {
+test('the plugin manifest: the key\'s action opens its popup pane through kalfa space popup, and the pane runs the form, which asks the mode', async () => {
 	assert.match(manifest, new RegExp(`^id = "${PLUGIN_ID}"$`, 'm'));
 	const actions = blocks('actions');
 	const panes = blocks('panes');
-	assert.deepEqual(actions.map((a) => a.id), [...PLUGIN_PANES]);
+	assert.deepEqual(actions.map((a) => a.id), [PLUGIN_ACTION]);
 	assert.deepEqual(panes.map((p) => p.id), [...PLUGIN_PANES]);
 	for (const action of actions) assert.deepEqual(action.command, ['kalfa', 'space', 'popup', action.id]);
 	for (const pane of panes) {
@@ -32,6 +32,7 @@ test('the plugin manifest: each action opens its own popup pane through kalfa sp
 		const command = pane.command as string[];
 		assert.deepEqual(command.slice(0, 3), ['kalfa', 'space', 'new']);
 		assert.ok(command.includes('--hold-on-error'));
+		assert.ok(!command.includes('--mode'), 'the form asks: new Task, open Task or Workspace');
 	}
 });
 
@@ -43,10 +44,10 @@ test('space popup opens the pane in the folder of the Workspace the action ran f
 	};
 	const env = { HOME: '/home/x', HERDR_PLUGIN_ID: 'kalfa', HERDR_PLUGIN_CONTEXT_JSON: JSON.stringify({ workspace_cwd: '/work/shop', focused_pane_cwd: '/work/shop/src' }) };
 	const io = captureIo('/plugin-root', env);
-	assert.equal(await spaceCommand(new Map(), { exec }).run(['popup', 'new-task'], io), 0);
-	assert.deepEqual(calls, [['plugin', 'pane', 'open', '--plugin', 'kalfa', '--entrypoint', 'new-task', '--placement', 'popup', '--cwd', '/work/shop', '--focus']]);
+	assert.equal(await spaceCommand(new Map(), { exec }).run(['popup', 'space'], io), 0);
+	assert.deepEqual(calls, [['plugin', 'pane', 'open', '--plugin', 'kalfa', '--entrypoint', 'space', '--placement', 'popup', '--cwd', '/work/shop', '--focus']]);
 
-	await spaceCommand(new Map(), { exec }).run(['popup', 'open-space'], captureIo('/here', { HOME: '/home/x' }));
+	await spaceCommand(new Map(), { exec }).run(['popup', 'space'], captureIo('/here', { HOME: '/home/x' }));
 	assert.equal(calls[1]!.at(-2), '/here', 'no plugin context: the current folder');
 	await assert.rejects(spaceCommand(new Map(), { exec }).run(['popup', 'board'], io), /no plugin pane 'board'/);
 });
@@ -78,7 +79,7 @@ test('install links the plugin from the Module folder; a second install changes 
 	assert.equal(root, '/pkg/modules/herdr/herdr-plugin');
 
 	const none = fakeHerdr([]);
-	assert.match(herdrPluginStep(none.exec).install({ env, moduleDir: '/pkg/modules/herdr', dryRun: false })[0]!, /^plugin: link \/pkg\/modules\/herdr\/herdr-plugin; /);
+	assert.match(herdrPluginStep(none.exec).install({ env, moduleDir: '/pkg/modules/herdr', dryRun: false })[0]!, /^plugin: link \/pkg\/modules\/herdr\/herdr-plugin$/);
 	assert.deepEqual(none.calls, [LIST, ['plugin', 'link', root]]);
 
 	const same = fakeHerdr([local(root, false)]);
