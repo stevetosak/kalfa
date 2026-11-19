@@ -1,6 +1,6 @@
 ---
 name: meter
-description: Sets the context meter for this session. `/meter off` stops the /compact reminders, `/meter 300k` moves the compact point, `/meter on` puts the project's compact point back, `/meter auto` turns on Auto mode (inside Herdr, the session resets itself at the next Section close past the compact point), `/meter` alone shows the setting. Typed by the Operator only.
+description: Sets the context meter for this session. `/meter off` stops the /compact reminders, `/meter 300k` moves the compact point, `/meter on` puts the project's compact point back, `/meter auto` turns on Auto mode (inside Herdr, every Section close from 100k resets the session unless the agent passes --keep; the meter's `auto` setting turns it on in every session), `/meter` alone shows the setting. Typed by the Operator only.
 disable-model-invocation: true
 argument-hint: off | on | auto | <N>k
 ---

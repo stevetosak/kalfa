@@ -161,30 +161,39 @@ export function report(sessions: SessionUsage[], top = 15, compactAt = COMPACT_A
 		.join('\n\n');
 }
 
+/** The requests of the old session before a Reset that its cost per request is taken from. */
+const BEFORE_RESET = 20;
+
+const perRequest = (requests: RequestRecord[]) => (requests.length ? sum(requests) / requests.length : 0);
+
 /**
- * Auto mode's Resets, measured: the cost is the cache write of the new
- * session's first request; each request of the new session then saves
- * reading the difference between the old context and the new start. A skip
- * shows the agent's estimate against the requests that really followed, up
- * to the session's next logged Section close.
+ * Auto mode's Resets, measured: the net is the old session's cost per request
+ * (its last BEFORE_RESET requests) against the new session's (the write of its
+ * start included), times the new session's requests. The estimate beside it
+ * assumes each request of the new session reads the whole difference less and
+ * pays only the start's write; measured on 26 Resets (2026-11-19), it was
+ * about three times the measured net. A keep (or an older skip) shows the
+ * requests that followed, up to the session's next logged Section close.
  */
 export function resets(entries: ResetEntry[], sessions: SessionUsage[]): string[] {
 	if (entries.length === 0) return [];
 	const byId = new Map(sessions.map((s) => [s.id, s]));
-	const count = (kind: ResetEntry['kind']) => entries.filter((e) => e.kind === kind).length;
-	const lines = [`Resets (Auto mode): ${count('reset')} done, ${count('skip')} skipped, ${count('failed')} failed.`];
+	const count = (...kinds: ResetEntry['kind'][]) => entries.filter((e) => kinds.includes(e.kind)).length;
+	const lines = [`Resets (Auto mode): ${count('reset')} done, ${count('keep', 'skip')} kept, ${count('failed')} failed.`];
+	let measuredTotal = 0;
+	let measuredCount = 0;
 	for (const e of entries) {
 		const head = `  ${new Date(e.at).toISOString().slice(0, 16)} ${e.task} ${k(e.context)}`;
-		const estimate = e.payback === undefined ? '' : `, estimate ${e.payback}`;
 		if (e.kind === 'failed') {
 			lines.push(`${head}  failed: ${e.reason ?? 'no reason'}`);
 			continue;
 		}
-		if (e.kind === 'skip') {
-			// Each later Section close of the session is logged too and decides again, so a skip counts only up to it.
+		if (e.kind === 'keep' || e.kind === 'skip') {
+			// Each later Section close of the session is logged too and decides again, so a keep counts only up to it.
 			const until = entries.find((n) => n.from === e.from && n.at > e.at)?.at ?? Infinity;
 			const after = byId.get(e.from)?.requests.filter((r) => r.at > e.at && r.at <= until).length;
-			lines.push(`${head}  skipped: ${e.estimate} requests expected, ${after === undefined ? 'session not found' : `${after} followed`}${estimate}`);
+			const expected = e.estimate === undefined ? '' : `${e.estimate} requests expected, `;
+			lines.push(`${head}  kept: ${expected}${after === undefined ? 'session not found' : `${after} followed`}`);
 			continue;
 		}
 		const next = e.to ? byId.get(e.to) : undefined;
@@ -193,12 +202,19 @@ export function resets(entries: ResetEntry[], sessions: SessionUsage[]): string[
 			lines.push(`${head}  reset; the new session is not in this period's transcripts`);
 			continue;
 		}
-		const cost = writeCost(e.model, first);
-		const perRequest = carryCost(e.model, e.context - first.context);
-		const saved = perRequest * next.requests.length;
-		const needs = perRequest > 0 ? Math.ceil(cost / perRequest) : undefined;
-		const verdict = saved >= cost ? `paid back after ${needs}` : `not paid back yet (needs ${needs ?? '?'})`;
-		lines.push(`${head}→${k(first.context)}  cost ${dollars(cost)}  saved ${dollars(saved)} over ${next.requests.length} requests  ${verdict}${estimate}`);
+		const n = next.requests.length;
+		const estimate = carryCost(e.model, e.context - first.context) * n - writeCost(e.model, first);
+		const before = byId.get(e.from)?.requests.filter((r) => r.at <= e.at).slice(-BEFORE_RESET) ?? [];
+		if (!before.length) {
+			lines.push(`${head}→${k(first.context)}  ${n} requests after; the old session is not in this period's transcripts  estimate net ${dollars(estimate)}`);
+			continue;
+		}
+		const [old, now] = [perRequest(before), perRequest(next.requests)];
+		const measured = (old - now) * n;
+		measuredTotal += measured;
+		measuredCount++;
+		lines.push(`${head}→${k(first.context)}  ${n} requests after  per request ${dollars(old)} → ${dollars(now)}  measured net ${dollars(measured)}  estimate net ${dollars(estimate)}`);
 	}
+	if (measuredCount) lines.push(`  measured net of ${measuredCount} Resets: ${dollars(measuredTotal)}`);
 	return lines;
 }

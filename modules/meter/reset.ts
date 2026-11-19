@@ -1,6 +1,6 @@
 // Auto mode's Reset: a Section close, a /clear and a continue word in one
 // session, typed into its Herdr pane without the Operator. `kalfa section
-// close` past the compact point starts a detached waiter (`kalfa meter
+// close` from RESET_FROM starts a detached waiter (`kalfa meter
 // reset-wait`), because the session cannot clear itself while its turn runs:
 // the waiter waits for the pane to go idle or done, types /clear, waits for
 // Herdr to report a new session id (Herdr reports /clear as a stall although
@@ -29,14 +29,14 @@ export const resetJobSchema = z.strictObject({
 	task: z.string(),
 	model: z.string(),
 	context: z.number(),
-	payback: z.number().optional(),
 });
 
 export type ResetJob = z.infer<typeof resetJobSchema>;
 
 const entrySchema = z.object({
 	at: z.number(),
-	kind: z.enum(['reset', 'skip', 'failed']),
+	/** `skip`: an older form of `keep` that came with the agent's estimate of the requests left. */
+	kind: z.enum(['reset', 'keep', 'skip', 'failed']),
 	repo: z.string(),
 	task: z.string(),
 	model: z.string(),
@@ -45,7 +45,7 @@ const entrySchema = z.object({
 	/** The session before the Reset; the new one in `to`. */
 	from: z.string(),
 	to: z.string().optional(),
-	/** The payback estimate the agent was given, in requests. */
+	/** The payback estimate the agent was given, in requests (older entries). */
 	payback: z.number().optional(),
 	/** A skip: the agent's estimate of the requests left. */
 	estimate: z.number().optional(),
@@ -120,7 +120,7 @@ export interface WaiterDeps {
 /** The Reset itself, run by the waiter; the entry it returns is also logged. */
 export function runReset(job: ResetJob, deps: WaiterDeps): ResetEntry {
 	const { exec, dir } = deps;
-	const base = { at: deps.now(), repo: job.repo, task: job.task, model: job.model, context: job.context, from: job.session, ...(job.payback !== undefined && { payback: job.payback }) };
+	const base = { at: deps.now(), repo: job.repo, task: job.task, model: job.model, context: job.context, from: job.session };
 	const fail = (reason: string): ResetEntry => ({ ...base, kind: 'failed', reason });
 	let entry: ResetEntry;
 	try {

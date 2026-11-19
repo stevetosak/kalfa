@@ -11,6 +11,15 @@ export const COMPACT_NOW_AFTER = 50_000;
 export const REPEAT_EVERY = 50_000;
 /** Below this, writing the whole context again costs less than a guard is worth; the shim leaves Node asleep. */
 export const GUARD_FROM = 100_000;
+/**
+ * Auto mode: from this context every Section close resets the session unless
+ * the agent passes --keep. A Reset writes a fresh start of about 57k tokens,
+ * so below this it saves almost nothing. A first value, tuned from resets.jsonl.
+ */
+export const RESET_FROM = 100_000;
+/** Auto mode: from this context, and again every LARGE_EVERY, the agent gets a note; nothing resets. A first value. */
+export const LARGE_AT = 300_000;
+export const LARGE_EVERY = 100_000;
 /** The one-hour prompt-cache lifetime of a main session on a subscription. */
 export const IDLE_MS = 60 * 60 * 1000;
 /** The context a fresh session starts with (system prompt, tools, memory), measured 2026-10-04. */
