@@ -53,8 +53,8 @@ function planReport(project: Project): ReportPart {
 	};
 }
 
-/** Characters of the hook's context the session report leaves for the other Modules (recall, deferred items). */
-const OTHER_MODULES_ROOM = 1500;
+/** Characters of the hook's context the session report leaves for the other Modules (recall, deferred items, the meter's Auto mode line). */
+const OTHER_MODULES_ROOM = 1700;
 
 /** Open Tasks other than the branch's that the session report names, the most recently written first. */
 const OTHER_TASKS_SHOWN = 3;
