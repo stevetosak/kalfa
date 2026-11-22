@@ -56,8 +56,13 @@ function planReport(project: Project): ReportPart {
 	};
 }
 
-/** Characters of the hook's context the session report leaves for the other Modules (recall, deferred items, the meter's Auto mode line). */
-const OTHER_MODULES_ROOM = 1700;
+/**
+ * Characters of the hook's context the session report leaves for the other
+ * Modules (recall, the inbox line, the deferred items' count, the meter's Auto
+ * mode line). Measured in kalfa on 2026-11-22: 1,987, of which Task recall
+ * (5 hits) took 1,547.
+ */
+const OTHER_MODULES_ROOM = 2500;
 
 /** Open Tasks other than the branch's that the session report names, the most recently written first. */
 const OTHER_TASKS_SHOWN = 3;
