@@ -53,6 +53,15 @@ test('add needs a layer, a known type and a summary; the project layer needs a r
 	assert.match(outside.error ?? '', /needs a git repository/);
 });
 
+test('the id root is kept for a Hub: refused for another type, and never made from a summary', async () => {
+	const { repo, env } = machine();
+	assert.match((await memory(env, repo, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'A fact.', '--id', 'root'])).error ?? '', /the id 'root' is kept for the layer's Root Hub/);
+	assert.match((await memory(env, repo, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'Root.'])).out, /Added fact root-2 /);
+	assert.match((await memory(env, repo, ['add', '--type', 'hub', '--layer', 'personal', '--summary', 'Root.'])).out, /Added hub root /);
+	assert.match((await memory(env, repo, ['supersede', 'root-2', '--summary', 'A fact.', '--id', 'root'])).error ?? '', /the id 'root' is kept/);
+	assert.match((await memory(env, repo, ['supersede', 'root', '--summary', 'Root.'])).out, /^root-3 supersedes root /, 'a Hub that supersedes the Root Hub takes the next free id');
+});
+
 test('a new write takes no rule type and no proposed status; the refusal says where a rule goes', async () => {
 	const { repo, env } = machine();
 	const rule = await memory(env, repo, ['add', '--type', 'rule', '--layer', 'personal', '--summary', 'Stage files by name.']);

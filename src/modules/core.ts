@@ -16,11 +16,14 @@
 // for the Stored tier (ADR 0002). Where the harness loads kalfa's instruction
 // file, the Personal layer comes from it instead, and the report is fitted
 // under the Adapter's cap on one hook's context (amendment 2026-11-12).
+// A layer with a Root Hub loads no index lines: the memory Module loads the
+// Root Hub, and the report keeps room for it (ADR 0003).
 import { statSync } from 'node:fs';
 import { writeCheckpoint } from '../core/checkpoint.ts';
 import { currentBranch } from '../core/git.ts';
 import { type Layer, type LayerScan, memoryHome, scanLayer, sessionLayers } from '../core/memory/home.ts';
 import { refreshInstructions } from '../core/memory/instructions.ts';
+import { rootHubOf } from '../core/memory/root-hub.ts';
 import { budgetOf, type LayerView, layerView, overBudgetNotice, renderLayer } from '../core/memory/standing.ts';
 import { readUsage } from '../core/memory/usage.ts';
 import { type RuleLayouts, sessionRules } from '../core/rules/session.ts';
@@ -146,7 +149,10 @@ function fitViews(scans: { layer: Layer; scan: LayerScan }[], budgets: MemoryBud
 		return layerView(layer, records, indexBytes === undefined ? budget : { ...budget, 'index-bytes': Math.max(0, Math.min(budget['index-bytes'], indexBytes)) }, readUsage(layer, env));
 	};
 	if (room === undefined) return scans.map(({ layer, scan }) => viewOf(layer, scan.records));
-	const fixed = scans.reduce((sum, { layer, scan }) => sum + renderLayer(viewOf(layer, scan.records, 0)).length + 2 + INDEX_HEADING, 0);
+	const fixed = scans.reduce((sum, { layer, scan }) => {
+		const view = viewOf(layer, scan.records, 0);
+		return sum + renderLayer(view).length + 2 + (view.rootHub ? 0 : INDEX_HEADING);
+	}, 0);
 	let left = room - MEMORY_HEADER.length - fixed;
 	return scans.map(({ layer, scan }) => {
 		const view = viewOf(layer, scan.records, left);
@@ -162,9 +168,11 @@ function fitViews(scans: { layer: Layer; scan: LayerScan }[], budgets: MemoryBud
  */
 function memoryReport(project: Project | undefined, settings: Settings, env: NodeJS.ProcessEnv, fit: { personal: boolean; room?: number }): ReportPart {
 	const budgets = memoryBudgets(settings);
-	const layers = sessionLayers(memoryHome(env), project).filter((layer) => fit.personal || layer.name !== 'personal');
-	const scans = layers.map((layer) => ({ layer, scan: scanLayer(layer) }));
-	const views = fitViews(scans, budgets, env, fit.room);
+	const all = sessionLayers(memoryHome(env), project).map((layer) => ({ layer, scan: scanLayer(layer) }));
+	// The memory Module loads every Root Hub in the report, the Personal one too, each at most its limit.
+	const rootHubs = all.filter(({ scan }) => rootHubOf(scan.records)).length;
+	const scans = all.filter(({ layer }) => fit.personal || layer.name !== 'personal');
+	const views = fitViews(scans, budgets, env, fit.room === undefined ? undefined : fit.room - rootHubs * budgets.rootHubChars);
 	const blocks = views.map(renderLayer).filter(Boolean);
 	// A broken file is left out and named; the other records still load.
 	const unreadable = scans.flatMap(({ scan }) => scan.problems.map((p) => `kalfa: memory: left out: ${p}`));

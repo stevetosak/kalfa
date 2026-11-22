@@ -41,7 +41,7 @@ it, and the agent keeps its memory without a review by the Operator.
 
 **Done when:** the session start loads each layer's Root Hub (at most 1,500 characters, a setting), the current Task's Short-term memory, one line for each open Task and Plan and the count of deferred items, and no index lines for a layer that has a Root Hub; the first prompt of a session adds the best few search hits once; every prompt's hits go to the shadow log without being injected; the personal Instruction file holds only rules; the kalfa session report is measured below 5,000 characters; local checks pass.
 
-- [ ] The Root Hubs in the session report, with their limit; a layer without a Root Hub still loads its index lines.
+- [x] The Root Hubs in the session report, with their limit; a layer without a Root Hub still loads its index lines.
 - [x] The deferred items as a count; `/kalfa-status` keeps the full list.
 - [ ] First-prompt recall: one search with the prompt and the Task, once per session.
 - [ ] The shadow log: each prompt's search hits written to a log in the cache folder, not injected.

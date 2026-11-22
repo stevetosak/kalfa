@@ -6,6 +6,7 @@ import type { MemoryRecord } from '../../src/core/memory/record.ts';
 import { budgetProblem } from '../../src/core/memory/standing.ts';
 import type { MemoryBudgets } from '../../src/core/settings.ts';
 import { type Link, LinkGraph, type LinkNode, linkText, PERSONAL_PREFIX } from './links.ts';
+import { rootHubFindings } from './root-hubs.ts';
 import type { MemorySettings } from './settings.ts';
 import { jaccard, wordsOf } from './words.ts';
 
@@ -116,6 +117,7 @@ export function lint(input: LintInput): Finding[] {
 		...input.scans.flatMap(({ layer, scan }) => [
 			...scan.problems.map((problem) => ({ layer: layer.label, problem: `left out of every session: ${problem}` })),
 			...recordFindings(layer, scan.records, input),
+			...rootHubFindings(layer, scan, input.budgets.rootHubChars),
 		]),
 		...linkFindings(input),
 		...duplicateFindings(input),

@@ -136,7 +136,7 @@ A Memory record that maps one subject: a short text and the links to the records
 _Avoid_: index, topic, map of content
 
 **Root Hub**:
-The top Hub of a Memory layer: a short map of the layer, with links to its subject Hubs, that loads at every session start.
+The top Hub of a Memory layer: a short map of the layer, with links to its subject Hubs, that loads at every session start. Its id is `root`; after a supersede, the record at the end of the chain takes its place.
 _Avoid_: index, home page, MEMORY.md
 
 **Memory layer**:

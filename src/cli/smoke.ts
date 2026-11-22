@@ -26,6 +26,7 @@ const PERSONAL_RULES = '.claude/rules/kalfa-personal/always.md';
 const MEMORY_HOME = '.local/share/kalfa/memory';
 const CANDIDATE = 'Smoke candidate from the Task.';
 const ACCEPTED = 'Smoke accepted candidate.';
+const ROOT_HUB = 'Smoke map of the project layer.';
 const GOAL = 'smoke goal';
 
 /** The Operator's own settings: an approval and a hook that kalfa must keep. */
@@ -275,7 +276,7 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 		},
 	},
 	{
-		name: 'memory Module: Task close puts the candidates into the inbox, accept writes a record, search finds it',
+		name: 'memory Module: Task close puts the candidates into the inbox, accept writes a record, search finds it, a Root Hub loads in place of the index lines',
 		run(world) {
 			const parts = `**Done:** smoke work.\n\n**Memory candidates:**\n- ${CANDIDATE}\n\n**Next:** nothing.`;
 			const section = exec(world, 'kalfa', ['section', 'close', 'Smoke section'], { input: parts });
@@ -294,6 +295,12 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			expect(kalfa(world, ['memory', 'inbox']).includes('the inbox is empty'), 'accept left the candidate in the inbox');
 			expect(kalfa(world, ['memory', 'search', 'accepted candidate']).includes(`[memory] fact: ${ACCEPTED}`), 'search does not find the accepted record');
 			expect(kalfa(world, ['memory', 'lint']).trim() === 'no findings', 'the lint has findings on fresh records');
+			kalfa(world, ['memory', 'add', '--type', 'hub', '--layer', 'project', '--id', 'root', '--summary', ROOT_HUB]);
+			const start = exec(world, 'sh', ['-c', installedHook(world, 'SessionStart')], { input: hookPayload(world, 'SessionStart', { source: 'startup' }) });
+			expect(start.status === 0, `session.start exited ${start.status}: ${start.stderr.trim()}`);
+			const context = String(JSON.parse(start.stdout || '{}').hookSpecificOutput?.additionalContext ?? '');
+			expect(context.includes(`Root Hub of the Project layer (local/repo);`) && context.includes(ROOT_HUB), 'session.start does not load the project Root Hub');
+			expect(!context.includes(`[fact] ${PROJECT_FACT}`), 'session.start still loads the index lines of a layer with a Root Hub');
 		},
 	},
 	{
