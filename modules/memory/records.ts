@@ -1,24 +1,16 @@
-// `kalfa memory`: the only way the agent writes a Memory record (ADR 0002).
-// Each write is checked, dated and committed in the Memory home. A write is
+// The record subcommands of `kalfa memory`: the only way the agent writes a
+// Memory record (ADR 0002, 0003). Each write is checked, dated and committed in
+// the Memory home, which the Core owns with the record format. A write is
 // never refused for space: a budget decides only what loads, and a record
 // past it is Stored (amendment 2026-11-08). What the Operator states and what
 // the agent finds are written at once and active; a rule goes to its Rule pack
 // through `kalfa rule` (ADR 0003).
 import { existsSync, readFileSync } from 'node:fs';
-import { KalfaError } from '../../core/errors.ts';
-import {
-	type HomeChange,
-	type Layer,
-	type LayerName,
-	memoryHome,
-	personalLayer,
-	projectLayer,
-	readLayer,
-	recordHistory,
-	recordPath,
-	sessionLayers,
-	writeRecords,
-} from '../../core/memory/home.ts';
+import { parseCommandArgs, UsageError } from '../../src/cli/command.ts';
+import type { Io } from '../../src/cli/io.ts';
+import { layerFor, layerName, layersFor } from '../../src/cli/layers.ts';
+import { KalfaError } from '../../src/core/errors.ts';
+import { type HomeChange, type Layer, type LayerName, memoryHome, readLayer, recordHistory, recordPath, writeRecords } from '../../src/core/memory/home.ts';
 import {
 	checkHeader,
 	isNewRecordType,
@@ -29,39 +21,13 @@ import {
 	RECORD_STATUSES,
 	RULE_IS_NOT_MEMORY,
 	slugOf,
-} from '../../core/memory/record.ts';
-import { refreshInstructions } from '../../core/memory/instructions.ts';
-import { LinkGraph, neighbourLines } from '../../core/memory/links.ts';
-import { markUsed } from '../../core/memory/usage.ts';
-import { loadProject } from '../../core/project.ts';
-import { loadSettings } from '../../core/settings.ts';
-import { type Command, parseCommandArgs, UsageError } from '../command.ts';
-import type { Io } from '../io.ts';
+} from '../../src/core/memory/record.ts';
+import { markUsed } from '../../src/core/memory/usage.ts';
+import { LinkGraph, neighbourLines } from './links.ts';
 
 const today = () => new Date().toLocaleDateString('sv-SE');
 
 const layerOption = { layer: { type: 'string' } } as const;
-
-/** Parses a --layer value. */
-export function layerName(value: string | undefined): LayerName | undefined {
-	if (value === undefined) return undefined;
-	if (value !== 'personal' && value !== 'project') throw new UsageError(`--layer is personal or project, not '${value}'`);
-	return value;
-}
-
-/** The layer named by --layer, as this directory sees it. */
-export function layerFor(io: Io, name: LayerName): Layer {
-	const home = memoryHome(io.env);
-	if (name === 'personal') return personalLayer(home);
-	const project = loadProject(io.cwd);
-	if (!project) throw new KalfaError('the project layer needs a git repository; run this inside one, or use --layer personal');
-	return projectLayer(home, project);
-}
-
-/** The layers to look in for an id: the one named, else every layer this directory sees. */
-export function layersFor(io: Io, name: LayerName | undefined): Layer[] {
-	return name ? [layerFor(io, name)] : sessionLayers(memoryHome(io.env), loadProject(io.cwd));
-}
 
 function findRecord(io: Io, id: string, name: LayerName | undefined): { layer: Layer; record: MemoryRecord; records: MemoryRecord[] } {
 	const found = layersFor(io, name).flatMap((layer) => {
@@ -128,10 +94,11 @@ export function addRecord(io: Io, layer: Layer, input: NewRecord, also: HomeChan
 	return { ...record, layer, path: path! };
 }
 
-/** A subcommand of `kalfa memory`; a Module can add its own (the `memory` Module adds search, lint, inbox). */
+/** A subcommand of `kalfa memory`. */
 export type MemorySubcommand = (args: string[], io: Io) => Promise<number>;
 
-const subcommands: Record<string, MemorySubcommand> = {
+/** add, supersede, confirm, close, activate, show and list. */
+export const recordSubcommands: Record<string, MemorySubcommand> = {
 	async add(args, io) {
 		const { values } = parseCommandArgs(args, {
 			...layerOption,
@@ -286,46 +253,13 @@ const subcommands: Record<string, MemorySubcommand> = {
 	},
 };
 
-const CORE_USAGE = [
+/** The usage lines of the record subcommands. */
+export const RECORD_USAGE = [
 	'kalfa memory add --type fact|decision|open|hub --layer personal|project --summary "<one line>" [--source <link>] [--id <id>]   (body on stdin, optional; a rule: kalfa rule add)',
-	'       kalfa memory supersede <id> --summary "<one line>" [--layer …] [--id <id>]   (body on stdin, optional)',
-	'       kalfa memory confirm <id> "<how you checked it>" [--layer …]',
-	'       kalfa memory close <id> "<why it is done>" [--layer …]   (it leaves the session start; search keeps it)',
-	'       kalfa memory activate [<id>…] [--layer …]   (the proposed records of the old review become active; no id: all of them)',
-	'       kalfa memory show <id> [--layer …] [--depth 0|1|2]   (with the summary line of each linked record, to depth 1 when not given)',
-	'       kalfa memory list [--layer personal|project] [--status active|proposed|superseded|closed|all]',
+	'kalfa memory supersede <id> --summary "<one line>" [--layer …] [--id <id>]   (body on stdin, optional)',
+	'kalfa memory confirm <id> "<how you checked it>" [--layer …]',
+	'kalfa memory close <id> "<why it is done>" [--layer …]   (it leaves the session start; search keeps it)',
+	'kalfa memory activate [<id>…] [--layer …]   (the proposed records of the old review become active; no id: all of them)',
+	'kalfa memory show <id> [--layer …] [--depth 0|1|2]   (with the summary line of each linked record, to depth 1 when not given)',
+	'kalfa memory list [--layer personal|project] [--status active|proposed|superseded|closed|all]',
 ];
-
-/** A Module's additions to `kalfa memory`: its subcommands and their usage lines. */
-export interface MemoryExtension {
-	subcommands: Record<string, MemorySubcommand>;
-	usage: string[];
-}
-
-/** `kalfa memory`: the Core's subcommands, and those the Modules add (a Core name cannot be taken). */
-export function memoryCommand(extensions: readonly MemoryExtension[] = []): Command {
-	const all: Record<string, MemorySubcommand> = { ...subcommands };
-	for (const extension of extensions) {
-		for (const [name, run] of Object.entries(extension.subcommands)) {
-			if (Object.hasOwn(all, name)) throw new KalfaError(`kalfa memory ${name} is defined twice`);
-			all[name] = run;
-		}
-	}
-	return {
-		summary: 'Add, supersede, confirm, close, show or list the Memory records of Standing memory',
-		usage: [...CORE_USAGE, ...extensions.flatMap((e) => e.usage.map((line) => `       ${line}`))].join('\n'),
-		async run(args, io) {
-			const [sub, ...rest] = args;
-			const run = sub && Object.hasOwn(all, sub) ? all[sub] : undefined;
-			if (!run) throw new UsageError(sub ? `unknown subcommand '${sub}'` : 'give a subcommand');
-			const code = await run(rest, io);
-			// A write, or a read that changes a record's rank, can change the Personal layer's Loaded tier.
-			try {
-				refreshInstructions(io.env, loadSettings(io.env));
-			} catch (error) {
-				io.err(`kalfa memory: the instruction file was not written again: ${(error as Error).message}`);
-			}
-			return code;
-		},
-	};
-}

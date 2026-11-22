@@ -33,7 +33,7 @@ it, and the agent keeps its memory without a review by the Operator.
 
 - [x] The record format: the `hub` type; the `rule` type and the `proposed` status refused for new writes and still read for the migration.
 - [x] Links: parse `[[id]]` and `[[personal:id]]`, find back-links, and `kalfa memory show --depth`.
-- [ ] The write commands (`add`, `supersede`, `confirm`, `close`, `show`, `list`) move from the Core to the memory Module; the Core keeps the Memory home.
+- [x] The write commands (`add`, `supersede`, `confirm`, `close`, `show`, `list`) move from the Core to the memory Module; the Core keeps the Memory home.
 - [ ] Search ranking in three tiers, by use within each.
 - [ ] The lint: broken links, and links from the Personal layer into a project.
 

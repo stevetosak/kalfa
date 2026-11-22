@@ -40,11 +40,19 @@ export function captureIo(cwd: string, env: NodeJS.ProcessEnv = { HOME: tempDir(
 }
 
 /**
- * A record as an older kalfa wrote it (a rule record, or a proposed one),
- * written straight into the Memory home and committed: no write command makes
- * one now (ADR 0003), but the migration still reads them.
+ * A record written straight into the Memory home and committed, without the
+ * memory Module's `kalfa memory add`: the Core's own tests need records, not
+ * the Module.
+ */
+export function seedRecord(env: NodeJS.ProcessEnv, layer: Layer, id: string, header: { type: RecordType; summary: string; status?: RecordStatus }, message = `seed ${header.type} ${id} (${layer.label})`): void {
+	const record = { id, header: { schema: 1 as const, status: 'active' as const, created: '2026-11-01', confirmed: '2026-11-01', ...header }, body: '' };
+	writeRecords(memoryHome(env), [{ layer, record }], message);
+}
+
+/**
+ * A record as an older kalfa wrote it (a rule record, or a proposed one): no
+ * write command makes one now (ADR 0003), but the migration still reads them.
  */
 export function legacyRecord(env: NodeJS.ProcessEnv, layer: Layer, id: string, header: { type: RecordType; summary: string; status?: RecordStatus }): void {
-	const record = { id, header: { schema: 1 as const, status: 'active' as const, created: '2026-11-01', confirmed: '2026-11-01', ...header }, body: '' };
-	writeRecords(memoryHome(env), [{ layer, record }], `legacy ${header.type} ${id} (${layer.label})`);
+	seedRecord(env, layer, id, header, `legacy ${header.type} ${id} (${layer.label})`);
 }

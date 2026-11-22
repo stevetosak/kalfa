@@ -143,6 +143,11 @@ function installedHook(world: World, hook: string): string {
 	return command;
 }
 
+/** The session report without the memory Module's recall block: its search hits may name any record, a rule record too. */
+function withoutRecall(context: string): string {
+	return context.split('\n\nRecall for ')[0]!;
+}
+
 function hookPayload(world: World, hook: string, extra: Record<string, unknown>): string {
 	return JSON.stringify({ session_id: '00000000-0000-4000-8000-000000000000', transcript_path: join(world.home, 'transcript.jsonl'), cwd: world.repo, hook_event_name: hook, ...extra });
 }
@@ -221,8 +226,14 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 		},
 	},
 	{
-		name: 'memory: kalfa memory writes records in the Memory home and refuses a rule; the instruction file holds the Personal layer, session.start the project layer',
+		name: 'memory: the memory Module turns on; kalfa memory writes records in the Memory home and refuses a rule; the instruction file holds the Personal layer, session.start the project layer',
 		run(world) {
+			const off = exec(world, 'kalfa', ['memory', 'list']);
+			expect(off.status === 1 && off.stderr.includes('the memory Module is not on here'), `kalfa memory ran with the memory Module off (exit ${off.status}): ${off.stderr.trim()}`);
+			cpSync(join(world.packageRoot, 'modules', 'memory'), join(world.root, 'modules', 'memory'), { recursive: true });
+			const project = parse(read(world, 'kalfa.yaml'));
+			writeFileSync(join(world.repo, 'kalfa.yaml'), stringify({ ...project, modules: [...project.modules, 'memory'] }));
+			kalfa(world, ['build']);
 			const home = join(world.home, MEMORY_HOME);
 			// A rule record as an older kalfa wrote it: no write makes one now (ADR 0003), and the rules step migrates it.
 			writeFiles(home, { 'personal/smoke-personal-rule.md': `---\nschema: 1\ntype: rule\nstatus: active\nsummary: ${PERSONAL_RULE}\ncreated: 2026-11-01\nconfirmed: 2026-11-01\n---\n` });
@@ -238,7 +249,7 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			const start = exec(world, 'sh', ['-c', installedHook(world, 'SessionStart')], { input: hookPayload(world, 'SessionStart', { source: 'startup' }) });
 			expect(start.status === 0, `session.start exited ${start.status}: ${start.stderr.trim()}`);
 			const output = JSON.parse(start.stdout || '{}');
-			const context = String(output.hookSpecificOutput?.additionalContext ?? '');
+			const context = withoutRecall(String(output.hookSpecificOutput?.additionalContext ?? ''));
 			const rules = join(world.home, '.claude', 'rules', 'kalfa-memory.md');
 			expect(existsSync(rules) && readFileSync(rules, 'utf8').includes(PERSONAL_RULE), 'the instruction file does not hold the personal rule');
 			expect(!context.includes(PERSONAL_RULE) && context.includes(`[fact] ${PROJECT_FACT}`), 'session.start does not inject the project layer alone');
@@ -257,7 +268,7 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			expect(existsSync(scoped) && readFileSync(scoped, 'utf8').startsWith('---\npaths:\n  - src/**\n---\n'), 'kalfa rule add did not build the path-scoped rule file');
 			const start = exec(world, 'sh', ['-c', installedHook(world, 'SessionStart')], { input: hookPayload(world, 'SessionStart', { source: 'startup' }) });
 			expect(start.status === 0, `session.start exited ${start.status}: ${start.stderr.trim()}`);
-			const context = String(JSON.parse(start.stdout || '{}').hookSpecificOutput?.additionalContext ?? '');
+			const context = withoutRecall(String(JSON.parse(start.stdout || '{}').hookSpecificOutput?.additionalContext ?? ''));
 			expect(!context.includes(PERSONAL_RULE) && !context.includes(PROJECT_RULE), 'session.start injects a rule that loads from its file');
 			kalfa(world, ['rule', 'remove', 'smoke-project-rule', 'the smoke is done with it']);
 			expect(!existsSync(scoped), 'kalfa rule remove left the rule file');
@@ -266,10 +277,6 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 	{
 		name: 'memory Module: Task close puts the candidates into the inbox, accept writes a record, search finds it',
 		run(world) {
-			cpSync(join(world.packageRoot, 'modules', 'memory'), join(world.root, 'modules', 'memory'), { recursive: true });
-			const project = parse(read(world, 'kalfa.yaml'));
-			writeFileSync(join(world.repo, 'kalfa.yaml'), stringify({ ...project, modules: [...project.modules, 'memory'] }));
-			kalfa(world, ['build']);
 			const parts = `**Done:** smoke work.\n\n**Memory candidates:**\n- ${CANDIDATE}\n\n**Next:** nothing.`;
 			const section = exec(world, 'kalfa', ['section', 'close', 'Smoke section'], { input: parts });
 			expect(section.status === 0, `kalfa section close exited ${section.status}: ${section.stderr.trim()}`);

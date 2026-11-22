@@ -2,7 +2,7 @@
 // `defer` skill adds an item at the Operator's word; the Operator takes an
 // item on (it becomes a Plan or a Task) or drops it. Each change is one
 // commit in the Memory home, so the history says when and why.
-import { layerFor, layerName, layersFor } from '../../src/cli/commands/memory.ts';
+import { layerFor, layerName, layersFor } from '../../src/cli/layers.ts';
 import { type Command, parseCommandArgs, UsageError } from '../../src/cli/command.ts';
 import type { Io } from '../../src/cli/io.ts';
 import { requireModule } from '../../src/cli/project.ts';

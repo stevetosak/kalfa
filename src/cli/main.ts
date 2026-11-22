@@ -3,14 +3,13 @@ import { moduleDirs, moduleDirsOrOwn } from '../core/module-dirs.ts';
 import { packageRoot } from '../core/package-root.ts';
 import { type Command, UsageError } from './command.ts';
 import { adapters } from '../adapters/index.ts';
-import { machineSteps, memoryExtensions, moduleCommands, modules, withFolderModules } from '../modules/index.ts';
+import { machineSteps, moduleCommands, modules, withFolderModules } from '../modules/index.ts';
 import { buildCommand } from './commands/build.ts';
 import { doctorCommand } from './commands/doctor.ts';
 import { initCommand } from './commands/init.ts';
 import { installCommand, uninstallCommand } from './commands/install.ts';
 import { linkCommand, unlinkCommand } from './commands/link.ts';
 import { hookCommand } from './commands/hook.ts';
-import { memoryCommand } from './commands/memory.ts';
 import { planCommand } from './commands/plan.ts';
 import { recapCommand } from './commands/recap.ts';
 import { ruleCommand } from './commands/rule.ts';
@@ -33,7 +32,6 @@ const commands: Record<string, Command> = {
 	section: sectionCommand(adapters, registry),
 	plan: planCommand,
 	recap: recapCommand,
-	memory: memoryCommand(memoryExtensions),
 	rule: ruleCommand(adapters, moduleDirs),
 	...Object.fromEntries(Object.entries(moduleCommands).map(([name, command]) => [name, command(adapters)])),
 };

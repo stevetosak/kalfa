@@ -89,13 +89,14 @@ Writing the harness files by hand was rejected because they have no history,
 fit one harness, and a new worktree does not get a git-ignored file; a private
 Module per project was rejected as too heavy for one stated rule.
 
-**The Core owns the rules; the memory Module owns Long-term memory.** The
-reason for ADR 0002's split stays, but it now falls between rules and memory:
-the Core owns the private Rule packs and their Instruction files (`kalfa rule
+**The Core owns the rules; the memory Module owns Long-term memory.** The reason
+for ADR 0002's split stays, but it now falls between rules and memory: the Core
+owns the private Rule packs and their Instruction files (`kalfa rule
 add|change|remove`), the Task Records with the Short-term window and the
-archive, and the Memory home. The memory Module owns Long-term memory, the
-Root Hubs at the start, recall, the shadow log, the Cleanup and the lint, and it
-can still be replaced as a whole. Without it no rule is lost; closed Task
+archive, and the Memory home with its record format, which the Core's own
+commands read too. The memory Module owns Long-term memory and `kalfa memory`,
+the Root Hubs at the start, recall, the shadow log, the Cleanup and the lint,
+and it can still be replaced as a whole. Without it no rule is lost; closed Task
 Records simply stay in Short-term memory, because nothing reconciles them.
 
 **A harness without a feature loads more, never less.** Two Capabilities are
