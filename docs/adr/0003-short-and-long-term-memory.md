@@ -151,7 +151,9 @@ Standing memory and Recall memory are replaced by Short-term and Long-term
 memory, and the rule type leaves the Memory record. The approval that followed
 the source ends: the agent writes what it finds, and what the Operator states is
 still written at once, a rule to its Rule pack and anything else to Long-term
-memory. The budgets no longer decide which index lines load; the Root Hub
+memory. The upkeep of a layer over its budget leaves the Task-close question
+for the Cleanup: the agent merges the likely duplicates and closes the open
+items whose work it can show is done. The budgets no longer decide which index lines load; the Root Hub
 limit and a warning on the count of rules that load always take their place.
 The instruction file that held the Personal layer's Loaded tier retires: the
 Personal layer's rules load from its Rule pack's files, and its memory from
