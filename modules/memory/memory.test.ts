@@ -3,7 +3,6 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { memoryCommand } from '../../src/cli/commands/memory.ts';
 import { sectionCommand, taskCommand } from '../../src/cli/commands/task.ts';
 import { dispatch } from '../../src/core/dispatcher.ts';
 import { KalfaError } from '../../src/core/errors.ts';
@@ -15,9 +14,9 @@ import type { HandlerContext } from '../../src/core/modules.ts';
 import { loadProject } from '../../src/core/project.ts';
 import { DEFAULT_MEMORY_BUDGETS, loadSettings } from '../../src/core/settings.ts';
 import { coreModule } from '../../src/modules/core.ts';
-import { memoryExtensions } from '../../src/modules/index.ts';
 import { fakeAdapter, registry } from '../../test/fakes.ts';
 import { captureIo, gitRepo, tempRepo } from '../../test/helpers.ts';
+import { memoryCommand } from './command.ts';
 import { candidateFiles, readInbox, splitCandidates } from './inbox.ts';
 import { lint } from './lint.ts';
 import { memoryModule } from './handlers.ts';
@@ -62,7 +61,7 @@ async function run(command: { run(args: string[], io: ReturnType<typeof captureI
 	}
 }
 
-const memory = (cwd: string, env: NodeJS.ProcessEnv, args: string[], stdin = '') => run(memoryCommand(memoryExtensions), cwd, env, args, stdin);
+const memory = (cwd: string, env: NodeJS.ProcessEnv, args: string[], stdin = '') => run(memoryCommand(), cwd, env, args, stdin);
 const homeLog = (env: NodeJS.ProcessEnv) => execFileSync('git', ['-C', memoryHome(env), 'log', '--format=%s'], { encoding: 'utf8' }).trim().split('\n');
 
 async function startTask(repo: string, env: NodeJS.ProcessEnv, candidates: string) {
@@ -263,10 +262,13 @@ test('inbox accept writes the record into the layer of the candidate project and
 	assert.match((await memory(repo, env, ['inbox'])).out, /the inbox is empty/);
 });
 
-test('the Module subcommands are refused where the memory Module is off', async () => {
+test('every subcommand is refused where the memory Module is off, and the project file can turn it on', async () => {
 	const repo = gitRepo({ 'kalfa.yaml': 'schema: 1\nmodules: []\n' });
 	const env = { HOME: tempRepo({ '.config/kalfa/config.yaml': 'schema: 1\nmodules: []\n' }) };
-	assert.match((await memory(repo, env, ['search', 'x'])).error ?? '', /the memory Module is not on here/);
-	assert.match((await memory(repo, env, ['inbox'])).error ?? '', /the memory Module is not on here/);
-	assert.equal((await memory(repo, env, ['list'])).code, 0, 'the Core subcommands still work');
+	for (const args of [['search', 'x'], ['inbox'], ['list'], ['show', 'x'], ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'A fact.']]) {
+		assert.match((await memory(repo, env, args)).error ?? '', /the memory Module is not on here/, args.join(' '));
+	}
+	assert.equal(existsSync(memoryHome(env)), false, 'nothing was written');
+	const on = gitRepo({ 'kalfa.yaml': 'schema: 1\nmodules: [memory]\n' });
+	assert.equal((await memory(on, env, ['list'])).code, 0, 'the project file turns it on');
 });

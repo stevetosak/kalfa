@@ -3,7 +3,6 @@ import { type MachineStep, machineStepOf } from '../core/machine-step.ts';
 import type { ModuleDefinition } from '../core/modules.ts';
 import type { Adapter } from '../adapters/adapter.ts';
 import type { Command } from '../cli/command.ts';
-import type { MemoryExtension } from '../cli/commands/memory.ts';
 import { docsCommand } from '../../modules/docs/command.ts';
 import { docsModule } from '../../modules/docs/handlers.ts';
 import { guardrailsCommand } from '../../modules/guardrails/command.ts';
@@ -13,7 +12,7 @@ import { boardCommand, herdrCommand, spaceCommand } from '../../modules/herdr/co
 import { herdrModule } from '../../modules/herdr/handlers.ts';
 import { keyBindingStep } from '../../modules/herdr/key-binding.ts';
 import { herdrPluginStep } from '../../modules/herdr/plugin.ts';
-import { memoryExtension } from '../../modules/memory/command.ts';
+import { memoryCommand } from '../../modules/memory/command.ts';
 import { memoryModule } from '../../modules/memory/handlers.ts';
 import { meterCommand } from '../../modules/meter/command.ts';
 import { meterModule } from '../../modules/meter/handlers.ts';
@@ -31,6 +30,7 @@ export const moduleCommands: Record<string, (adapters: ReadonlyMap<string, Adapt
 	herdr: (adapters) => herdrCommand(adapters),
 	board: (adapters) => boardCommand(adapters),
 	space: (adapters) => spaceCommand(adapters),
+	memory: () => memoryCommand(),
 	meter: (adapters) => meterCommand(adapters),
 	defer: () => deferCommand(),
 };
@@ -40,9 +40,6 @@ export const machineSteps: ReadonlyMap<string, MachineStep> = new Map([
 	['guardrails', gitHooksStep()],
 	['herdr', machineStepOf(herdrPluginStep(), keyBindingStep())],
 ]);
-
-/** The Modules' subcommands of the Core's `kalfa memory`; each checks that its Module is on. */
-export const memoryExtensions: readonly MemoryExtension[] = [memoryExtension];
 
 /**
  * `registry` and every Module in the Module folders `dirs` that has no handlers: a

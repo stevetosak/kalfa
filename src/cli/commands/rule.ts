@@ -19,7 +19,7 @@ import { loadSettings, memoryBudgets } from '../../core/settings.ts';
 import { type Command, parseCommandArgs, UsageError } from '../command.ts';
 import type { Io } from '../io.ts';
 import { buildProject } from './build.ts';
-import { layerFor, layerName } from './memory.ts';
+import { layerFor, layerName } from '../layers.ts';
 
 const today = () => new Date().toLocaleDateString('sv-SE');
 

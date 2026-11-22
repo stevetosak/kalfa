@@ -3,8 +3,8 @@
 // are untyped: the sentence around a link says why it is there. Back-links are
 // not stored: they are found when the records are read, so a write never has
 // to change the record it links to.
-import type { Layer } from './home.ts';
-import type { MemoryRecord } from './record.ts';
+import type { Layer } from '../../src/core/memory/home.ts';
+import type { MemoryRecord } from '../../src/core/memory/record.ts';
 
 /** One link as written: an optional layer prefix (only `personal` names a layer) and the id. */
 export interface Link {

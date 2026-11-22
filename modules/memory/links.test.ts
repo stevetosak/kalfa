@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { personalLayer, projectLayerOfKey } from '../src/core/memory/home.ts';
-import { LinkGraph, type LinkNode, neighbourLines, parseLinks } from '../src/core/memory/links.ts';
-import type { MemoryRecord, RecordStatus, RecordType } from '../src/core/memory/record.ts';
+import { personalLayer, projectLayerOfKey } from '../../src/core/memory/home.ts';
+import { LinkGraph, type LinkNode, neighbourLines, parseLinks } from './links.ts';
+import type { MemoryRecord, RecordStatus, RecordType } from '../../src/core/memory/record.ts';
 
 const personal = personalLayer('/home');
 const project = projectLayerOfKey('/home', 'github.com/someone/project');
