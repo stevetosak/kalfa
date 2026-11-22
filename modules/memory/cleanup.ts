@@ -2,7 +2,8 @@
 // Record into Long-term memory while its session still holds the work. kalfa
 // gives the steps: the findings of the record's Remember parts, the commands
 // that write them, the upkeep of a layer over its budget, and the command that
-// marks the record reconciled.
+// marks the record reconciled. A closed record that missed its Cleanup is
+// taken in at the next Task close, a few at each close, the oldest first.
 import { memoryHome, scanLayer, sessionLayers } from '../../src/core/memory/home.ts';
 import { budgetProblem } from '../../src/core/memory/standing.ts';
 import type { Project } from '../../src/core/project.ts';
@@ -67,17 +68,46 @@ export function upkeepHere(project: Project | undefined, coreSettings: Settings,
 	});
 }
 
+/** A closed Task Record that missed its Cleanup, which the next Task close takes in. */
+export interface MissedCleanup {
+	id: string;
+	closed?: string;
+	findings: RememberFinding[];
+}
+
+/** How many missed Cleanups one Task close takes in; the others wait for the next close. */
+export const MISSED_PER_CLOSE = 3;
+
 const oneLine = (text: string) => text.replace(/\s*\n\s*/g, ' ');
 
-function findingSteps(task: string, key: string, findings: readonly RememberFinding[]): string[] {
-	if (!findings.length) return ['Its Sections have no finding in a Remember part.'];
+const findingLines = (findings: readonly RememberFinding[], indent = '') => findings.map((f) => `${indent}- ${f.from}: ${oneLine(f.text)}`);
+
+function missedSteps(missed: readonly MissedCleanup[]): string[] {
+	if (!missed.length) return [];
+	const shown = missed.slice(0, MISSED_PER_CLOSE);
 	return [
-		'Findings in its Remember parts:',
-		...findings.map((f) => `- ${f.from}: ${oneLine(f.text)}`),
+		'Closed Task Records that missed their Cleanup: take their findings in too, then mark each one.',
+		...shown.flatMap((m) => [
+			`- Task ${m.id}${m.closed ? ` (closed ${m.closed})` : ''}: ${m.findings.length ? 'its findings:' : 'no finding in a Remember part.'}`,
+			...findingLines(m.findings, '  '),
+			`  Then: \`kalfa task reconciled --task ${m.id}\`.`,
+		]),
+		...(missed.length > shown.length ? [`- ${missed.length - shown.length} more wait for the next Task close.`] : []),
+	];
+}
+
+function findingSteps(source: string, key: string, findings: readonly RememberFinding[], missed: readonly MissedCleanup[]): string[] {
+	const steps = [
+		...(findings.length ? ['Findings in its Remember parts:', ...findingLines(findings)] : ['Its Sections have no finding in a Remember part.']),
+		...missedSteps(missed),
+	];
+	if (!findings.length && !missed.slice(0, MISSED_PER_CLOSE).some((m) => m.findings.length)) return steps;
+	return [
+		...steps,
 		'For each finding:',
 		'1. Check it against the later Sections, which may correct it; write what holds at the end.',
 		'2. Search for its subject with `kalfa memory search "<words>"` and read each hit on it with `kalfa memory show <id>`.',
-		`3. Write it, the body on stdin (or </dev/null): a record that says it and still holds → \`kalfa memory confirm <id> "<how this Task showed it>"\`; a record it changes → \`kalfa memory supersede <id> --summary "<one line>"\`; no record → \`kalfa memory add --type fact|decision|open --layer personal|project --summary "<one line>" --source "Task ${task} (${key})"\`; a rule → \`kalfa rule add --layer personal|project --summary "<the rule>"\`.`,
+		`3. Write it, the body on stdin (or </dev/null): a record that says it and still holds → \`kalfa memory confirm <id> "<how this Task showed it>"\`; a record it changes → \`kalfa memory supersede <id> --summary "<one line>"\`; no record → \`kalfa memory add --type fact|decision|open --layer personal|project --summary "<one line>" --source "Task ${source} (${key})"\`; a rule → \`kalfa rule add --layer personal|project --summary "<the rule>"\`.`,
 		'4. Link it: name the related records as [[id]] in its body ([[personal:id]] from a project record; a personal record never links into a project), and add a link to it in the Hub of its subject (supersede the Hub), or in the Root Hub when no Hub fits.',
 	];
 }
@@ -90,11 +120,12 @@ function upkeepSteps(upkeep: readonly Upkeep[]): string[] {
 	];
 }
 
-/** What the agent does at Task close: the steps of the Cleanup, then the command that marks the record. */
-export function cleanupSteps(task: { id: string; key: string }, findings: readonly RememberFinding[], upkeep: readonly Upkeep[]): string {
+/** What the agent does at Task close: the steps of the Cleanup (with the missed Cleanups it takes in), then the command that marks the record. */
+export function cleanupSteps(task: { id: string; key: string }, findings: readonly RememberFinding[], upkeep: readonly Upkeep[], missed: readonly MissedCleanup[] = []): string {
+	const source = missed.slice(0, MISSED_PER_CLOSE).some((m) => m.findings.length) ? "<the finding's Task>" : task.id;
 	return [
 		`Cleanup of Task ${task.id} (ADR 0003): take its findings into Long-term memory now, while this session still holds the work. You decide each one; do not ask the Operator.`,
-		...findingSteps(task.id, task.key, findings),
+		...findingSteps(source, task.key, findings, missed),
 		...upkeepSteps(upkeep),
 		`Then mark the record: \`kalfa task reconciled --task ${task.id}\`.`,
 	].join('\n');

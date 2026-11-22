@@ -1,20 +1,22 @@
 // The memory Module's code (ADR 0002, 0003): each layer's Root Hub at
-// session start, recall on the first prompt of a session with the prompt and
+// session start with the missed Cleanups and the idle Tasks, recall on the first prompt of a session with the prompt and
 // the branch's Task (and on each prompt when a setting turns it on), the
 // shadow log of each prompt's hits when a setting turns it on, and at
 // Task close the copy of the Task Record into the Memory home, the steps of
-// its Cleanup with the upkeep of a layer over its budget, and the move of the
-// records outside the Short-term window to the archive.
+// its Cleanup with the missed Cleanups it takes in and the upkeep of a layer
+// over its budget, and the move of the records outside the Short-term window
+// to the archive.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { activeDays } from '../../src/core/active-days.ts';
 import type { CoreEvent, HandlerResult, SessionStartSource } from '../../src/core/events.ts';
 import { currentBranch } from '../../src/core/git.ts';
 import { commitHome, memoryHome, projectKey, projectTasksDir, scanLayer, sessionLayers } from '../../src/core/memory/home.ts';
 import { type GateContext, type HandlerContext, type ModuleDefinition, moduleSettings } from '../../src/core/modules.ts';
 import type { Project } from '../../src/core/project.ts';
 import { memoryBudgets, type Settings } from '../../src/core/settings.ts';
-import { parseRecord, readRecord, type TaskRecord, taskIdOf } from '../../src/core/task-record.ts';
-import { cleanupSteps, rememberFindings, upkeepHere } from './cleanup.ts';
+import { listRecords, parseRecord, readRecord, type TaskRecord, taskIdOf } from '../../src/core/task-record.ts';
+import { cleanupSteps, MISSED_PER_CLOSE, type MissedCleanup, rememberFindings, upkeepHere } from './cleanup.ts';
 import { readInbox } from './inbox.ts';
 import { lint } from './lint.ts';
 import { rootHubOf } from '../../src/core/memory/root-hub.ts';
@@ -22,6 +24,7 @@ import { rootHubText } from './root-hubs.ts';
 import { type Hit, hitLine, openIndex, type SearchIndex } from './search.ts';
 import { type MemorySettings, memorySettings } from './settings.ts';
 import { appendShadow, shadowEntry } from './shadow.ts';
+import { idleTasks, lastWriteDay, missedCleanups, shortTermReport } from './short-term.ts';
 import type { SourceScope } from './sources.ts';
 import { archiveOutsideWindow } from './window.ts';
 
@@ -92,6 +95,15 @@ function rootHubsPart(context: HandlerContext): Part {
 	};
 }
 
+/** The closed records that missed their Cleanup and the idle open Tasks of the repository. */
+function shortTermPart(context: HandlerContext, settings: MemorySettings): Part {
+	if (!context.project) return {};
+	const root = context.project.root;
+	const records = listRecords(root);
+	const days = settings['idle-task-days'];
+	return shortTermReport(missedCleanups(records), idleTasks(records, { activeDays: activeDays(root), days, lastWrite: lastWriteDay }), days);
+}
+
 function inboxPart(env: NodeJS.ProcessEnv): Part {
 	const { candidates, problems } = readInbox(memoryHome(env));
 	const notice = problems.length ? `kalfa: memory inbox: ${problems.join('; ')}` : undefined;
@@ -114,6 +126,7 @@ function sessionStart(event: CoreEvent, context: HandlerContext): HandlerResult 
 	const settings = settingsOf(context);
 	const parts = [
 		attempt('Root Hubs', () => rootHubsPart(context)),
+		attempt('Short-term memory', () => shortTermPart(context, settings)),
 		attempt('inbox', () => inboxPart(context.env)),
 		attempt('lint', () => lintPart(context, settings)),
 	];
@@ -266,13 +279,18 @@ function taskClose(event: CoreEvent, context: HandlerContext): HandlerResult | u
 	const key = projectKey(project.root);
 	commitHome(home, { write: [{ path: join(projectTasksDir(home, project), `${record.id}.md`), text }] }, `close task ${record.id} (${key}): copy the record`);
 	const findings = rememberFindings(record);
+	const missed: MissedCleanup[] = missedCleanups(listRecords(project.root))
+		.filter((r) => r.id !== record.id)
+		.map((r) => ({ id: r.id, closed: r.header.closed, findings: rememberFindings(r) }));
+	const takenIn = missed.slice(0, MISSED_PER_CLOSE).map((m) => m.id);
 	const upkeep = upkeepHere(project, context.settings, context.env);
 	const notice = [
 		`kalfa: memory: Task Record copied to the Memory home; the Cleanup has ${plural(findings.length, 'finding')}`,
+		...(takenIn.length ? [`kalfa: memory: the Cleanup takes in ${plural(takenIn.length, 'missed Cleanup')}: ${takenIn.join(', ')}`] : []),
 		...(upkeep.length ? [`kalfa: memory: the Cleanup holds the upkeep of ${upkeep.map((u) => u.layer).join(', ')} (over budget)`] : []),
 		...windowNotice(project, home, settingsOf(context)['window-days']),
 	].join('\n');
-	return { context: cleanupSteps({ id: record.id, key }, findings, upkeep), notice };
+	return { context: cleanupSteps({ id: record.id, key }, findings, upkeep, missed), notice };
 }
 
 /** Moves the records outside the window to the archive; a failure keeps them and is only reported, since the close and its Cleanup matter more. */

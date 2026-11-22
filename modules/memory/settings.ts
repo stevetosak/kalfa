@@ -25,6 +25,8 @@ export const memorySettings = z.strictObject({
 		.prefault({}),
 	/** The Short-term window: how many Active days after its close day a closed Task Record stays in the repository (ADR 0003). */
 	'window-days': z.number().int().min(1).default(5),
+	/** How many Active days with no write to its Task Record make an open Task idle, named at session start (ADR 0003). */
+	'idle-task-days': z.number().int().min(1).default(7),
 	/** Globs (from the repository root) of old memory archives to search; they are often not tracked by git. */
 	archives: z.array(z.string().min(1)).default(['.claude/*-history.md']),
 });
