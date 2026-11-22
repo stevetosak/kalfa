@@ -1,6 +1,7 @@
 // The days a Memory record was last used: read with `kalfa memory show`, or
 // returned by `kalfa memory search` (ADR 0002, amendment 2026-11-08). They
-// rank the Loaded tier. They change on every read, so they live in the cache
+// rank the Loaded tier, and the search hits within their tier (ADR 0003).
+// They change on every read, so they live in the cache
 // folder, one file per layer, never in the Memory home and its history; a
 // lost or broken file only makes the ranking fall back to the confirmed date.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -10,6 +11,9 @@ import type { Layer } from './home.ts';
 
 /** Record id → the day (`YYYY-MM-DD`) it was last used. */
 export type Usage = Readonly<Record<string, string>>;
+
+/** The day a record ranks by: the later of its last use and its last confirmation. */
+export const useDay = (confirmed: string, used: string | undefined): string => (used && used > confirmed ? used : confirmed);
 
 const today = () => new Date().toLocaleDateString('sv-SE');
 

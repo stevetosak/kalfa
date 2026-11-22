@@ -7,7 +7,7 @@
 import type { LayerBudget, MemoryBudgets } from '../settings.ts';
 import type { Layer } from './home.ts';
 import { type MemoryRecord, ruleText } from './record.ts';
-import type { Usage } from './usage.ts';
+import { type Usage, useDay } from './usage.ts';
 
 export interface LayerView {
 	layer: Layer;
@@ -26,10 +26,7 @@ export const indexLine = (record: MemoryRecord): string => `- [${record.header.t
 export const bytes = (text: string): number => Buffer.byteLength(text, 'utf8');
 
 /** The day a record ranks by: the later of its last use and its last confirmation. */
-export const rankDay = (record: MemoryRecord, usage: Usage): string => {
-	const used = usage[record.id];
-	return used && used > record.header.confirmed ? used : record.header.confirmed;
-};
+export const rankDay = (record: MemoryRecord, usage: Usage): string => useDay(record.header.confirmed, usage[record.id]);
 
 const byRank = (usage: Usage) => (a: MemoryRecord, b: MemoryRecord) =>
 	rankDay(b, usage).localeCompare(rankDay(a, usage)) || b.header.created.localeCompare(a.header.created) || a.id.localeCompare(b.id);

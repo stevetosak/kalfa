@@ -41,6 +41,10 @@ export interface Chunk {
 	task?: string;
 	/** For a Memory record chunk: its id and its layer's label, so a search can mark it used. */
 	record?: RecordRef;
+	/** A Memory record or a deferred item that is closed: it no longer holds. */
+	closed?: boolean;
+	/** The day (`YYYY-MM-DD`) a Memory record was last confirmed, or a Task Record last written; its use day starts here. */
+	touched?: string;
 }
 
 /** A Memory record by its id and the label of its layer (`personal`, or the project key). */
@@ -65,6 +69,8 @@ function statOf(path: string): { mtimeMs: number; size: number } | undefined {
 	const stat = statSync(path, { throwIfNoEntry: false });
 	return stat?.isFile() ? { mtimeMs: stat.mtimeMs, size: stat.size } : undefined;
 }
+
+const dayOf = (time: number) => new Date(time).toLocaleDateString('sv-SE');
 
 const markdownIn = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith('.md')).sort() : []);
 
@@ -185,6 +191,8 @@ function memoryChunks(file: SourceFile, text: string): Chunk[] {
 			text: record.body,
 			ref: `kalfa memory show ${id} (${file.label})`,
 			record: { id, layer: file.label },
+			closed: status === 'closed',
+			touched: record.header.confirmed,
 		},
 	];
 }
@@ -200,6 +208,7 @@ function deferredChunks(file: SourceFile, text: string): Chunk[] {
 			title: `deferred${mark}: ${header.summary}`,
 			text: [header.condition ? `When: ${header.condition}` : '', body].filter(Boolean).join('\n'),
 			ref: `kalfa defer show ${id} (${file.label})`,
+			closed: header.status !== 'open',
 		},
 	];
 }
@@ -220,6 +229,7 @@ function taskChunks(file: SourceFile, text: string): Chunk[] {
 			text: parts(block.parts),
 			ref: `${file.refPath}:${line}`,
 			task: id,
+			touched: dayOf(file.mtimeMs),
 		};
 	});
 }

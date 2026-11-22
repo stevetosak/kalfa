@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { sectionCommand, taskCommand } from '../../src/cli/commands/task.ts';
 import { dispatch } from '../../src/core/dispatcher.ts';
 import { KalfaError } from '../../src/core/errors.ts';
 import { handledEvents } from '../../src/core/fast-path.ts';
-import { memoryHome, personalLayer, projectLayerOfKey, scanLayer } from '../../src/core/memory/home.ts';
-import { readUsage } from '../../src/core/memory/usage.ts';
+import { deferredDir, memoryHome, personalLayer, projectLayerOfKey, scanLayer } from '../../src/core/memory/home.ts';
+import { markUsed, readUsage } from '../../src/core/memory/usage.ts';
 import { renderMemoryRecord } from '../../src/core/memory/record.ts';
 import type { HandlerContext } from '../../src/core/modules.ts';
 import { loadProject } from '../../src/core/project.ts';
@@ -16,6 +16,7 @@ import { DEFAULT_MEMORY_BUDGETS, loadSettings } from '../../src/core/settings.ts
 import { coreModule } from '../../src/modules/core.ts';
 import { fakeAdapter, registry } from '../../test/fakes.ts';
 import { captureIo, gitRepo, tempRepo } from '../../test/helpers.ts';
+import { renderItem } from '../plans/deferred.ts';
 import { memoryCommand } from './command.ts';
 import { candidateFiles, readInbox, splitCandidates } from './inbox.ts';
 import { lint } from './lint.ts';
@@ -177,6 +178,46 @@ test('search keeps a closed record and marks it', async () => {
 	const scope = { project: loadProject(repo), env, archives: memorySettings.parse({}).archives };
 	const titles = openIndex(scope).search('zeppelin', 5).map((h) => h.title);
 	assert.deepEqual(titles, ['open (closed): Wire the zeppelin gateway.']);
+});
+
+test('search ranks the relevant Long-term sources first, then the Task Records, then the closed ones, then the weak hits, and records by use', async () => {
+	const { repo, env } = machine();
+	await startTask(repo, env, 'none');
+	const layer = projectLayerOfKey(memoryHome(env), KEY);
+	mkdirSync(layer.dir, { recursive: true });
+	const put = (id: string, summary: string, status = 'active') =>
+		writeFileSync(join(layer.dir, `${id}.md`), renderMemoryRecord({ header: { schema: 1, type: 'fact', status, created: '2026-01-01', confirmed: '2026-01-01', summary } as never, body: '' }));
+	put('rotation-closed', 'Rotate the database password with kluster, then rotate the database password again.', 'closed');
+	put('vault-a', 'Rotate the database password with kluster from vault A and the database password store.');
+	put('vault-b', 'Rotate the database password with kluster from vault B.');
+	put('weak', 'Kluster is the cluster tool.');
+	mkdirSync(deferredDir(layer), { recursive: true });
+	const defer = (id: string, status: 'open' | 'dropped') =>
+		writeFileSync(join(deferredDir(layer), `${id}.md`), renderItem({ header: { schema: 1, status, summary: 'Rotate the database password with kluster each month.', created: '2026-01-01' }, body: '' }));
+	defer('rotation-open', 'open');
+	defer('rotation-dropped', 'dropped');
+	// An older Task Record that matches better: the newer one still leads the Short-term tier.
+	const tasks = join(repo, '.kalfa', 'tasks');
+	const older = join(tasks, 'aaa-older.md');
+	writeFileSync(older, readFileSync(join(tasks, 'feat-rotation.md'), 'utf8').replace('Wrote the rotation.', 'Wrote the rotation: rotate the database password with kluster.'));
+	utimesSync(older, new Date('2026-01-01'), new Date('2026-01-01'));
+	const scope = { project: loadProject(repo), env, archives: memorySettings.parse({}).archives };
+	const names = () =>
+		openIndex(scope)
+			.search('rotate the database password with kluster', 20)
+			.map((h) => h.record?.id ?? /^kalfa defer show (\S+)/.exec(h.ref)?.[1] ?? `${h.kind}${h.task ? ` ${h.task}` : ''}`);
+	const before = names();
+	assert.ok(before.indexOf('vault-a') < before.indexOf('vault-b'), `without use the better match leads: ${before.join(', ')}`);
+	assert.ok(before.indexOf('vault-b') < before.indexOf('doc'), `records before docs in Long-term: ${before.join(', ')}`);
+	assert.ok(before.indexOf('rotation-open') < before.indexOf('task feat-rotation'), `an open deferred item is Long-term: ${before.join(', ')}`);
+	assert.ok(before.indexOf('doc') < before.indexOf('task feat-rotation'), `Long-term before Short-term: ${before.join(', ')}`);
+	assert.ok(before.indexOf('task feat-rotation') < before.indexOf('task aaa-older'), `the Task Record written later leads its tier: ${before.join(', ')}`);
+	assert.ok(before.indexOf('task aaa-older') < before.indexOf('rotation-closed'), `a closed record after the Task Records: ${before.join(', ')}`);
+	assert.ok(before.indexOf('task feat-rotation') < before.indexOf('rotation-dropped'), `a dropped deferred item after the Task Records: ${before.join(', ')}`);
+	assert.equal(before.at(-1), 'weak', `a Long-term record under the band comes last: ${before.join(', ')}`);
+	markUsed(layer, ['vault-b'], env, '2026-06-01');
+	const after = names();
+	assert.ok(after.indexOf('vault-b') < after.indexOf('vault-a'), `the record used later leads its tier: ${after.join(', ')}`);
 });
 
 test('task close copies the record into the Memory home and puts the candidates into the inbox in one commit', async () => {

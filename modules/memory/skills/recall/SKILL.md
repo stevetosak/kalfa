@@ -9,7 +9,10 @@ description: Searches what kalfa remembers (Memory records, Task Records, projec
 Memory records, the Task Records, the tracked Markdown of the repository and
 the old archives. Use the words a page would use: names of tools, commands,
 files and errors. Read the hit at its reference before you rely on it; a hit
-is a pointer, not a proof.
+is a pointer, not a proof. Hits come in tiers: the Memory records, the docs and
+the open deferred items; then the Task Records; then the closed records and
+the old archives; the most recently used first in each. A weak match comes
+after every strong one, whatever its tier.
 
 **What you find yourself is a candidate, never a record.** Put it in the
 **Memory candidates:** part of the Section, one bullet per candidate. Only
