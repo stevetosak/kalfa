@@ -1,0 +1,26 @@
+# kalfa's Herdr plugin (the herdr Module). Herdr lists no plugin action in a
+# menu, so `kalfa install` binds the action to a key in Herdr's config.toml.
+# The action runs with no terminal, so it only opens the popup pane in the
+# folder of the Workspace it was run from; the pane runs the form, which asks
+# what to open. Every command is a kalfa command, so `kalfa` must be on
+# Herdr's PATH.
+id = "kalfa"
+name = "kalfa"
+version = "0.2.0"
+min_herdr_version = "0.9.3"
+description = "Start a kalfa Task, or open a Task or a repository's space from a Preset, through a form"
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "space"
+title = "kalfa: Space"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["kalfa", "space", "popup", "space"]
+
+[[panes]]
+id = "space"
+title = "kalfa: Space"
+placement = "popup"
+width = "80%"
+height = "80%"
+command = ["kalfa", "space", "new", "--hold-on-error"]

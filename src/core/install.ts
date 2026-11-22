@@ -42,6 +42,8 @@ const installStateSchema = z.strictObject({
 	schema: z.literal(1),
 	/** Per harness, what kalfa wrote into its user settings. */
 	harnesses: z.record(z.string(), harnessStateSchema).default({}),
+	/** The Modules whose machine step (MachineStep) kalfa install ran; uninstall undoes only these. */
+	steps: z.array(z.string()).default([]),
 });
 
 export type InstallState = z.infer<typeof installStateSchema>;
@@ -52,12 +54,12 @@ const installStateFormat: VersionedFormat<InstallState> = { name: 'install.yaml'
 
 export const installStatePath = (env: NodeJS.ProcessEnv) => join(machineConfigDir(env), 'install.yaml');
 
-export const readInstallState = (env: NodeJS.ProcessEnv): InstallState => readVersioned(installStatePath(env), installStateFormat) ?? { schema: 1, harnesses: {} };
+export const readInstallState = (env: NodeJS.ProcessEnv): InstallState => readVersioned(installStatePath(env), installStateFormat) ?? { schema: 1, harnesses: {}, steps: [] };
 
-/** Writes the state; with no harness left in it, the file goes. */
+/** Writes the state; with no harness and no step left in it, the file goes. */
 export function writeInstallState(env: NodeJS.ProcessEnv, state: InstallState): void {
 	const path = installStatePath(env);
-	if (!Object.keys(state.harnesses).length) {
+	if (!Object.keys(state.harnesses).length && !state.steps.length) {
 		rmSync(path, { force: true });
 		return;
 	}

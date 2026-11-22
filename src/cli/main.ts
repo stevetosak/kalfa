@@ -3,7 +3,7 @@ import { moduleDirs, moduleDirsOrOwn } from '../core/module-dirs.ts';
 import { packageRoot } from '../core/package-root.ts';
 import { type Command, UsageError } from './command.ts';
 import { adapters } from '../adapters/index.ts';
-import { memoryExtensions, moduleCommands, modules, withFolderModules } from '../modules/index.ts';
+import { machineSteps, memoryExtensions, moduleCommands, modules, withFolderModules } from '../modules/index.ts';
 import { buildCommand } from './commands/build.ts';
 import { doctorCommand } from './commands/doctor.ts';
 import { initCommand } from './commands/init.ts';
@@ -23,8 +23,8 @@ const commands: Record<string, Command> = {
 	init: initCommand(adapters, moduleDirs),
 	build: buildCommand(adapters, moduleDirs),
 	doctor: doctorCommand(adapters, moduleDirs, () => packageRoot()),
-	install: installCommand(adapters, moduleDirs, () => packageRoot()),
-	uninstall: uninstallCommand(adapters),
+	install: installCommand(adapters, moduleDirs, () => packageRoot(), machineSteps),
+	uninstall: uninstallCommand(adapters, moduleDirs, machineSteps),
 	link: linkCommand(() => packageRoot()),
 	unlink: unlinkCommand(() => packageRoot()),
 	hook: hookCommand(adapters, registry),

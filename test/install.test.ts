@@ -6,6 +6,7 @@ import { claudeAdapter } from '../src/adapters/claude/adapter.ts';
 import { claudeUser } from '../src/adapters/claude/user.ts';
 import { installCommand, uninstallCommand } from '../src/cli/commands/install.ts';
 import { KalfaError } from '../src/core/errors.ts';
+import type { MachineStepContext } from '../src/core/machine-step.ts';
 import { captureIo, tempRepo } from './helpers.ts';
 
 const modulesDir = tempRepo({
@@ -16,7 +17,7 @@ const shim = join(pkg, 'dist/kalfa-hook');
 const tap = join(pkg, 'dist/adapters/claude/status-tap');
 const adapters = new Map([['claude', claudeAdapter]]);
 const install = installCommand(adapters, () => [modulesDir], () => pkg);
-const uninstall = uninstallCommand(adapters);
+const uninstall = uninstallCommand(adapters, () => [modulesDir]);
 
 const FOREIGN = { matcher: 'Bash', hooks: [{ type: 'command', command: 'operator-own-hook', timeout: 5 }] };
 const OPERATOR = {
@@ -170,4 +171,49 @@ test('the Claude user layout knows a quoted shim and a quoted tap as kalfa\'s', 
 	assert.equal(claudeUser.hooks({ model: 'x' }, undefined).model, 'x');
 	const same = { model: 'x' };
 	assert.equal(claudeUser.hooks(same, undefined), same, 'unchanged data is the same object');
+});
+
+test('install runs the steps of the machine Modules that are on and records them; uninstall and an install with the Module off undo only those; a failed step gives exit 1', async () => {
+	const calls: string[] = [];
+	const step = (name: string, fail = false) => ({
+		install: (context: MachineStepContext) => {
+			calls.push(`install ${name} ${context.moduleDir} dry=${context.dryRun}`);
+			if (fail) throw new Error('herdr is down');
+			return [`${name} set`];
+		},
+		uninstall: (context: MachineStepContext) => {
+			calls.push(`uninstall ${name} dry=${context.dryRun}`);
+			return [`${name} gone`];
+		},
+	});
+	const steps = new Map([['guardrails', step('guardrails')], ['other', step('other')]]);
+	const otherDir = tempRepo({ 'other/module.yaml': 'schema: 1\ndescription: Another.\n' });
+	const withSteps = installCommand(adapters, () => [modulesDir, otherDir], () => pkg, steps);
+	const home = machine(undefined);
+
+	const dry = await run(withSteps, home, '--dry-run');
+	assert.equal(dry.code, 0);
+	assert.match(dry.out, /guardrails Module:\n  guardrails set\ndry run: nothing was written$/);
+	assert.deepEqual(calls, [`install guardrails ${join(modulesDir, 'guardrails')} dry=true`], "'other' is not a machine Module that is on");
+
+	calls.length = 0;
+	assert.equal((await run(withSteps, home)).code, 0);
+	assert.match(readFileSync(join(home, '.config/kalfa/install.yaml'), 'utf8'), /"steps": \[\n\s+"guardrails"\n\s+\]/);
+	const off = machine(undefined, '[]');
+	writeFileSync(join(off, '.config/kalfa/install.yaml'), readFileSync(join(home, '.config/kalfa/install.yaml')));
+	calls.length = 0;
+	assert.match((await run(withSteps, off)).out, /guardrails Module:\n  guardrails gone/);
+	assert.deepEqual(calls, ['uninstall guardrails dry=false'], 'the Module is off now, so install undoes its step');
+
+	calls.length = 0;
+	const io = captureIo(home, { HOME: home });
+	assert.equal(await uninstallCommand(adapters, () => [modulesDir, otherDir], steps).run([], io), 0);
+	assert.deepEqual(calls, ['uninstall guardrails dry=false'], "uninstall undoes only the recorded steps; 'other' never ran");
+	assert.ok(!existsSync(join(home, '.config/kalfa/install.yaml')));
+
+	const failing = installCommand(adapters, () => [modulesDir], () => pkg, new Map([['guardrails', step('guardrails', true)]]));
+	const failIo = captureIo(home, { HOME: home });
+	assert.equal(await failing.run([], failIo), 1);
+	assert.match(failIo.stderr.join('\n'), /the guardrails Module's step failed: herdr is down/);
+	assert.ok(existsSync(join(home, '.config/kalfa/install.yaml')), 'the settings are still written');
 });
