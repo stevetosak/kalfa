@@ -276,7 +276,7 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 		},
 	},
 	{
-		name: 'memory Module: Task close puts the candidates into the inbox, accept writes a record, search finds it, a Root Hub loads in place of the index lines',
+		name: 'memory Module: Task close puts the candidates into the inbox, accept writes a record, search finds it, a Root Hub loads in place of the index lines, the first prompt recalls once',
 		run(world) {
 			const parts = `**Done:** smoke work.\n\n**Memory candidates:**\n- ${CANDIDATE}\n\n**Next:** nothing.`;
 			const section = exec(world, 'kalfa', ['section', 'close', 'Smoke section'], { input: parts });
@@ -301,6 +301,14 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			const context = String(JSON.parse(start.stdout || '{}').hookSpecificOutput?.additionalContext ?? '');
 			expect(context.includes(`Root Hub of the Project layer (local/repo);`) && context.includes(ROOT_HUB), 'session.start does not load the project Root Hub');
 			expect(!context.includes(`[fact] ${PROJECT_FACT}`), 'session.start still loads the index lines of a layer with a Root Hub');
+			// The session's wake starts Node for its first prompt alone.
+			const prompt = (env?: NodeJS.ProcessEnv) =>
+				exec(world, 'sh', ['-c', installedHook(world, 'UserPromptSubmit')], { input: hookPayload(world, 'UserPromptSubmit', { prompt: 'where is the accepted candidate' }), ...(env && { env }) });
+			const first = prompt();
+			const recall = String(JSON.parse(first.stdout || '{}').hookSpecificOutput?.additionalContext ?? '');
+			expect(first.status === 0 && recall.startsWith('Recall for this prompt') && recall.includes(ACCEPTED), `the first prompt does not recall the accepted record (exit ${first.status}): ${recall || first.stderr.trim()}`);
+			const next = prompt({ KALFA_NODE: join(world.root, 'no-node') });
+			expect(next.status === 0 && next.stdout === '', `the second prompt started Node (exit ${next.status}: ${next.stderr.trim()})`);
 		},
 	},
 	{
