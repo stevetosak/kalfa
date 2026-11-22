@@ -88,8 +88,12 @@ Work the Operator has named but not taken on, with the condition that brings it 
 _Avoid_: deferred record, backlog item, parked task
 
 **Cleanup**:
-The agent's reconciling of a closed Task Record into Long-term memory and the Rule packs, from the findings its Sections marked to keep; after it the record is reconciled.
+The agent's reconciling of a closed Task Record into Long-term memory and the Rule packs, from the findings in its Sections' Remember parts; after it the record is reconciled.
 _Avoid_: consolidation, reflection, memory review, Memory candidate
+
+**Remember part**:
+The `**Remember:**` part of a Section: one bullet per finding the Cleanup takes into Long-term memory. The old part names Memory candidates and Lesson candidates are read as it.
+_Avoid_: Keep part (`section close --keep` keeps the session's context), Memory candidates, Lesson candidates
 
 ### Sessions
 

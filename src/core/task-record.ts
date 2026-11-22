@@ -1,5 +1,5 @@
 // The Task Record: one Task's Sections with what was done, found with proof,
-// decided, the Memory candidates and the next step. It lives in
+// decided, what to remember and the next step. It lives in
 // `<repo>/.kalfa/tasks/<task>.md`: a YAML header, then one `## Section:`
 // block per closed Section, each made of `**Part:** text` parts.
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -10,11 +10,12 @@ import { KalfaError } from './errors.ts';
 import { stateDir, statePath } from './private-dir.ts';
 import { parseVersioned, type VersionedFormat } from './versioned-file.ts';
 
+/** The part that marks the findings for Long-term memory, one bullet each (ADR 0003). */
+export const REMEMBER_PART = 'Remember';
 /** The Core's parts, in the order a Section prints them. Module parts are `<module>.<part>`. */
-export const CORE_PARTS = ['Done', 'Found', 'Decisions', 'Memory candidates', 'Next'] as const;
+export const CORE_PARTS = ['Done', 'Found', 'Decisions', REMEMBER_PART, 'Next'] as const;
 /** Old part names, read and written as their new name, so older records and habits still work. */
-const RENAMED_PARTS: Readonly<Record<string, (typeof CORE_PARTS)[number]>> = { 'Lesson candidates': 'Memory candidates' };
-export const CANDIDATES_PART = 'Memory candidates';
+const RENAMED_PARTS: Readonly<Record<string, (typeof CORE_PARTS)[number]>> = { 'Memory candidates': REMEMBER_PART, 'Lesson candidates': REMEMBER_PART };
 /** The close part that answers the Task's finish line: `holds — <proof>` or `not met — <why>`. */
 export const DONE_WHEN_PART = 'Done when';
 const CLOSE_PARTS: readonly string[] = [...CORE_PARTS, DONE_WHEN_PART];
@@ -235,8 +236,8 @@ export function handoffView(record: TaskRecord): string {
 	lines.push(`Record: ${record.path}`);
 	if (sections.length) lines.push(`Sections closed: ${sections.map((s) => s.title).join('; ')}`);
 	if (last?.parts.get('Found')) lines.push('', `Found in "${last.title}":`, last.parts.get('Found')!);
-	const candidates = sections.flatMap((s) => (s.parts.get(CANDIDATES_PART) ? [s.parts.get(CANDIDATES_PART)!] : []));
-	if (candidates.length) lines.push('', 'Memory candidates:', ...candidates);
+	const remember = sections.flatMap((s) => (s.parts.get(REMEMBER_PART) ? [s.parts.get(REMEMBER_PART)!] : []));
+	if (remember.length) lines.push('', `${REMEMBER_PART}:`, ...remember);
 	const next = record.close?.get('Next') ?? last?.parts.get('Next');
 	lines.push('', `Next: ${next ?? 'not recorded'}`);
 	return lines.join('\n');
