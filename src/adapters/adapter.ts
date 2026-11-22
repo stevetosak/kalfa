@@ -69,6 +69,12 @@ export interface UserFiles {
 	/** The settings `kalfa install` sets to kalfa's value; `uninstall` puts back the value each had. */
 	owned?: readonly OwnedSetting[];
 	/**
+	 * The keys to the map of environment variables the harness sets for the
+	 * agent's commands, e.g. `['env']`; where a machine step's `agentEnv` goes.
+	 * Left out, the harness has no such map and the entries are not written.
+	 */
+	agentEnv?: readonly string[];
+	/**
 	 * The instruction file, relative to HOME, that the harness loads in full at
 	 * every session start (the `instruction-file` Capability); kalfa writes the
 	 * Personal layer's Loaded tier into it (ADR 0002, amendment 2026-11-12).
