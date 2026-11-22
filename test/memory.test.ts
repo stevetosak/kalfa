@@ -141,6 +141,25 @@ test('confirm needs a proof, dates the record and writes the proof into the hist
 	assert.match(show.out, /History:\n- \d{4}-\d\d-\d\d confirm a-fact: read it back\n- \d{4}-\d\d-\d\d add fact a-fact/);
 });
 
+test('show lists the linked records to --depth, both ways and across layers; only the record shown is used', async () => {
+	const { repo, env } = machine();
+	await memory(env, repo, ['add', '--type', 'hub', '--layer', 'personal', '--summary', 'Git habits.', '--id', 'git-habits'], 'Stage by name: [[stage-by-name]]. Gone: [[no-such]].');
+	await memory(env, repo, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'Stage files by name.', '--id', 'stage-by-name'], 'A folder can hold [[untracked]] files.');
+	await memory(env, repo, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'Some files are untracked on purpose.', '--id', 'untracked']);
+	await memory(env, repo, ['add', '--type', 'decision', '--layer', 'project', '--summary', 'CI stages by name.', '--id', 'ci-stages'], 'As [[personal:git-habits]] says.');
+
+	const one = (await memory(env, repo, ['show', 'git-habits'])).out;
+	assert.match(
+		one,
+		/\nStage by name: \[\[stage-by-name\]\]\. Gone: \[\[no-such\]\]\.\n\nLinks, depth 1 \(→ it links to, ← links to it\):\n- → \[fact\] Stage files by name\. \(stage-by-name\)\n- → \[\[no-such\]\]: no such record\n- ← \[decision\] CI stages by name\. \(ci-stages, github\.com\/someone\/project\)\n\nHistory:/,
+	);
+	assert.doesNotMatch(one, /untracked on purpose/, 'depth 1 stops at the neighbours');
+	assert.match((await memory(env, repo, ['show', 'git-habits', '--depth', '2'])).out, /- → \[fact\] Stage files by name\. \(stage-by-name\)\n {2}- → \[fact\] Some files are untracked on purpose\. \(untracked\)\n/);
+	assert.doesNotMatch((await memory(env, repo, ['show', 'git-habits', '--depth', '0'])).out, /Links/);
+	assert.match((await memory(env, repo, ['show', 'git-habits', '--depth', '3'])).error ?? '', /--depth is 0, 1, 2, not '3'/);
+	assert.deepEqual(Object.keys(readUsage(personalLayer(memoryHome(env)), env)), ['git-habits'], 'a summary line is not a read');
+});
+
 test('close needs a reason, takes the record out of the session start and keeps it in list and history', async () => {
 	const { repo, env } = machine();
 	await memory(env, repo, ['add', '--type', 'open', '--layer', 'personal', '--summary', 'An open item.']);
