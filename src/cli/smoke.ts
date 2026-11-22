@@ -292,7 +292,6 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			const home = join(world.home, MEMORY_HOME);
 			const copies = readdirSync(join(home, 'projects', 'local', 'repo', 'tasks'));
 			expect(copies.length === 1, `the Task Record is not copied into the Memory home: ${copies.join(', ')}`);
-			expect(kalfa(world, ['memory', 'inbox']).includes('the inbox is empty'), 'task close put a candidate into the inbox');
 			kalfa(world, ['memory', 'add', '--type', 'fact', '--layer', 'project', '--summary', REMEMBERED, '--source', `Task ${task}`]);
 			kalfa(world, ['task', 'reconciled', '--task', task!]);
 			expect(/\nreconciled: \d{4}-\d{2}-\d{2}\n/.test(kalfa(world, ['task', 'show', '--task', task!])), 'kalfa task reconciled did not mark the record');

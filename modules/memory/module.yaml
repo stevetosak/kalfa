@@ -8,7 +8,5 @@ commands:
     - kalfa memory search *
     - kalfa memory lint
     - kalfa memory migrate --dry-run
-    - kalfa memory inbox
-    - kalfa memory inbox list
     - kalfa memory list*
     - kalfa memory show *

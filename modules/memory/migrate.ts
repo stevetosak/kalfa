@@ -1,8 +1,8 @@
 // The Migration of a repository's Task Records (ADR 0003; Plan memory
 // revision, Part 5): each closed record from before the Cleanup is marked
-// reconciled, since its findings went to the inbox through the old path, and
-// the window then moves the records outside it to the archive. It runs once
-// per repository. A later run would also mark a record that missed its
+// reconciled, since its findings went through the old path (the inbox, since
+// retired), and the window then moves the records outside it to the archive.
+// It runs once per repository. A later run would also mark a record that missed its
 // Cleanup, so the dry run names each record before the real one.
 import { localDay } from '../../src/core/active-days.ts';
 import type { Project } from '../../src/core/project.ts';
