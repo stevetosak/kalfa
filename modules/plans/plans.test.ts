@@ -74,14 +74,29 @@ test('defer list shows open items of both layers; take and drop leave the list a
 	assert.equal(scanDeferred(projectLayerOfKey(memoryHome(env), KEY)).items.length, 2, 'the files stay');
 });
 
-test('the session start lists the open items beside the Plans; a broken file is named, not fatal', async () => {
+test('the session start counts the open items per layer, not lists them; a broken file is named, not fatal', async () => {
 	const { repo, env } = machine();
-	assert.equal(plansModule.handlers['session.start']({ name: 'session.start', harness: 'fake', cwd: repo, source: 'startup' }, contextOf(repo, env)), undefined);
+	const start = () => plansModule.handlers['session.start']({ name: 'session.start', harness: 'fake', cwd: repo, source: 'startup' }, contextOf(repo, env));
+	assert.equal(start(), undefined);
 	await defer(repo, env, ['add', '--layer', 'personal', '--summary', 'Quiz feature', '--when', 'the Operator asks']);
+	await defer(repo, env, ['add', '--layer', 'project', '--summary', 'Fork the parser']);
+	await defer(repo, env, ['add', '--layer', 'project', '--summary', 'Deploy action']);
+	await defer(repo, env, ['drop', 'deploy-action', 'not', 'needed']);
 	writeFileSync(itemPath(personalLayer(memoryHome(env)), 'broken'), 'no header');
+	const result = start();
+	assert.equal(
+		result?.context,
+		'Deferred items: 2 open (personal 1, project 1; 1 with a condition). The list: kalfa defer list. The Operator takes one on; a condition is only something to report, it never starts the work.',
+	);
+	assert.doesNotMatch(result?.context ?? '', /quiz-feature|fork-the-parser|when:/, 'no item lines');
+	assert.match(result?.notice ?? '', /^kalfa: plans: 2 deferred items\nkalfa: deferred items left out: .*broken\.md/);
+});
+
+test('a layer with no open item is left out of the count', async () => {
+	const { repo, env } = machine();
+	await defer(repo, env, ['add', '--layer', 'project', '--summary', 'Fork the parser']);
 	const result = plansModule.handlers['session.start']({ name: 'session.start', harness: 'fake', cwd: repo, source: 'startup' }, contextOf(repo, env));
-	assert.match(result?.context ?? '', /^Deferred items \(kalfa defer list\)[^\n]*\n- quiz-feature \(\d{4}-\d\d-\d\d, personal\): Quiz feature\n {2}when: the Operator asks$/);
-	assert.match(result?.notice ?? '', /kalfa: plans: 1 deferred item\nkalfa: deferred items left out: .*broken\.md/);
+	assert.match(result?.context ?? '', /^Deferred items: 1 open \(project 1\)\. The list:/);
 });
 
 test('memory search finds a deferred item and names how to read it', async () => {

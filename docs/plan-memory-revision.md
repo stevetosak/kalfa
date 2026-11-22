@@ -42,7 +42,7 @@ it, and the agent keeps its memory without a review by the Operator.
 **Done when:** the session start loads each layer's Root Hub (at most 1,500 characters, a setting), the current Task's Short-term memory, one line for each open Task and Plan and the count of deferred items, and no index lines for a layer that has a Root Hub; the first prompt of a session adds the best few search hits once; every prompt's hits go to the shadow log without being injected; the personal Instruction file holds only rules; the kalfa session report is measured below 5,000 characters; local checks pass.
 
 - [ ] The Root Hubs in the session report, with their limit; a layer without a Root Hub still loads its index lines.
-- [ ] The deferred items as a count; `/kalfa-status` keeps the full list.
+- [x] The deferred items as a count; `/kalfa-status` keeps the full list.
 - [ ] First-prompt recall: one search with the prompt and the Task, once per session.
 - [ ] The shadow log: each prompt's search hits written to a log in the cache folder, not injected.
 - [ ] The personal Instruction file `kalfa-memory.md` retires; the rules come from Part 1's files.
@@ -82,7 +82,10 @@ Part 1 first: its last step moves the rules out of the session report, with
 every rule still loading. That alone did not bring the infrastructure
 repository below the cap: on 2026-11-22, after the move, its report was 11,885
 characters, because the list of deferred items took 3,323 of them, where the
-Core leaves 1,700 for the other Modules; Part 3's count of deferred items
-removes that. Parts 2, 3 and 4 follow in that order, since the session start
+Core left 1,700 for the other Modules. Part 3's count of deferred items came
+next, ahead of Part 2: with it the infrastructure report measured 7,908
+characters. The kalfa report was over the cap for another reason: Task recall
+took 1,547 characters of that room, so the room became 2,500, and the report
+measured 9,478. Parts 2, 3 and 4 follow in that order, since the session start
 needs the Hubs and the Cleanup writes the new records; Part 5 then moves one
 layer at a time, and Part 6 waits for two weeks of data.
