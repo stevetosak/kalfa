@@ -1,9 +1,9 @@
 // `kalfa memory`: the only way the agent writes a Memory record (ADR 0002).
 // Each write is checked, dated and committed in the Memory home. A write is
 // never refused for space: a budget decides only what loads, and a record
-// past it is Stored (amendment 2026-11-08). What the Operator
-// states is written at once; what the agent finds goes through a Memory
-// candidate first (the `memory` Module's part, not this command's).
+// past it is Stored (amendment 2026-11-08). What the Operator states and what
+// the agent finds are written at once and active; a rule goes to its Rule pack
+// through `kalfa rule` (ADR 0003).
 import { existsSync, readFileSync } from 'node:fs';
 import { KalfaError } from '../../core/errors.ts';
 import {
@@ -19,11 +19,21 @@ import {
 	sessionLayers,
 	writeRecords,
 } from '../../core/memory/home.ts';
-import { checkHeader, type MemoryRecord, RECORD_STATUSES, RECORD_TYPES, type RecordHeader, type RecordType, ruleText, slugOf } from '../../core/memory/record.ts';
+import {
+	checkHeader,
+	isNewRecordType,
+	type MemoryRecord,
+	NEW_RECORD_TYPES,
+	type NewRecordType,
+	newRecordHeader,
+	RECORD_STATUSES,
+	RULE_IS_NOT_MEMORY,
+	slugOf,
+} from '../../core/memory/record.ts';
 import { refreshInstructions } from '../../core/memory/instructions.ts';
 import { markUsed } from '../../core/memory/usage.ts';
 import { loadProject } from '../../core/project.ts';
-import { loadSettings, memoryBudgets } from '../../core/settings.ts';
+import { loadSettings } from '../../core/settings.ts';
 import { type Command, parseCommandArgs, UsageError } from '../command.ts';
 import type { Io } from '../io.ts';
 
@@ -69,13 +79,6 @@ function uniqueId(records: readonly MemoryRecord[], wanted: string): string {
 	for (let n = 2; ; n++) if (!taken.has(`${wanted}-${n}`)) return `${wanted}-${n}`;
 }
 
-function checkRule(record: MemoryRecord, io: Io): void {
-	if (record.header.type !== 'rule') return;
-	const limit = memoryBudgets(loadSettings(io.env)).ruleChars;
-	const length = ruleText(record).length;
-	if (length > limit) throw new KalfaError(`a rule is short and exact: this one is ${length} characters (limit ${limit}); move the reasons into a fact or decision`);
-}
-
 /** Refuses a write to a record that no longer counts: superseded or closed. */
 function refuseRetired(record: MemoryRecord, action: string): void {
 	const { status } = record.header;
@@ -83,43 +86,33 @@ function refuseRetired(record: MemoryRecord, action: string): void {
 	if (status === 'closed') throw new KalfaError(`'${record.id}' is closed; add a new record instead`);
 }
 
-/** Parses a --type value. */
-export function recordType(value: string | undefined): RecordType {
-	if (!value) throw new UsageError(`give --type (${RECORD_TYPES.join(', ')})`);
-	if (!(RECORD_TYPES as readonly string[]).includes(value)) throw new UsageError(`--type is one of ${RECORD_TYPES.join(', ')}, not '${value}'`);
-	return value as RecordType;
+/** Parses a --type value: a type a write can make. */
+export function recordType(value: string | undefined): NewRecordType {
+	if (!value) throw new UsageError(`give --type (${NEW_RECORD_TYPES.join(', ')})`);
+	if (value === 'rule') throw new UsageError(RULE_IS_NOT_MEMORY);
+	if (!isNewRecordType(value)) throw new UsageError(`--type is one of ${NEW_RECORD_TYPES.join(', ')}, not '${value}'`);
+	return value;
 }
 
 export interface NewRecord {
-	type: RecordType;
+	type: NewRecordType;
 	summary: string | undefined;
 	source?: string;
 	id?: string;
-	proposed?: boolean;
 	body?: string;
 }
 
 /**
- * Checks and writes one new record in `layer` as one commit, with any other
- * change of the Memory home (`also`, e.g. the inbox file it came from).
- * Refused only over the rule length, never for space.
+ * Checks and writes one new active record in `layer` as one commit, with any
+ * other change of the Memory home (`also`, e.g. the inbox file it came from).
+ * Never refused for space.
  */
 export function addRecord(io: Io, layer: Layer, input: NewRecord, also: HomeChange = {}): MemoryRecord & { layer: Layer; path: string } {
 	if (!input.summary?.trim()) throw new UsageError('give --summary "<one line>"');
 	const records = readLayer(layer);
 	if (input.id && records.some((r) => r.id === input.id)) throw new KalfaError(`'${input.id}' already exists in the ${layer.label} layer`);
-	const date = today();
-	const header: RecordHeader = checkHeader({
-		schema: 1,
-		type: input.type,
-		status: input.proposed ? 'proposed' : 'active',
-		summary: input.summary,
-		created: date,
-		confirmed: date,
-		...(input.source ? { source: input.source } : {}),
-	});
+	const header = newRecordHeader({ type: input.type, summary: input.summary, source: input.source }, today());
 	const record: MemoryRecord = { id: input.id ?? uniqueId(records, slugOf(header.summary)), header, body: (input.body ?? '').trim() };
-	checkRule(record, io);
 	const [path] = writeRecords(memoryHome(io.env), [{ layer, record }], `add ${input.type} ${record.id} (${layer.label})`, also);
 	return { ...record, layer, path: path! };
 }
@@ -135,13 +128,15 @@ const subcommands: Record<string, MemorySubcommand> = {
 			summary: { type: 'string' },
 			source: { type: 'string' },
 			id: { type: 'string' },
+			// Read only to refuse it with its reason: an older instruction may still name it.
 			proposed: { type: 'boolean' },
 		});
+		if (values.proposed) throw new UsageError('--proposed is gone (ADR 0003): the agent writes what it finds as an active record, and the Operator does not review it');
 		const type = recordType(values.type);
 		const name = layerName(values.layer);
 		if (!name) throw new UsageError('give --layer personal or --layer project');
-		const record = addRecord(io, layerFor(io, name), { type, summary: values.summary, source: values.source, id: values.id, proposed: values.proposed, body: await io.stdin() });
-		io.out(`${record.header.status === 'proposed' ? 'Proposed' : 'Added'} ${type} ${record.id} in the ${record.layer.label} layer: ${record.path}`);
+		const record = addRecord(io, layerFor(io, name), { type, summary: values.summary, source: values.source, id: values.id, body: await io.stdin() });
+		io.out(`Added ${type} ${record.id} in the ${record.layer.label} layer: ${record.path}`);
 		return 0;
 	},
 
@@ -152,23 +147,16 @@ const subcommands: Record<string, MemorySubcommand> = {
 		if (!values.summary?.trim()) throw new UsageError('give --summary "<one line>" for the new record');
 		const { layer, record: old, records } = findRecord(io, oldId, layerName(values.layer));
 		refuseRetired(old, 'supersede');
-		const date = today();
+		const { type } = old.header;
+		if (!isNewRecordType(type)) throw new KalfaError(`'${old.id}' is a rule record, and ${RULE_IS_NOT_MEMORY}; kalfa rule migrate moves this one into its Rule pack`);
+		// The successor is active, also for a proposed record: the supersede decides it.
 		const next: MemoryRecord = {
 			id: values.id ?? uniqueId(records, slugOf(values.summary)),
-			header: checkHeader({
-				schema: 1,
-				type: old.header.type,
-				status: old.header.status,
-				summary: values.summary,
-				created: date,
-				confirmed: date,
-				...(old.header.source ? { source: old.header.source } : {}),
-			}),
+			header: newRecordHeader({ type, summary: values.summary, source: old.header.source }, today()),
 			body: (await io.stdin()).trim(),
 		};
 		if (records.some((r) => r.id === next.id)) throw new KalfaError(`'${next.id}' already exists in the ${layer.label} layer`);
 		const retired: MemoryRecord = { ...old, header: checkHeader({ ...old.header, status: 'superseded', 'superseded-by': next.id }) };
-		checkRule(next, io);
 		writeRecords(
 			memoryHome(io.env),
 			[
@@ -273,11 +261,11 @@ const subcommands: Record<string, MemorySubcommand> = {
 };
 
 const CORE_USAGE = [
-	'kalfa memory add --type rule|fact|decision|open --layer personal|project --summary "<one line>" [--source <link>] [--id <id>] [--proposed]   (body on stdin, optional)',
+	'kalfa memory add --type fact|decision|open|hub --layer personal|project --summary "<one line>" [--source <link>] [--id <id>]   (body on stdin, optional; a rule: kalfa rule add)',
 	'       kalfa memory supersede <id> --summary "<one line>" [--layer …] [--id <id>]   (body on stdin, optional)',
 	'       kalfa memory confirm <id> "<how you checked it>" [--layer …]',
 	'       kalfa memory close <id> "<why it is done>" [--layer …]   (it leaves the session start; search keeps it)',
-	'       kalfa memory activate [<id>…] [--layer …]   (proposed records become active; no id: all of them)',
+	'       kalfa memory activate [<id>…] [--layer …]   (the proposed records of the old review become active; no id: all of them)',
 	'       kalfa memory show <id> [--layer …]',
 	'       kalfa memory list [--layer personal|project] [--status active|proposed|superseded|closed|all]',
 ];

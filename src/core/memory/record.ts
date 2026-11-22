@@ -6,14 +6,28 @@ import { z } from 'zod';
 import { KalfaError } from '../errors.ts';
 import { parseVersioned, type VersionedFormat } from '../versioned-file.ts';
 
-/** A rule loads in full; the other types load as one index line. */
-export const RECORD_TYPES = ['rule', 'fact', 'decision', 'open'] as const;
+/**
+ * What a record file can hold. A Hub maps one subject with links to its
+ * records (ADR 0003). `rule` is only read: the records of the old Standing
+ * memory, until `kalfa rule migrate` moves them into the Rule packs.
+ */
+export const RECORD_TYPES = ['fact', 'decision', 'open', 'hub', 'rule'] as const;
 export type RecordType = (typeof RECORD_TYPES)[number];
 
+/** What a write can make: a rule is not a Memory record, it lives in a Rule pack. */
+export const NEW_RECORD_TYPES = ['fact', 'decision', 'open', 'hub'] as const satisfies readonly RecordType[];
+export type NewRecordType = (typeof NEW_RECORD_TYPES)[number];
+
+export const isNewRecordType = (type: string): type is NewRecordType => (NEW_RECORD_TYPES as readonly string[]).includes(type);
+
+/** Why a write refuses the rule type, and where a rule goes instead. */
+export const RULE_IS_NOT_MEMORY = 'a rule is not a Memory record (ADR 0003): write it with kalfa rule add --layer personal|project';
+
 /**
- * Only `active` records load. `proposed` ones wait for the Operator's review of
- * a sort; `superseded` ones name their successor; `closed` ones are done or no
- * longer apply (an open item that was finished), and search still finds them.
+ * Only `active` records load. `proposed` is only read: the records that waited
+ * for the Operator's review of a sort, until the migration decides them;
+ * `superseded` ones name their successor; `closed` ones are done or no longer
+ * apply (an open item that was finished), and search still finds them.
  */
 export const RECORD_STATUSES = ['proposed', 'active', 'superseded', 'closed'] as const;
 export type RecordStatus = (typeof RECORD_STATUSES)[number];
@@ -26,7 +40,7 @@ const headerSchema = z
 		schema: z.literal(1),
 		type: z.enum(RECORD_TYPES),
 		status: z.enum(RECORD_STATUSES),
-		/** One line: the index line, and the first line of a rule. */
+		/** One line: the index line, and the first line of a rule record. */
 		summary: z
 			.string()
 			.trim()
@@ -70,6 +84,22 @@ export function checkHeader(header: RecordHeader): RecordHeader {
 	const result = headerSchema.safeParse(header);
 	if (!result.success) throw new KalfaError(`the Memory record is not valid:\n${z.prettifyError(result.error)}`);
 	return result.data;
+}
+
+/**
+ * The header of a new record: active from the day it is written, since the
+ * agent writes what it finds and no one reviews it first (ADR 0003).
+ */
+export function newRecordHeader(input: { type: NewRecordType; summary: string; source?: string }, date: string): RecordHeader {
+	return checkHeader({
+		schema: 1,
+		type: input.type,
+		status: 'active',
+		summary: input.summary,
+		created: date,
+		confirmed: date,
+		...(input.source ? { source: input.source } : {}),
+	});
 }
 
 /** An id from a summary: lower-case words joined by dashes, cut at a word end. */

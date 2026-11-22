@@ -250,6 +250,8 @@ test('inbox accept writes the record into the layer of the candidate project and
 	await run(taskCommand(adapters, modules), repo, env, ['close'], '**Done when:** holds — the test ran.\n');
 	// Run from outside the repository: the project layer still is the candidate's.
 	const elsewhere = gitRepo();
+	const asRule = await memory(elsewhere, env, ['inbox', 'accept', 'project-feat-rotation-1', '--type', 'rule', '--layer', 'project', '--summary', 'Rotate with kluster.']);
+	assert.match(asRule.error ?? '', /a rule is not a Memory record .*kalfa rule add/);
 	const accept = await memory(elsewhere, env, ['inbox', 'accept', 'project-feat-rotation-1', '--type', 'fact', '--layer', 'project', '--summary', 'Rotating a password needs kluster.']);
 	assert.equal(accept.code, 0, accept.error);
 	const record = join(memoryHome(env), 'projects', ...KEY.split('/'), 'rotating-a-password-needs-kluster.md');
