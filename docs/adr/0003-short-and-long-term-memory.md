@@ -71,8 +71,12 @@ branch without a Task, has nothing to search with. After that the agent pulls
 with `kalfa memory show` and `search`. Searching on every prompt waits for
 data: each prompt's hits go to a shadow log and are not injected, and after two
 weeks of use the log is compared with what the agent searched for and read.
-Search ranks Long-term records first, then Short-term, then the archive, and
-by use within each.
+Search ranks Long-term memory first (with the project's docs and the open
+deferred items), then Short-term, then the archive (with the closed records),
+and by use within each. The order holds among the hits that score at least a
+quarter of the best one, and the weaker hits follow in the same order: keyword
+matching gives most hits only one word of the query, and a strict order put
+such weak records above the Task Section that answered it.
 
 **Rules are private Rule packs, outside memory.** Each Memory layer keeps its
 rules in a Rule pack in the Memory home, in the format of a Module's Rule pack,
