@@ -1,7 +1,7 @@
 // `kalfa install` / `uninstall`: kalfa's hooks, the status-tap and the machine
 // Modules' approvals in the user settings of every harness whose Adapter has
-// them, and the instruction file with the Personal layer where a harness has
-// one. The hooks and the tap run the built files of the kalfa that installs
+// them, and the instruction file with the Personal layer and the Personal
+// layer's rules (its Rule pack) where a harness has one. The hooks and the tap run the built files of the kalfa that installs
 // them, so run `kalfa install` again after the package moves. A Module can
 // have its own part on the machine (a MachineStep, such as the herdr Module's
 // Herdr plugin); it runs after the settings, and install.yaml records it so
@@ -18,6 +18,7 @@ import { machineCacheDir } from '../../core/machine-paths.ts';
 import { personalInstructions } from '../../core/memory/instructions.ts';
 import type { ModuleDirs } from '../../core/module-dirs.ts';
 import { loadModuleSource } from '../../core/module-source.ts';
+import { planUserRules } from '../../core/rules/user-files.ts';
 import { loadSettings } from '../../core/settings.ts';
 import { type Command, parseCommandArgs } from '../command.ts';
 import type { Io } from '../io.ts';
@@ -43,6 +44,7 @@ export function installWants(env: NodeJS.ProcessEnv, moduleDirs: ModuleDirs, pac
 		...sources.map((source) => steps.get(source.name)?.agentEnv?.({ env, moduleDir: source.dir, dryRun: true }) ?? {}),
 	) as Record<string, string>;
 	return (adapter) => ({
+		...userRules(env, adapter),
 		hook: (event) => `${shim} ${adapter.name} ${event}`,
 		tap: quote([built(join(packageRoot, 'dist', 'adapters', adapter.name, 'status-tap'))]),
 		approvals: planApprovals(sources, adapter.user!.approvals),
@@ -50,6 +52,15 @@ export function installWants(env: NodeJS.ProcessEnv, moduleDirs: ModuleDirs, pac
 		agentEnv,
 		...(adapter.capabilities.has('instruction-file') ? { instructions } : {}),
 	});
+}
+
+/** The Personal layer's Instruction files where the harness loads files of instructions; a broken file in the Rule pack stops the install. */
+function userRules(env: NodeJS.ProcessEnv, adapter: Adapter): Pick<UserWants, 'rules'> {
+	const layout = adapter.user?.rules;
+	if (!layout || !adapter.capabilities.has('instruction-file')) return {};
+	const { problems, ...rules } = planUserRules(env, { layout, capabilities: adapter.capabilities });
+	if (problems.length) throw new KalfaError(`the Personal layer's Rule pack: ${problems.join('; ')} (fix the file by hand, then try again)`);
+	return { rules };
 }
 
 /** The changes `kalfa install` would make in each harness's user settings, without writing them. */
@@ -122,7 +133,7 @@ function run(adapters: ReadonlyMap<string, Adapter>, io: Io, wants: (adapter: Ad
 
 export function installCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs, packageRoot: () => string, steps: ReadonlyMap<string, MachineStep> = new Map()): Command {
 	return {
-		summary: "Write kalfa's hooks, the status-line tap, the machine Modules' approvals and the Personal layer's instruction file into the harnesses' user settings, set the settings kalfa owns (their own memory off, idle compaction), and run the machine Modules' own steps (the herdr Module links its Herdr plugin and binds its action to a Herdr key)",
+		summary: "Write kalfa's hooks, the status-line tap, the machine Modules' approvals, the Personal layer's instruction file and its rules into the harnesses' user settings, set the settings kalfa owns (their own memory off, idle compaction), and run the machine Modules' own steps (the herdr Module links its Herdr plugin and binds its action to a Herdr key)",
 		usage: 'kalfa install [--dry-run]',
 		async run(args, io) {
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' } });

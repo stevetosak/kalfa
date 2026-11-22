@@ -70,6 +70,26 @@ export function projectLayerOfKey(home: string, key: string): Layer {
 	return { name: 'project', dir: join(home, 'projects', ...key.split('/')), label: key };
 }
 
+/** The folders a layer keeps beside its record files; a project folder with one of them, or with a record, is a layer. */
+const LAYER_FOLDERS = new Set(['tasks', 'deferred', 'rules', 'skills']);
+
+/** Every layer of the Memory home: the Personal layer, then each project's layer in key order. */
+export function allLayers(home: string): Layer[] {
+	const layers = [personalLayer(home)];
+	const walk = (dir: string, key: string[]) => {
+		const entries = readdirSync(dir, { withFileTypes: true });
+		// A project key has a host or `local`, then at least one more segment.
+		if (key.length >= 2 && entries.some((e) => (e.isFile() && e.name.endsWith('.md')) || (e.isDirectory() && LAYER_FOLDERS.has(e.name)))) {
+			layers.push(projectLayerOfKey(home, key.join('/')));
+			return;
+		}
+		for (const entry of entries.filter((e) => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) walk(join(dir, entry.name), [...key, entry.name]);
+	};
+	const projects = join(home, 'projects');
+	if (existsSync(projects)) walk(projects, []);
+	return layers;
+}
+
 /** The layers a session in `project` sees: the Personal layer, and the project's when there is one. */
 export function sessionLayers(home: string, project: Project | undefined): Layer[] {
 	return project ? [personalLayer(home), projectLayer(home, project)] : [personalLayer(home)];

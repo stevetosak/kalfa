@@ -8,7 +8,9 @@
 // wants in the environment of the agent's commands are such settings too,
 // named `agent-env:<variable>`. A changed settings file
 // is backed up next to itself before kalfa writes it. The instruction file
-// (the Personal layer, where a harness loads one) is kalfa's by its name.
+// (the Personal layer, where a harness loads one) is kalfa's by its name, and
+// so is the folder of the Personal layer's rules; its skill links are kalfa's
+// when `install.yaml` records them (core/rules/user-files.ts).
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -19,6 +21,8 @@ import { KalfaError } from './errors.ts';
 import type { CoreEventName } from './events.ts';
 import { machineConfigDir } from './machine-paths.ts';
 import type { Approvals } from './module-source.ts';
+import type { PlannedRules } from './rules/files.ts';
+import { applyUserRules } from './rules/user-files.ts';
 import { readVersioned, type VersionedFormat } from './versioned-file.ts';
 
 const entries = z.array(z.string()).default([]);
@@ -35,6 +39,8 @@ const harnessStateSchema = z
 		settings: z.record(z.string(), settingStateSchema).optional(),
 		/** The instruction file kalfa wrote, relative to HOME. */
 		instructions: z.string().optional(),
+		/** The Personal layer's rules folder and skill links kalfa wrote, relative to HOME. */
+		rules: z.strictObject({ dir: z.string(), skills: z.array(z.string()).default([]) }).optional(),
 		/** Before the `settings` map: the harness's own memory setting. Read, never written. */
 		'native-memory': settingStateSchema.optional(),
 	})
@@ -78,6 +84,8 @@ export interface UserWants {
 	ownedSettings?: boolean;
 	/** The text of the Adapter's instruction file; left out, kalfa removes the file it wrote. */
 	instructions?: string;
+	/** The Personal layer's Instruction files in the Adapter's rule layout; left out, kalfa removes the ones it wrote. */
+	rules?: PlannedRules;
 	/** The machine steps' entries in the environment of the agent's commands; one kalfa set before and left out here is put back. */
 	agentEnv?: Record<string, string>;
 }
@@ -251,7 +259,9 @@ export function applyUser(home: string, user: UserFiles, want: UserWants, owned:
 
 	const settingsChanged = after !== before && !(existing === undefined && isDeepStrictEqual(after, {}));
 	const instructions = applyInstructions(home, user, want.instructions, owned?.instructions, report, options.dryRun ?? false);
-	const changed = settingsChanged || instructions.changed;
+	const rules = user.rules ? applyUserRules(home, user.rules, want.rules, owned?.rules, options.dryRun ?? false) : undefined;
+	report.push(...(rules?.report ?? []));
+	const changed = settingsChanged || instructions.changed || (rules?.changed ?? false);
 	if (!changed) report.push('nothing to change');
 	if (settingsChanged && !options.dryRun) {
 		if (existing !== undefined) {
@@ -266,6 +276,11 @@ export function applyUser(home: string, user: UserFiles, want: UserWants, owned:
 		path,
 		report,
 		changed,
-		owned: { approvals: merged.owned, ...(settings.owned ? { settings: settings.owned } : {}), ...(instructions.owned ? { instructions: instructions.owned } : {}) },
+		owned: {
+			approvals: merged.owned,
+			...(settings.owned ? { settings: settings.owned } : {}),
+			...(instructions.owned ? { instructions: instructions.owned } : {}),
+			...(rules?.owned ? { rules: rules.owned } : {}),
+		},
 	};
 }

@@ -19,13 +19,13 @@ it, and the agent keeps its memory without a review by the Operator.
 
 **Done when:** each Memory layer has a Rule pack in the Memory home; `kalfa rule add|change|remove` writes a rule with its checks and commits it; `kalfa install` writes the personal rules and `kalfa build` a project's rules as Instruction files, the project's in a git-ignored folder; a rule loads always, by path or as a skill, and a harness without `path-rules` or `skills` loads it always or as a pointer line; `kalfa doctor` reports a missing or changed file and `kalfa uninstall` removes them; every active rule record of every layer is in its Rule pack, still loading always, and no session report holds rules; local checks pass.
 
-- [ ] A layer's Rule pack: a `rules/` folder per layer in the Memory home, in the file format of a Module's Rule pack (Markdown, optional `paths:`), read by the Core.
-- [ ] `kalfa rule add|change|remove --layer personal|project`: checks the length, the path patterns and the layer, commits in the Memory home and writes the Instruction files again.
-- [ ] Instruction files: the personal rules under `~/.claude/rules/kalfa-personal/` at `kalfa install` and after each rule write; a project's under `.claude/rules/kalfa-project/` at `kalfa build`; both recorded for `kalfa uninstall`.
-- [ ] The skill form: a rule that is a procedure is written as a skill of its layer and linked where the harness finds skills.
-- [ ] Capabilities `path-rules` and `skills`, both declared by the Claude Adapter; without them a path-scoped rule loads always and a skill-form rule becomes a pointer line.
-- [ ] `kalfa doctor` shows each layer's Rule pack against its Instruction files and warns when the rules that load always pass their count limit.
-- [ ] Move the rules: `kalfa rule migrate [--dry-run]` writes each active rule record of every layer into its Rule pack with its text unchanged, loading always, and closes the record with a pointer to its file.
+- [x] A layer's Rule pack: a `rules/` folder per layer in the Memory home, in the file format of a Module's Rule pack (Markdown, optional `paths:`), read by the Core.
+- [x] `kalfa rule add|change|remove --layer personal|project`: checks the length, the path patterns and the layer, commits in the Memory home and writes the Instruction files again.
+- [x] Instruction files: the personal rules under `~/.claude/rules/kalfa-personal/` at `kalfa install` and after each rule write; a project's under `.claude/rules/kalfa-project/` at `kalfa build`; both recorded for `kalfa uninstall`.
+- [x] The skill form: a rule that is a procedure is written as a skill of its layer and linked where the harness finds skills.
+- [x] Capabilities `path-rules` and `skills`, both declared by the Claude Adapter; without them a path-scoped rule loads always and a skill-form rule becomes a pointer line.
+- [x] `kalfa doctor` shows each layer's Rule pack against its Instruction files and warns when the rules that load always pass their count limit.
+- [x] Move the rules: `kalfa rule migrate [--dry-run]` writes each active rule record of every layer into its Rule pack with its text unchanged, loading always, and closes the record with a pointer to its file.
 
 ## 2. Long-term memory: records, Hubs and links
 
@@ -78,8 +78,11 @@ it, and the agent keeps its memory without a review by the Operator.
 
 ## Order
 
-Part 1 first: its last step moves the rules out of the session report, which
-brings the infrastructure repository below the cap at once, with every rule
-still loading. Parts 2, 3 and 4 follow in that order, since the session start
+Part 1 first: its last step moves the rules out of the session report, with
+every rule still loading. That alone did not bring the infrastructure
+repository below the cap: on 2026-11-22, after the move, its report was 11,885
+characters, because the list of deferred items took 3,323 of them, where the
+Core leaves 1,700 for the other Modules; Part 3's count of deferred items
+removes that. Parts 2, 3 and 4 follow in that order, since the session start
 needs the Hubs and the Cleanup writes the new records; Part 5 then moves one
 layer at a time, and Part 6 waits for two weeks of data.

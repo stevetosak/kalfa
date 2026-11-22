@@ -9,6 +9,8 @@
 // after it, the summary is kept as the Task's Checkpoint.
 // After some days with no activity in the repository, a new session starts
 // with the Recap instead of the list of open Tasks.
+// Rules: each layer's Rule pack loads from its Instruction files; a layer whose
+// files are not there for this harness gets its rules in the report (ADR 0003).
 // Standing memory: the Personal layer in every session, and the project's
 // layer inside a repository: the Loaded tier under their budgets, and a line
 // for the Stored tier (ADR 0002). Where the harness loads kalfa's instruction
@@ -21,12 +23,13 @@ import { type Layer, type LayerScan, memoryHome, scanLayer, sessionLayers } from
 import { refreshInstructions } from '../core/memory/instructions.ts';
 import { budgetOf, type LayerView, layerView, overBudgetNotice, renderLayer } from '../core/memory/standing.ts';
 import { readUsage } from '../core/memory/usage.ts';
+import { type RuleLayouts, sessionRules } from '../core/rules/session.ts';
 import { lastActivity, idleDays, markSession, recapTask, recapView } from '../core/recap.ts';
 import { type MemoryBudgets, memoryBudgets, recapAfterDays, type Settings } from '../core/settings.ts';
 import { isContinueWord } from '../core/continue-word.ts';
 import type { CoreEvent, HandlerResult, SessionStartSource } from '../core/events.ts';
 import type { ModuleManifest } from '../core/module-source.ts';
-import { CORE_MODULE, type Handler, type ModuleDefinition } from '../core/modules.ts';
+import { CORE_MODULE, type Handler, type HandlerContext, type ModuleDefinition } from '../core/modules.ts';
 import { findPlans, isOpenPlan, planSummary } from '../core/plans.ts';
 import type { Project } from '../core/project.ts';
 import { briefView, compactFocus, handoffView, listRecords, nextStep, readRecord, type TaskRecord, taskIdOf } from '../core/task-record.ts';
@@ -123,7 +126,7 @@ function recapReport(project: Project, settings: Settings, event: Extract<CoreEv
 	};
 }
 
-const MEMORY_HEADER = 'Standing memory (kalfa memory). Write a record only through `kalfa memory add|supersede|confirm`; what you find yourself is a Memory candidate first.';
+const MEMORY_HEADER = 'Standing memory (kalfa memory). Write a rule only through `kalfa rule add|change|remove`, a record only through `kalfa memory add|supersede|confirm`; what you find yourself is a Memory candidate first.';
 /** What a layer's index heading costs, with the blank line before it. */
 const INDEX_HEADING = 'Index (the body: kalfa memory show <id>):'.length + 3;
 
@@ -167,25 +170,32 @@ function memoryReport(project: Project | undefined, settings: Settings, env: Nod
 	const file = fit.personal ? '' : ' (+ the Personal layer from the instruction file)';
 	return {
 		context: blocks.length ? [MEMORY_HEADER, ...blocks].join('\n\n') : undefined,
-		summary: blocks.length || file ? `memory: ${plural(rules, 'rule')}, ${plural(lines, 'index line')}${stored ? `, ${stored} Stored` : ''}${file}` : undefined,
+		summary: blocks.length || file ? `memory: ${rules ? `${plural(rules, 'rule')}, ` : ''}${plural(lines, 'index line')}${stored ? `, ${stored} Stored` : ''}${file}` : undefined,
 		notice: notices.length ? notices.join('\n') : undefined,
 	};
+}
+
+/** The rules the harness cannot load from files, for the report. */
+function rulesReportPart(project: Project | undefined, env: NodeJS.ProcessEnv, harness: string, layouts: RuleLayouts, capabilities: HandlerContext['capabilities']): ReportPart {
+	const part = sessionRules(project, env, harness, layouts, capabilities);
+	return { context: part.context, summary: part.inReport ? `${plural(part.inReport, 'rule')} in the report` : undefined, notice: part.notice };
 }
 
 /**
  * The agent gets the full report; the Operator sees one line of what it
  * holds (harnesses show a notice to the Operator, not the context).
  */
-const sessionReport: Handler = (event, { project, settings, env, capabilities, contextCap }) => {
+const sessionReport: Handler = (event, { project, settings, env, capabilities, contextCap, rules: layouts }) => {
 	if (event.name !== 'session.start') return undefined;
 	// The Personal layer loads from the instruction file when it is current.
 	const personal = !(capabilities.has('instruction-file') && refreshInstructions(env, settings, event.harness).length);
+	const rules = rulesReportPart(project, env, event.harness, layouts ?? {}, capabilities);
 	// The Recap comes first: a harness can show only the start of a long report.
 	const recap = project ? recapReport(project, settings, event) : undefined;
 	const rest = recap ? [recap, planReport(project!)] : project ? [planReport(project), taskReport(project, event)] : [];
-	const used = rest.reduce((sum, part) => sum + (part.context ? part.context.length + 2 : 0), 0);
+	const used = [rules, ...rest].reduce((sum, part) => sum + (part.context ? part.context.length + 2 : 0), 0);
 	const memory = memoryReport(project, settings, env, { personal, room: contextCap === undefined ? undefined : contextCap - OTHER_MODULES_ROOM - used });
-	const parts = recap ? [recap, memory, rest[1]!] : [memory, ...rest];
+	const parts = recap ? [recap, rules, memory, rest[1]!] : [rules, memory, ...rest];
 	const context = parts.map((p) => p.context).filter(Boolean).join('\n\n');
 	const summary = parts.map((p) => p.summary).filter(Boolean).join(' · ');
 	const notice = [summary ? `kalfa: ${summary}` : undefined, ...parts.map((p) => p.notice)].filter(Boolean).join('\n');
@@ -240,6 +250,9 @@ export const coreNeeds: ModuleManifest['needs'] = [
 	{ capability: 'context-injection', without: 'no session report; the agent runs kalfa plan list and kalfa task list itself' },
 	{ capability: 'task-list', without: 'a closed Section stays in the Task Record only' },
 	{ capability: 'compaction', without: "a compaction keeps what the harness chooses, and the Task gets no Checkpoint" },
+	{ capability: 'instruction-file', without: "the Personal layer's index and rules load in the session report, under the harness's cap" },
+	{ capability: 'path-rules', without: 'a path-scoped rule loads in every session, with its paths named after it' },
+	{ capability: 'skills', without: 'a skill-form rule loads as a pointer line among the rules that load always' },
 ];
 
 export const coreModule: ModuleDefinition = {

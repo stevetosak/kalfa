@@ -5,6 +5,7 @@ import type { Capability } from './capabilities.ts';
 import { KalfaError } from './errors.ts';
 import type { CoreEvent, CoreEventName, HandlerResult } from './events.ts';
 import type { Project } from './project.ts';
+import type { RuleLayouts } from './rules/session.ts';
 import type { Settings } from './settings.ts';
 import type { UsageSource } from './usage.ts';
 
@@ -18,6 +19,8 @@ export interface HandlerContext {
 	usage?: UsageSource;
 	/** The Adapter's cap on one hook's context (`Adapter.contextCap`). */
 	contextCap?: number;
+	/** Where the Adapter writes the layers' rules (`UserFiles.rules`, `ProjectFiles.rules`). */
+	rules?: RuleLayouts;
 }
 
 /** What decides whether a handler runs here: the project and the machine settings, nothing from the event. */

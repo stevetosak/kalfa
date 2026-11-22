@@ -162,7 +162,7 @@ _Avoid_: memory entry, note, memory file
 ### Instructions
 
 **Rule pack**:
-A set of rules in harness-neutral files, each loaded at every session start or only when the agent touches a matching file. A Module's Rule pack is generic and public; a Memory layer's Rule pack is private and lives in the Memory home.
+A set of rules in harness-neutral files, each loaded at every session start, only when the agent touches a matching file, or as a skill when the work fits it. A Module's Rule pack is generic and public; a Memory layer's Rule pack is private and lives in the Memory home, where `kalfa rule` writes it.
 _Avoid_: domain memory, guidelines, rule records
 
 **Instruction file**:
