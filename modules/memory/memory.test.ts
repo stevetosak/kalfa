@@ -20,7 +20,7 @@ import { fakeAdapter, registry } from '../../test/fakes.ts';
 import { captureIo, gitRepo, tempRepo } from '../../test/helpers.ts';
 import { renderItem } from '../plans/deferred.ts';
 import { memoryCommand } from './command.ts';
-import { candidateFiles, readInbox, splitCandidates } from './inbox.ts';
+import { readInbox } from './inbox.ts';
 import { lint } from './lint.ts';
 import { memoryModule, SEARCHABLE_PROMPT, sourceScope } from './handlers.ts';
 import { openIndex, type SearchOptions } from './search.ts';
@@ -89,28 +89,6 @@ test('markdownPieces nests headings by level, ignores headings in code fences an
 	const long = markdownPieces(`## Long\n${'word '.repeat(50)}\n\n${'more '.repeat(50)}\n`, 300);
 	assert.equal(long.length, 2);
 	assert.ok(long.every((p) => p.text.length <= 300 && p.headings[0] === 'Long'));
-});
-
-test('splitCandidates takes one candidate per top-level bullet, and none for "none"', () => {
-	assert.deepEqual(splitCandidates('- first\n  more of first\n- second'), ['first\n  more of first', 'second']);
-	assert.deepEqual(splitCandidates('One plain candidate.'), ['One plain candidate.']);
-	assert.deepEqual(splitCandidates('none'), []);
-	assert.deepEqual(splitCandidates('- None.\n- real'), ['real']);
-});
-
-test('candidateFiles does not write a candidate twice for the same Task', () => {
-	const home = tempRepo();
-	const files = candidateFiles(home, { project: KEY, task: 'feat-x', created: '2026-10-31' }, ['a', 'b']);
-	assert.deepEqual(
-		files.map((f) => f.id),
-		['project-feat-x-1', 'project-feat-x-2'],
-	);
-	mkdirSync(join(home, 'inbox'));
-	writeFileSync(files[0]!.path, files[0]!.text);
-	assert.deepEqual(
-		candidateFiles(home, { project: KEY, task: 'feat-x', created: '2026-10-31' }, ['a', 'c']).map((f) => [f.id, f.candidate]),
-		[['project-feat-x-2', 'c']],
-	);
 });
 
 test('the lint reports stale records, broken links, duplicates and unreadable files, and gives no age limit to a decision', () => {
@@ -225,26 +203,24 @@ test('search ranks the relevant Long-term sources first, then the Task Records, 
 	assert.ok(after.indexOf('vault-b') < after.indexOf('vault-a'), `the record used later leads its tier: ${after.join(', ')}`);
 });
 
-test('task close copies the record into the Memory home and puts the candidates into the inbox in one commit', async () => {
+test('task close copies the record into the Memory home and gives the Cleanup of each Remember finding, with no inbox candidate', async () => {
 	const { repo, env } = machine();
 	await startTask(repo, env, '- The rotation needs kluster.\n- Envoy times out at 15 s.');
-	const close = await run(taskCommand(adapters, modules), repo, env, ['close'], '**Done when:** holds — the test ran.\n');
+	const close = await run(taskCommand(adapters, modules), repo, env, ['close'], '**Remember:** The close found the timeout.\n\n**Done when:** holds — the test ran.\n');
 	assert.equal(close.code, 0, close.error ?? close.err);
 	const home = memoryHome(env);
 	assert.ok(existsSync(join(home, 'projects', ...KEY.split('/'), 'tasks', 'feat-rotation.md')));
-	const inbox = readInbox(home).candidates;
-	assert.deepEqual(
-		inbox.map((c) => [c.id, c.project, c.task, c.text]),
-		[
-			['project-feat-rotation-1', KEY, 'feat-rotation', 'The rotation needs kluster.'],
-			['project-feat-rotation-2', KEY, 'feat-rotation', 'Envoy times out at 15 s.'],
-		],
-	);
-	assert.deepEqual(homeLog(env), [`close task feat-rotation (${KEY}): copy the record, 2 candidates to the inbox`]);
-	assert.match(close.out, /Ask the Operator ONE question[\s\S]*- project-feat-rotation-1: The rotation needs kluster\./);
+	assert.deepEqual(readInbox(home).candidates, []);
+	assert.deepEqual(homeLog(env), [`close task feat-rotation (${KEY}): copy the record`]);
+	assert.match(close.out, /^Cleanup of Task feat-rotation \(ADR 0003\)/m);
+	assert.match(close.out, /^- Rotation: The rotation needs kluster\.\n- Rotation: Envoy times out at 15 s\.\n- Task close: The close found the timeout\.$/m);
+	assert.ok(close.out.includes(`--source "Task feat-rotation (${KEY})"`), close.out);
+	assert.match(close.out, /Then mark the record: `kalfa task reconciled --task feat-rotation`\.$/);
+	assert.doesNotMatch(close.out, /Ask the Operator|inbox/);
+	assert.match(close.err + close.out, /Task Record copied to the Memory home; the Cleanup has 3 findings/);
 });
 
-test('task close proposes upkeep only for a layer over its budget: its duplicates and its open items', async () => {
+test('the Cleanup holds the upkeep only of a layer over its budget: its duplicates and its open items', async () => {
 	const { repo, env } = machine('memory:\n  project:\n    index-bytes: 120\n');
 	await memory(repo, env, ['add', '--type', 'open', '--layer', 'project', '--summary', 'Wire the zeppelin gateway to Envoy.']);
 	await memory(repo, env, ['add', '--type', 'fact', '--layer', 'project', '--summary', 'The zeppelin gateway runs on Envoy.']);
@@ -253,12 +229,14 @@ test('task close proposes upkeep only for a layer over its budget: its duplicate
 	await startTask(repo, env, 'none');
 	const close = await run(taskCommand(adapters, modules), repo, env, ['close'], '**Done when:** holds — the test ran.\n');
 	assert.equal(close.code, 0, close.error ?? close.err);
-	assert.doesNotMatch(close.out, /Ask the Operator ONE question/, 'no candidates, no candidate question');
+	assert.match(close.out, /Its Sections have no finding in a Remember part\./);
+	assert.doesNotMatch(close.out, /Ask the Operator|the Operator's yes/, 'the agent decides the upkeep itself');
 	assert.match(close.out, /Memory upkeep: [\s\S]*- the github\.com\/someone\/project layer holds \d+ B of index lines \(limit 120 B; \d Stored\)/);
 	assert.match(close.out, /likely a duplicate of github\.com\/someone\/project\/the-zeppelin-gateway-runs-on-envoy/);
 	assert.match(close.out, /open item github\.com\/someone\/project\/wire-the-zeppelin-gateway-to-envoy: Wire the zeppelin gateway to Envoy\./);
 	assert.doesNotMatch(close.out, /keyboard/, 'the personal layer is within its budget');
-	assert.match(close.err + close.out, /upkeep proposed for github\.com\/someone\/project \(over budget\)/);
+	assert.match(close.err + close.out, /the Cleanup holds the upkeep of github\.com\/someone\/project \(over budget\)/);
+	assert.match(close.out, /Then mark the record: `kalfa task reconciled --task feat-rotation`\.$/);
 });
 
 /** A session in `repo`: its start and its prompts, through the Dispatcher, which owns the wakes. */
@@ -276,7 +254,7 @@ test('session start does not recall, asks a wake and counts the inbox; the first
 	const { start, prompt } = sessionIn(repo, env);
 	const result = await start();
 	assert.doesNotMatch(result.context.join('\n'), /Recall/);
-	assert.match(result.context.join('\n'), /1 Memory candidate waits in the inbox/);
+	assert.match(result.context.join('\n'), /1 Memory candidate from before the Cleanup waits in the inbox until the Migration decides them/);
 	assert.ok(result.notice.includes('kalfa: memory: 1 in the inbox'), result.notice.join('\n'));
 	assert.ok(existsSync(wakePath(repo, 'prompt.submit', 's1')));
 	assert.deepEqual((await prompt('/kalfa-status')).context, [], 'a slash command keeps the wake, also with a Task');
@@ -452,10 +430,17 @@ test('a shadow log that cannot be written is a notice, and recall still comes', 
 	assert.match(result.notice.join('\n'), /^kalfa: memory: recall 1 hit$/m);
 });
 
+/** A Memory candidate that waits in the inbox, as Task close wrote one before the Cleanup. */
+function waitingCandidate(env: NodeJS.ProcessEnv, id: string, text: string) {
+	mkdirSync(join(memoryHome(env), 'inbox'), { recursive: true });
+	writeFileSync(join(memoryHome(env), 'inbox', `${id}.md`), `---\nschema: 1\nproject: ${KEY}\ntask: feat-rotation\ncreated: 2026-10-31\n---\n\n${text}\n`);
+}
+
 test('inbox accept writes the record into the layer of the candidate project and removes the candidate in one commit', async () => {
 	const { repo, env } = machine();
-	await startTask(repo, env, '- The rotation needs kluster.\n- A wrong idea.');
-	await run(taskCommand(adapters, modules), repo, env, ['close'], '**Done when:** holds — the test ran.\n');
+	// Task close no longer adds to the inbox; these two wait from before the Cleanup.
+	waitingCandidate(env, 'project-feat-rotation-1', 'The rotation needs kluster.');
+	waitingCandidate(env, 'project-feat-rotation-2', 'A wrong idea.');
 	// Run from outside the repository: the project layer still is the candidate's.
 	const elsewhere = gitRepo();
 	const asRule = await memory(elsewhere, env, ['inbox', 'accept', 'project-feat-rotation-1', '--type', 'rule', '--layer', 'project', '--summary', 'Rotate with kluster.']);

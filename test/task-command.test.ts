@@ -65,6 +65,26 @@ test('start, close Sections, close: the whole Task in one record', async () => {
 	await assert.rejects(section.run(['close', 'late'], captureIo(root, inHarness, '**Done:** x\n')), /Task 'feat-monitoring' is closed/);
 });
 
+test('kalfa task reconciled marks a closed record once, refuses an open one, and --task names it from another branch', async () => {
+	const root = repo();
+	await task.run(['start', '--done-when', 'it works', 'goal'], captureIo(root));
+	await assert.rejects(task.run(['reconciled'], captureIo(root)), /Task 'feat-monitoring' is open; close it with kalfa task close/);
+	assert.equal(await task.run(['close'], captureIo(root, inHarness, '**Done when:** holds — the test closed it.\n')), 0);
+	execFileSync('git', ['-C', root, 'checkout', '-q', '-b', 'other']);
+	const path = join(root, '.kalfa', 'tasks', 'feat-monitoring.md');
+	const day = new Date().toLocaleDateString('sv-SE');
+	let io = captureIo(root);
+	assert.equal(await task.run(['reconciled', '--task', 'feat-monitoring'], io), 0);
+	assert.deepEqual(io.stdout, [`Task feat-monitoring reconciled: ${path}`]);
+	const text = readFileSync(path, 'utf8');
+	assert.match(text, new RegExp(`\\nclosed: ${day}\\nreconciled: ${day}\\n---\\n`));
+	io = captureIo(root);
+	assert.equal(await task.run(['reconciled', '--task', 'feat-monitoring'], io), 0);
+	assert.deepEqual(io.stdout, [`Task feat-monitoring was reconciled on ${day}`]);
+	assert.equal(readFileSync(path, 'utf8'), text, 'a second mark changes nothing');
+	await assert.rejects(task.run(['reconciled', '--task', 'nope'], captureIo(root)), /no Task Record 'nope'/);
+});
+
 test('without a task list the Section is not mapped', async () => {
 	const root = repo();
 	await task.run(['start', '--done-when', 'it works', 'goal'], captureIo(root));
