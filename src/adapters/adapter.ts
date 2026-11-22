@@ -74,12 +74,6 @@ export interface UserFiles {
 	 * Left out, the harness has no such map and the entries are not written.
 	 */
 	agentEnv?: readonly string[];
-	/**
-	 * The instruction file, relative to HOME, that the harness loads in full at
-	 * every session start (the `instruction-file` Capability); kalfa writes the
-	 * Personal layer's Loaded tier into it (ADR 0002, amendment 2026-11-12).
-	 */
-	instructions?: string;
 	/** Where the Personal layer's Rule pack goes, relative to HOME (ADR 0003); `undefined` puts its rules in the session report. */
 	rules?: RuleLayout;
 }

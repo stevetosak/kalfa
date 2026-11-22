@@ -45,7 +45,7 @@ it, and the agent keeps its memory without a review by the Operator.
 - [x] The deferred items as a count; `/kalfa-status` keeps the full list.
 - [x] First-prompt recall: one search with the prompt and the Task, once per session.
 - [x] The shadow log: each prompt's search hits written to a log in the cache folder, not injected.
-- [ ] The personal Instruction file `kalfa-memory.md` retires; the rules come from Part 1's files.
+- [x] The personal Instruction file `kalfa-memory.md` retires; the rules come from Part 1's files.
 
 ## 4. Short-term memory and the Cleanup
 
@@ -89,3 +89,11 @@ took 1,547 characters of that room, so the room became 2,500, and the report
 measured 9,478. Parts 2, 3 and 4 follow in that order, since the session start
 needs the Hubs and the Cleanup writes the new records; Part 5 then moves one
 layer at a time, and Part 6 waits for two weeks of data.
+
+The Personal layer's Root Hub came ahead of Part 5, with the last step of
+Part 3: without the instruction file and without a Root Hub, the Personal
+layer's index lines (a budget of 4,096 bytes) load first in the session report
+and take most of the room the project's index lines had. Part 5's step for the
+Personal layer keeps the rest of its work. Part 3 itself closes only after
+Part 5's step for the kalfa layer, since its report reaches 5,000 characters
+only with that layer's Root Hub.

@@ -1,7 +1,7 @@
 // The rules at session start (ADR 0003): no session loses a rule. Where kalfa
 // install recorded the Personal layer's Instruction files, the session start
-// writes them again from the Rule pack, as it does the instruction file, so
-// the next session has the current rules. A layer whose files are not there
+// writes them again from the Rule pack, so the next session has the current
+// rules. A layer whose files are not there
 // for this harness (no install yet, a new worktree with no build, a repository
 // with no kalfa.yaml, a harness with no rule layout) gets its rules in the
 // session report instead, with a note that says which command writes them.

@@ -9,7 +9,6 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Adapter } from '../../adapters/adapter.ts';
 import { KalfaError } from '../../core/errors.ts';
 import { allLayers, type Layer, type LayerName, memoryHome, projectKey, readLayer, recordPath, sessionLayers } from '../../core/memory/home.ts';
-import { refreshInstructions } from '../../core/memory/instructions.ts';
 import { checkHeader, type MemoryRecord, renderMemoryRecord, ruleText, slugOf } from '../../core/memory/record.ts';
 import type { ModuleDirs } from '../../core/module-dirs.ts';
 import { loadProject } from '../../core/project.ts';
@@ -71,12 +70,6 @@ function uniqueId(pack: readonly PackRule[], wanted: string): string {
  */
 function writeFiles(io: Io, layers: readonly Layer[], adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs): void {
 	if (layers.some((layer) => layer.name === 'personal')) {
-		// A migrate closes rule records, which leave the Personal layer's instruction file.
-		try {
-			refreshInstructions(io.env, loadSettings(io.env));
-		} catch (error) {
-			io.err(`kalfa rule: the instruction file was not written again: ${(error as Error).message}`);
-		}
 		const written = [...adapters.values()].filter((adapter) => {
 			try {
 				return refreshUserRules(io.env, adapter.name, adapter.user?.rules, adapter.capabilities);
