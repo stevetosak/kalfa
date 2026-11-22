@@ -52,3 +52,19 @@ test('a record with no finding still gets the reconciled command, and the upkeep
 	assert.ok(upkeepAt > 1 && steps.includes('  - open item personal/old-item: Old work.'), steps.join('\n'));
 	assert.equal(steps.at(-1), 'Then mark the record: `kalfa task reconciled --task feat-x`.');
 });
+
+test('a missed Cleanup with findings brings the steps when the closing Task has none, with its own Task as the source', () => {
+	const steps = cleanupSteps(TASK, [], [], [{ id: 'feat-old', closed: '2026-03-01', findings: [{ from: 'Old', text: 'old finding' }] }]).split('\n');
+	assert.equal(steps[1], 'Its Sections have no finding in a Remember part.');
+	assert.ok(steps.includes('  - Old: old finding'), steps.join('\n'));
+	assert.ok(steps.includes('For each finding:'));
+	assert.ok(steps.some((l) => l.includes(`--source "Task <the finding's Task> (github.com/someone/project)"`)));
+	assert.equal(steps.at(-1), 'Then mark the record: `kalfa task reconciled --task feat-x`.');
+});
+
+test('missed Cleanups with no finding bring no steps, only their reconciled commands', () => {
+	const steps = cleanupSteps(TASK, [], [], [{ id: 'feat-old', findings: [] }]).split('\n');
+	assert.ok(steps.includes('- Task feat-old: no finding in a Remember part.'), steps.join('\n'));
+	assert.ok(steps.includes('  Then: `kalfa task reconciled --task feat-old`.'));
+	assert.ok(!steps.includes('For each finding:'));
+});
