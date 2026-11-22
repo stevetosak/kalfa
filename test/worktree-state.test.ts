@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { taskCommand } from '../src/cli/commands/task.ts';
 import { writeCheckpoint } from '../src/core/checkpoint.ts';
+import { activeDays, localDay, markActiveDay } from '../src/core/active-days.ts';
 import { mainCheckout } from '../src/core/private-dir.ts';
 import { lastActivity, markSession } from '../src/core/recap.ts';
 import { listRecords, readRecord } from '../src/core/task-record.ts';
@@ -24,7 +25,7 @@ function repoWithWorktree() {
 	return { main, worktree };
 }
 
-test('a worktree keeps its Task Records, Checkpoints and session stamp in the main checkout', async () => {
+test('a worktree keeps its Task Records, Checkpoints, session stamp and Active days in the main checkout', async () => {
 	const { main, worktree } = repoWithWorktree();
 	assert.equal(mainCheckout(worktree), main);
 	assert.equal(mainCheckout(main), main);
@@ -41,6 +42,10 @@ test('a worktree keeps its Task Records, Checkpoints and session stamp in the ma
 	markSession(worktree);
 	assert.ok(existsSync(join(main, '.kalfa/last-session')));
 	assert.ok(lastActivity(main), 'the main checkout sees the worktree session');
+
+	markActiveDay(worktree);
+	assert.ok(!existsSync(join(worktree, '.kalfa/active-days')));
+	assert.ok(activeDays(main).includes(localDay(new Date())), 'the main checkout sees the worktree session day');
 });
 
 test('the wake markers stay in each checkout, where the hook shim looks', () => {

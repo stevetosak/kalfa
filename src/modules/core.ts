@@ -18,6 +18,7 @@
 // lines: the memory Module loads the Root Hub, and the report keeps room for
 // it (ADR 0003).
 import { statSync } from 'node:fs';
+import { markActiveDay } from '../core/active-days.ts';
 import { writeCheckpoint } from '../core/checkpoint.ts';
 import { currentBranch } from '../core/git.ts';
 import { type Layer, type LayerScan, memoryHome, scanLayer, sessionLayers } from '../core/memory/home.ts';
@@ -192,6 +193,8 @@ function rulesReportPart(project: Project | undefined, env: NodeJS.ProcessEnv, h
  */
 const sessionReport: Handler = (event, { project, settings, env, capabilities, contextCap, rules: layouts }) => {
 	if (event.name !== 'session.start') return undefined;
+	// Every session start is an Active day, whatever started it (a /clear on a new day too).
+	if (project) markActiveDay(project.root);
 	const rules = rulesReportPart(project, env, event.harness, layouts ?? {}, capabilities);
 	// The Recap comes first: a harness can show only the start of a long report.
 	const recap = project ? recapReport(project, settings, event) : undefined;
