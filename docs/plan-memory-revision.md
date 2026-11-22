@@ -56,14 +56,14 @@ it, and the agent keeps its memory without a review by the Operator.
 - [x] Active days: the day of each session start per repository, beside the commit dates.
 - [x] The window: a closed record stays while its Plan is active, an open Task links to it, or it closed fewer than N Active days ago (N = 5, a setting); otherwise, once reconciled, it moves with its Checkpoints to the archive.
 - [x] Session start lines: the closed records that are not reconciled, and each Task with no write for seven days.
-- [ ] The inbox retires, after Part 5 decides the waiting candidates; Task close no longer adds to it since the Cleanup.
+- [x] The inbox retires, after Part 5 decides the waiting candidates; Task close no longer adds to it since the Cleanup.
 
 ## 5. Migration
 
 **Done when:** `kalfa memory migrate` has run for every repository; each layer has a Root Hub, its subject Hubs and links, every rule has its form, and no proposed record or inbox candidate is left; the managed `/etc/claude-code/CLAUDE.md` names `kalfa rule add` and `kalfa memory add`; `kalfa doctor` shows every repository's session report below the cap; each layer's migration Task lists where each rule went and what it made active or closed.
 
 - [x] `kalfa memory migrate [--dry-run]`: the existing closed Task Records are marked reconciled, since their candidates went through the old path, and those outside the window move to the archive.
-- [ ] The kalfa layer: rule forms, Root Hub, subject Hubs, links, the proposed records and the inbox.
+- [ ] The kalfa layer: rule forms, Root Hub, subject Hubs, links and the proposed records.
 - [ ] The Personal layer, the same way.
 - [ ] The infrastructure repository's layer, the same way.
 - [ ] The three remaining project layers.
@@ -97,3 +97,7 @@ and take most of the room the project's index lines had. Part 5's step for the
 Personal layer keeps the rest of its work. Part 3 itself closes only after
 Part 5's step for the kalfa layer, since its report reaches 5,000 characters
 only with that layer's Root Hub.
+
+The inbox retired with the last step of Part 4, ahead of Part 5: each of its
+42 candidates had already been accepted or rejected by then, so none waited
+for the Migration.
