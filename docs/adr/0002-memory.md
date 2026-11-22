@@ -1,9 +1,11 @@
 ---
-status: accepted
+status: accepted, partly superseded by ADR 0003
 date: 2026-10-31
 ---
 
 # Memory: Standing memory in the Core, Recall memory in a replaceable file-first Module
+
+[ADR 0003](0003-short-and-long-term-memory.md) replaces Standing and Recall memory with Short-term and Long-term memory and moves the rules out of memory; its last section lists what of this ADR still holds.
 
 The old setup kept the agent's memory in a handful of hand-edited Markdown files
 that the harness loaded natively in every session. They grew to about 45 KB,
