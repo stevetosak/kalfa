@@ -1,6 +1,6 @@
 ---
 name: recall
-description: Searches what kalfa remembers (Memory records, Task Records, project docs, old archives) and handles the Memory candidates in the inbox. Use before work that may repeat an old decision or fault, when the Operator asks what was decided or found before, when a recall hit at session start looks relevant, or at Task close when kalfa lists Memory candidates.
+description: Searches what kalfa remembers (Memory records, Task Records, project docs, old archives) and handles the Memory candidates in the inbox. Use before work that may repeat an old decision or fault, when the Operator asks what was decided or found before, when a recall hit on the first prompt looks relevant, or at Task close when kalfa lists Memory candidates.
 ---
 
 # Recall memory
@@ -12,7 +12,9 @@ files and errors. Read the hit at its reference before you rely on it; a hit
 is a pointer, not a proof. Hits come in tiers: the Memory records, the docs and
 the open deferred items; then the Task Records; then the closed records and
 the old archives; the most recently used first in each. A weak match comes
-after every strong one, whatever its tier.
+after every strong one, whatever its tier. kalfa searches for you once: the
+first prompt of a session brings the relevant hits for the prompt and the
+branch's Task. After that, search yourself.
 
 **The Root Hub is the map.** At session start each layer that has a Root Hub
 (the Hub `root`) loads it in place of its index lines. Follow a link `[[id]]`

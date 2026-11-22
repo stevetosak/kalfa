@@ -45,8 +45,8 @@ test('a worktree keeps its Task Records, Checkpoints and session stamp in the ma
 
 test('the wake markers stay in each checkout, where the hook shim looks', () => {
 	const { main, worktree } = repoWithWorktree();
-	setWake(worktree, 'session.start', { data: {} });
-	assert.equal(wakePath(worktree, 'session.start'), join(worktree, '.kalfa/wake/session.start'));
-	assert.ok(existsSync(wakePath(worktree, 'session.start')));
+	setWake(worktree, 'session.start', 's1', 'core', {});
+	assert.equal(wakePath(worktree, 'session.start', 's1'), join(worktree, '.kalfa/wake/session.start.s1'));
+	assert.ok(existsSync(wakePath(worktree, 'session.start', 's1')));
 	assert.ok(!existsSync(join(main, '.kalfa/wake')));
 });

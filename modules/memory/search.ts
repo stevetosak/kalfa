@@ -11,7 +11,7 @@ import MiniSearch, { type Options, type SearchResult } from 'minisearch';
 import { machineCacheDir } from '../../src/core/machine-paths.ts';
 import { memoryHome, sessionLayers } from '../../src/core/memory/home.ts';
 import { readUsage, type Usage, useDay } from '../../src/core/memory/usage.ts';
-import { rankHits } from './ranking.ts';
+import { rankHits, relevantBand } from './ranking.ts';
 import { type Chunk, chunksOf, listSources, type RecordRef, type SourceFile, type SourceKind, type SourceScope } from './sources.ts';
 import { keepTerm } from './words.ts';
 
@@ -37,9 +37,16 @@ const OPTIONS: Options<Chunk & { snippet: string }> = {
 	},
 };
 
+export interface SearchOptions {
+	/** The hits to leave out, e.g. what the session already holds. */
+	keep?: (hit: Hit) => boolean;
+	/** Only the relevant band of the hits `keep` accepts (ranking.ts), not the weaker hits after it. */
+	relevantOnly?: boolean;
+}
+
 export interface SearchIndex {
-	/** The best `limit` hits that `keep` accepts, in the order of ranking.ts. */
-	search(query: string, limit: number, keep?: (hit: Hit) => boolean): Hit[];
+	/** The best `limit` hits, in the order of ranking.ts. */
+	search(query: string, limit: number, options?: SearchOptions): Hit[];
 	/** Source files that could not be read as their kind; they are left out. */
 	problems: string[];
 	/** The index was read from the cache, not built. */
@@ -129,11 +136,11 @@ export function openIndex(scope: SourceScope): SearchIndex {
 	return {
 		problems,
 		cached: cached !== undefined,
-		search(query, limit, keep = () => true) {
+		search(query, limit, { keep = () => true, relevantOnly = false } = {}) {
 			if (!query.trim()) return [];
 			// Every match is ranked before the cut, because a hit with a lower score can rank first.
-			const hits = mini.search(query).map(toHit).filter(keep);
-			return rankHits(hits, useDayOf(usageByLayer(scope))).slice(0, limit);
+			const kept = mini.search(query).map(toHit).filter(keep);
+			return rankHits(relevantOnly ? relevantBand(kept) : kept, useDayOf(usageByLayer(scope))).slice(0, limit);
 		},
 	};
 }

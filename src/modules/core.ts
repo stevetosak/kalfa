@@ -36,13 +36,13 @@ import { CORE_MODULE, type Handler, type HandlerContext, type ModuleDefinition }
 import { findPlans, isOpenPlan, planSummary } from '../core/plans.ts';
 import type { Project } from '../core/project.ts';
 import { briefView, compactFocus, handoffView, listRecords, nextStep, readRecord, type TaskRecord, taskIdOf } from '../core/task-record.ts';
-import { setWake, takeWake } from '../core/wake.ts';
 
 /** One part of the session report: what the agent reads, and a short summary the Operator sees. */
 interface ReportPart {
 	context?: string;
 	summary?: string;
 	notice?: string;
+	wake?: HandlerResult['wake'];
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -76,9 +76,9 @@ const RELOAD_SOURCES: ReadonlySet<SessionStartSource> = new Set(['compact', 'for
 const handoffContext = (record: TaskRecord) => `Continue the Task from its record (kalfa task show --handoff):\n\n${handoffView(record)}`;
 
 /** After /clear: the brief for the Operator, a pointer for the agent, and a wake for the first prompt. */
-function clearReport(project: Project, own: TaskRecord, session: string | undefined): ReportPart {
-	setWake(project.root, 'prompt.submit', { session, data: { task: own.id } });
+function clearReport(own: TaskRecord): ReportPart {
 	return {
+		wake: { event: 'prompt.submit', data: { task: own.id } },
 		context: [
 			`Task ${own.id} is open on this branch; the Operator sees its brief.`,
 			`If the first prompt is a continue word, the Task's Handoff comes with it. Any other first prompt is a new task: read the Handoff (kalfa task show --handoff) only when the prompt is about Task ${own.id}.`,
@@ -93,7 +93,7 @@ function taskReport(project: Project, event: Extract<CoreEvent, { name: 'session
 
 	const branch = currentBranch(project.root);
 	const own = branch ? open.find((r) => r.id === taskIdOf(branch)) : undefined;
-	if (own && event.source === 'clear') return clearReport(project, own, event.sessionId);
+	if (own && event.source === 'clear') return clearReport(own);
 	if (own && RELOAD_SOURCES.has(event.source)) return { context: handoffContext(own), summary: `Handoff of Task ${own.id} loaded again` };
 
 	// The branch's Task in full; of the others only the most recently written, in one line each.
@@ -212,17 +212,18 @@ const sessionReport: Handler = (event, { project, settings, env, capabilities, c
 	const context = parts.map((p) => p.context).filter(Boolean).join('\n\n');
 	const summary = parts.map((p) => p.summary).filter(Boolean).join(' · ');
 	const notice = [summary ? `kalfa: ${summary}` : undefined, ...parts.map((p) => p.notice)].filter(Boolean).join('\n');
-	if (!context && !notice) return undefined;
-	return { context: context || undefined, notice: notice || undefined };
+	const wake = parts.find((p) => p.wake)?.wake;
+	if (!context && !notice && !wake) return undefined;
+	return { context: context || undefined, notice: notice || undefined, ...(wake && { wake }) };
 };
 
 /**
  * The first prompt after /clear (the wake from clearReport): a continue word
  * loads the Handoff of the Task; any other prompt only uses up the wake.
  */
-const continueWord: Handler = (event, { project }) => {
+const continueWord: Handler = (event, { project, wake }) => {
 	if (event.name !== 'prompt.submit' || event.subagent || !project) return undefined;
-	const task = takeWake(project.root, 'prompt.submit', event.sessionId)?.data.task;
+	const task = wake?.task;
 	if (!task || !isContinueWord(event.prompt)) return undefined;
 	const record = readRecord(project.root, task);
 	if (record?.header.status !== 'open') return undefined;
@@ -271,5 +272,5 @@ export const coreNeeds: ModuleManifest['needs'] = [
 export const coreModule: ModuleDefinition = {
 	name: CORE_MODULE,
 	handlers: { 'session.start': sessionReport, 'prompt.submit': continueWord, 'compact.before': compactBefore, 'compact.after': compactAfter, 'section.close': taskListMapping },
-	wakeOnly: ['prompt.submit'],
+	wakeOnly: { 'prompt.submit': true },
 };

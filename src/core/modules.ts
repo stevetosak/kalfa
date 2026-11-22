@@ -21,6 +21,8 @@ export interface HandlerContext {
 	contextCap?: number;
 	/** Where the Adapter writes the layers' rules (`UserFiles.rules`, `ProjectFiles.rules`). */
 	rules?: RuleLayouts;
+	/** On an event this Module asked a wake for in this session (`HandlerResult.wake`): the data it left. */
+	wake?: Readonly<Record<string, string>>;
 }
 
 /** What decides whether a handler runs here: the project and the machine settings, nothing from the event. */
@@ -50,9 +52,11 @@ export interface ModuleDefinition {
 	minContext?: Partial<Record<CoreEventName, number>>;
 	/**
 	 * Events whose handler acts only on a wake (`core/wake.ts`): the shim does
-	 * not start Node for them on its own, only when the wake marker exists.
+	 * not start Node for them on its own, only when the session's wake marker
+	 * exists. Per event `true`, or a gate that says whether it is so here (a
+	 * setting can make the handler act on every event).
 	 */
-	wakeOnly?: CoreEventName[];
+	wakeOnly?: Partial<Record<CoreEventName, true | ((context: GateContext) => boolean)>>;
 	/**
 	 * Per event, whether the handler runs here at all (a setting turns it on).
 	 * When it says no, the shim does not start Node for this Module and the
@@ -88,6 +92,22 @@ export function handlesEvent(module: ModuleDefinition, name: CoreEventName, cont
 		return gate(context);
 	} catch {
 		return true;
+	}
+}
+
+/**
+ * The Module's handler for the event acts only on a wake here. A gate with no
+ * context, or one that fails (a broken setting), counts as no, so the shim
+ * starts Node and the handler reports the error.
+ */
+export function isWakeOnly(module: ModuleDefinition, name: CoreEventName, context: GateContext | undefined): boolean {
+	const entry = module.wakeOnly?.[name];
+	if (entry === undefined || entry === true) return entry === true;
+	if (!context) return false;
+	try {
+		return entry(context);
+	} catch {
+		return false;
 	}
 }
 

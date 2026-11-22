@@ -57,6 +57,8 @@ export interface HandlerResult {
 	stop?: string;
 	/** Text for the Operator only. */
 	notice?: string;
+	/** Asks the shim to start Node on the next `event` of this session; the handler gets `data` back in `HandlerContext.wake` (core/wake.ts). */
+	wake?: { event: CoreEventName; data?: Readonly<Record<string, string>> };
 }
 
 /** The merged result of all handlers for one event. */

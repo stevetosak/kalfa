@@ -13,6 +13,13 @@ writeFileSync(shim, readFileSync('src/cli/kalfa-hook.sh', 'utf8').replace('@CORE
 const stub = join(bin, 'node-stub');
 writeFileSync(stub, '#!/usr/bin/env bash\necho "ran $*"; cat\n');
 chmodSync(stub, 0o755);
+// The fake Adapter's probe: `size` prints the first number of the payload, `session` its session_id.
+mkdirSync(join(bin, 'adapters', 'fake'), { recursive: true });
+writeFileSync(
+	join(bin, 'adapters', 'fake', 'context-probe'),
+	'#!/usr/bin/env bash\ninput=$(cat)\nif [[ $1 == session ]]; then grep -o \'"session_id":"[^"]*"\' <<< "$input" | cut -d\'"\' -f4; else grep -o "[0-9]*" <<< "$input" | head -n 1; fi\n',
+);
+chmodSync(join(bin, 'adapters', 'fake', 'context-probe'), 0o755);
 
 // No machine settings unless a test makes them: the Operator's own must not leak in.
 const machine = { XDG_CONFIG_HOME: join(tempDir(), 'config'), XDG_CACHE_HOME: join(tempDir(), 'cache') };
@@ -71,9 +78,6 @@ test('an event with a context size starts Node from that size, as the Adapter pr
 	mkdirSync(join(root, '.kalfa'));
 	writeFileSync(join(root, '.kalfa', 'events'), 'prompt.submit\t"/meter"\t100000\ntool.after\t\t100000\n');
 	utimesSync(join(root, 'kalfa.yaml'), new Date(2000, 0), new Date(2000, 0));
-	mkdirSync(join(bin, 'adapters', 'fake'), { recursive: true });
-	writeFileSync(join(bin, 'adapters', 'fake', 'context-probe'), '#!/usr/bin/env bash\ngrep -o "[0-9]*" | head -n 1\n');
-	chmodSync(join(bin, 'adapters', 'fake', 'context-probe'), 0o755);
 	const runs = (event: string, input: string) => execFileSync('bash', [shim, 'fake', event], { cwd: root, input, env }).toString() !== '';
 	assert.equal(runs('tool.after', '{"size":99999}'), false);
 	assert.equal(runs('tool.after', '{"size":100000}'), true);
@@ -94,16 +98,31 @@ function machineSettings(table?: string): NodeJS.ProcessEnv {
 	return dirs;
 }
 
-test('a wake marker starts Node for its event, in a repository with or without kalfa.yaml', () => {
+test("the session's wake marker starts Node for its event, in a repository with or without kalfa.yaml", () => {
 	for (const root of [tempRepo({ 'kalfa.yaml': 'schema: 1\n' }), tempRepo()]) {
 		mkdirSync(join(root, '.kalfa', 'wake'), { recursive: true });
 		writeFileSync(join(root, '.kalfa', 'events'), '');
 		if (existsSync(join(root, 'kalfa.yaml'))) utimesSync(join(root, 'kalfa.yaml'), new Date(2000, 0), new Date(2000, 0));
-		assert.equal(shimRuns(root, 'prompt.submit'), false);
-		writeFileSync(join(root, '.kalfa', 'wake', 'prompt.submit'), '{}\n');
-		assert.equal(shimRuns(root, 'prompt.submit'), true);
-		assert.equal(shimRuns(root, 'tool.after'), false, 'the wake is for its own event only');
+		const runs = (event: string, session?: string) =>
+			execFileSync('bash', [shim, 'fake', event], { cwd: root, input: session ? `{"session_id":"${session}"}` : '{"x":"none"}', env }).toString() !== '';
+		assert.equal(runs('prompt.submit', 's-1'), false);
+		writeFileSync(join(root, '.kalfa', 'wake', 'prompt.submit.s-1'), '{}\n');
+		assert.equal(runs('prompt.submit', 's-1'), true);
+		assert.equal(runs('prompt.submit', 's-2'), false, "another session's wake");
+		assert.equal(runs('prompt.submit'), true, 'the probe cannot tell the session: any marker for the event');
+		assert.equal(runs('tool.after', 's-1'), false, 'the wake is for its own event only');
 	}
+});
+
+test('a wake without a session id starts Node only when the probe cannot tell the session; an odd session id is a safe name', () => {
+	const root = tempRepo();
+	mkdirSync(join(root, '.kalfa', 'wake'), { recursive: true });
+	const runs = (input: string) => execFileSync('bash', [shim, 'fake', 'prompt.submit'], { cwd: root, input, env }).toString() !== '';
+	writeFileSync(join(root, '.kalfa', 'wake', 'prompt.submit'), '{}\n');
+	assert.equal(runs('{"session_id":"s-2"}'), false);
+	assert.equal(runs('{"x":"none"}'), true);
+	writeFileSync(join(root, '.kalfa', 'wake', 'prompt.submit.a_b_c'), '{}\n');
+	assert.equal(runs('{"session_id":"a/b c"}'), true, 'the same change as sessionTag');
 });
 
 test('with machine settings, the machine table decides outside a kalfa project', () => {

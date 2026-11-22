@@ -75,7 +75,14 @@ those layers' index lines and to keep room for each Root Hub under the hook's
 cap. On the first prompt
 of a session one search with the prompt and the Task adds the best few
 summaries, because the session-start hook runs before the prompt and, on a
-branch without a Task, has nothing to search with. After that the agent pulls
+branch without a Task, has nothing to search with. Only the relevant band of
+the hits comes, without the Task's own record and the Root Hubs the session
+already holds; a slash command, or a prompt of a word or two on a branch
+without a Task, gives nothing to search with, and the next prompt searches
+instead. The session start leaves a wake for it, so the shim starts Node for
+that prompt alone; the Core's wake markers became per session for this,
+because the Operator runs several sessions in one checkout and one marker per
+event let each new session take the last one's. After that the agent pulls
 with `kalfa memory show` and `search`. Searching on every prompt waits for
 data: each prompt's hits go to a shadow log and are not injected, and after two
 weeks of use the log is compared with what the agent searched for and read.

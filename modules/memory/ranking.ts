@@ -41,8 +41,17 @@ export const tierOf = (hit: Pick<Rankable, 'kind' | 'closed'>): Tier => (hit.clo
  * tier, then by use day (the latest first; a hit without one after those with
  * one), then by score. `useDay` gives a hit's `YYYY-MM-DD` day of last use.
  */
+/** The score a hit needs to be in the relevant band of `hits`. */
+const bandFloor = (hits: readonly Rankable[]): number => RELEVANT_SHARE * hits.reduce((best, hit) => Math.max(best, hit.score), 0);
+
+/** The hits in the relevant band, the ones that score at least a share of the best one. */
+export function relevantBand<T extends Rankable>(hits: readonly T[]): T[] {
+	const floor = bandFloor(hits);
+	return hits.filter((hit) => hit.score >= floor);
+}
+
 export function rankHits<T extends Rankable>(hits: readonly T[], useDay: (hit: T) => string | undefined): T[] {
-	const floor = RELEVANT_SHARE * hits.reduce((best, hit) => Math.max(best, hit.score), 0);
+	const floor = bandFloor(hits);
 	return hits
 		.map((hit) => ({ hit, band: hit.score >= floor ? 0 : 1, tier: TIERS.indexOf(tierOf(hit)), day: useDay(hit) ?? '' }))
 		.sort((a, b) => a.band - b.band || a.tier - b.tier || b.day.localeCompare(a.day) || b.hit.score - a.hit.score)

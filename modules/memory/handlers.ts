@@ -1,12 +1,12 @@
-// The memory Module's code (ADR 0002, 0003): each layer's Root Hub and recall
-// from the open Task at session start, recall on each prompt when a setting
-// turns it on, and at Task close
-// the copy of the Task Record into the Memory home and its Memory candidates
-// into the inbox, in one commit, plus the upkeep proposals for a layer over
-// its budget.
+// The memory Module's code (ADR 0002, 0003): each layer's Root Hub at
+// session start, recall on the first prompt of a session with the prompt and
+// the branch's Task (and on each prompt when a setting turns it on), and at
+// Task close the copy of the Task Record into the Memory home and its Memory
+// candidates into the inbox, in one commit, plus the upkeep proposals for a
+// layer over its budget.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { CoreEvent, HandlerResult } from '../../src/core/events.ts';
+import type { CoreEvent, HandlerResult, SessionStartSource } from '../../src/core/events.ts';
 import { currentBranch } from '../../src/core/git.ts';
 import { commitHome, memoryHome, projectKey, projectTasksDir, scanLayer, sessionLayers } from '../../src/core/memory/home.ts';
 import { type GateContext, type HandlerContext, type ModuleDefinition, moduleSettings } from '../../src/core/modules.ts';
@@ -16,8 +16,9 @@ import { CANDIDATES_PART, parseRecord, readRecord, type TaskRecord, taskIdOf } f
 import { budgetProblem } from '../../src/core/memory/standing.ts';
 import { candidateFiles, readInbox, splitCandidates } from './inbox.ts';
 import { duplicateFindings, type Finding, findingLine, lint } from './lint.ts';
+import { rootHubOf } from '../../src/core/memory/root-hub.ts';
 import { rootHubText } from './root-hubs.ts';
-import { hitLine, openIndex } from './search.ts';
+import { type Hit, hitLine, openIndex } from './search.ts';
 import { type MemorySettings, memorySettings } from './settings.ts';
 import type { SourceScope } from './sources.ts';
 
@@ -26,6 +27,11 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 /** A prompt shorter than this many words gives too little to search with. */
 const PROMPT_MIN_WORDS = 3;
 const PROMPT_MAX_CHARS = 600;
+/**
+ * The session starts after which the next prompt recalls: a new conversation,
+ * or one the harness summarised. A resumed or forked one still holds its recall.
+ */
+const RECALL_SOURCES: ReadonlySet<SessionStartSource> = new Set(['startup', 'clear', 'compact']);
 
 export const settingsOf = (context: GateContext): MemorySettings => moduleSettings(memoryModule, context.project, context.settings);
 
@@ -83,20 +89,6 @@ function rootHubsPart(context: HandlerContext): Part {
 	};
 }
 
-function recallPart(context: HandlerContext, settings: MemorySettings): Part {
-	const task = ownOpenTask(context.project);
-	if (!task) return {};
-	const index = openIndex(sourceScope(context.project, settings, context.env));
-	const hits = index.search(taskQuery(task), settings['recall-hits'], (hit) => hit.task !== task.id);
-	const notice = index.problems.length ? `kalfa: memory search left out: ${index.problems.join('; ')}` : undefined;
-	if (!hits.length) return { notice };
-	return {
-		context: [`Recall for Task ${task.id} (kalfa memory search "<words>" finds more; read a hit before you rely on it):`, ...hits.map(hitLine)].join('\n'),
-		summary: `recall ${plural(hits.length, 'hit')}`,
-		notice,
-	};
-}
-
 function inboxPart(env: NodeJS.ProcessEnv): Part {
 	const { candidates, problems } = readInbox(memoryHome(env));
 	const notice = problems.length ? `kalfa: memory inbox: ${problems.join('; ')}` : undefined;
@@ -119,25 +111,74 @@ function sessionStart(event: CoreEvent, context: HandlerContext): HandlerResult 
 	const settings = settingsOf(context);
 	const parts = [
 		attempt('Root Hubs', () => rootHubsPart(context)),
-		attempt('recall', () => recallPart(context, settings)),
 		attempt('inbox', () => inboxPart(context.env)),
 		attempt('lint', () => lintPart(context, settings)),
 	];
 	const context_ = parts.map((p) => p.context).filter(Boolean).join('\n\n');
 	const summary = parts.map((p) => p.summary).filter(Boolean).join(' · ');
 	const notice = [summary ? `kalfa: memory: ${summary}` : undefined, ...parts.map((p) => p.notice)].filter(Boolean).join('\n');
-	if (!context_ && !notice) return undefined;
-	return { context: context_ || undefined, notice: notice || undefined };
+	// The session start has no prompt to search with, so the first prompt recalls.
+	const wake: HandlerResult['wake'] = RECALL_SOURCES.has(event.source) ? { event: 'prompt.submit' } : undefined;
+	if (!context_ && !notice && !wake) return undefined;
+	return { context: context_ || undefined, notice: notice || undefined, ...(wake && { wake }) };
+}
+
+/** What a prompt gives to search with: nothing for a slash command or a prompt of a word or two. */
+function promptWords(prompt: string): string {
+	const text = prompt.trim();
+	return text.startsWith('/') || text.split(/\s+/).length < PROMPT_MIN_WORDS ? '' : text.slice(0, PROMPT_MAX_CHARS);
+}
+
+/** The Root Hubs the session start loaded, as `<layer label> <id>`; a hit on one adds nothing. */
+function rootHubKeys(project: Project | undefined, env: NodeJS.ProcessEnv): Set<string> {
+	return new Set(
+		sessionLayers(memoryHome(env), project).flatMap((layer) => {
+			const hub = rootHubOf(scanLayer(layer).records);
+			return hub ? [`${layer.label} ${hub.id}`] : [];
+		}),
+	);
+}
+
+const searchNotice = (problems: readonly string[]) => (problems.length ? `kalfa: memory search left out: ${problems.join('; ')}` : undefined);
+
+/**
+ * The first prompt of a session (the wake from the session start): one search
+ * with the prompt and the branch's Task, the relevant hits only, without the
+ * Task's own record and the Root Hubs the session already holds. A slash
+ * command, or a short prompt on a branch without a Task, gives nothing to
+ * search with and keeps the wake for the next prompt.
+ */
+function firstPromptRecall(prompt: string, context: HandlerContext, settings: MemorySettings): HandlerResult {
+	const words = promptWords(prompt);
+	const task = ownOpenTask(context.project);
+	if (prompt.trim().startsWith('/') || (!words && !task)) return { wake: { event: 'prompt.submit' } };
+	const hubs = rootHubKeys(context.project, context.env);
+	const held = (hit: Hit) => (task !== undefined && hit.task === task.id) || (hit.record !== undefined && hubs.has(`${hit.record.layer} ${hit.record.id}`));
+	const index = openIndex(sourceScope(context.project, settings, context.env));
+	const query = [words, ...(task ? [taskQuery(task)] : [])].filter(Boolean).join('\n');
+	const hits = index.search(query, settings['recall-hits'], { keep: (hit) => !held(hit), relevantOnly: true });
+	const problems = searchNotice(index.problems);
+	if (!hits.length) return problems ? { notice: problems } : {};
+	return {
+		context: [`Recall for this prompt${task ? ` and Task ${task.id}` : ''} (kalfa memory search "<words>" finds more; read a hit before you rely on it):`, ...hits.map(hitLine)].join('\n'),
+		notice: [`kalfa: memory: recall ${plural(hits.length, 'hit')}`, problems].filter(Boolean).join('\n'),
+	};
+}
+
+/** Recall on each prompt, when the setting turns it on: the prompt alone. */
+function promptRecall(prompt: string, context: HandlerContext, settings: MemorySettings): HandlerResult | undefined {
+	const words = promptWords(prompt);
+	if (!words) return undefined;
+	const hits = openIndex(sourceScope(context.project, settings, context.env)).search(words, settings['recall-hits']);
+	if (!hits.length) return undefined;
+	return { context: ['Recall for this prompt (kalfa memory search; read a hit before you rely on it):', ...hits.map(hitLine)].join('\n') };
 }
 
 function promptSubmit(event: CoreEvent, context: HandlerContext): HandlerResult | undefined {
 	if (event.name !== 'prompt.submit' || event.subagent) return undefined;
-	const prompt = event.prompt.trim();
-	if (prompt.startsWith('/') || prompt.split(/\s+/).length < PROMPT_MIN_WORDS) return undefined;
 	const settings = settingsOf(context);
-	const hits = openIndex(sourceScope(context.project, settings, context.env)).search(prompt.slice(0, PROMPT_MAX_CHARS), settings['recall-hits']);
-	if (!hits.length) return undefined;
-	return { context: ['Recall for this prompt (kalfa memory search; read a hit before you rely on it):', ...hits.map(hitLine)].join('\n') };
+	if (context.wake) return firstPromptRecall(event.prompt, context, settings);
+	return settings['recall-on-prompt'] ? promptRecall(event.prompt, context, settings) : undefined;
 }
 
 /** The question the agent puts to the Operator at Task close. */
@@ -211,6 +252,7 @@ function taskClose(event: CoreEvent, context: HandlerContext): HandlerResult | u
 export const memoryModule = {
 	name: 'memory',
 	settings: memorySettings,
-	when: { 'prompt.submit': (context) => settingsOf(context)['recall-on-prompt'] },
+	// The first prompt's recall comes on a wake; recall on each prompt needs the shim on every prompt.
+	wakeOnly: { 'prompt.submit': (context) => !settingsOf(context)['recall-on-prompt'] },
 	handlers: { 'session.start': sessionStart, 'prompt.submit': promptSubmit, 'task.close': taskClose },
 } satisfies ModuleDefinition & { settings: typeof memorySettings };

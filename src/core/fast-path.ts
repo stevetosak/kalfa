@@ -8,12 +8,13 @@
 // raw payload must match (the Modules' filters joined; see ModuleDefinition),
 // then optionally a tab and the context size from which Node runs anyway (the
 // smallest `minContext`; the regex is empty when only that counts).
-// An event a Module handles only on a wake (`wakeOnly`) is in no table: the
-// shim starts Node for it when its wake marker exists (core/wake.ts).
+// An event a Module handles only on a wake here (`wakeOnly`) is in no table:
+// the shim starts Node for it when the session's wake marker exists
+// (core/wake.ts).
 import { mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CORE_EVENTS, type CoreEventName } from './events.ts';
-import { type GateContext, handlesEvent, type ModuleDefinition } from './modules.ts';
+import { type GateContext, handlesEvent, isWakeOnly, type ModuleDefinition } from './modules.ts';
 import { machineCacheDir } from './machine-paths.ts';
 import { privateDir } from './private-dir.ts';
 
@@ -21,7 +22,7 @@ export const EVENT_TABLE = 'events';
 
 /** The Module's handler runs without a wake: the shim starts Node for it on its own. */
 function shimRuns(module: ModuleDefinition, name: CoreEventName, context: GateContext | undefined): boolean {
-	return handlesEvent(module, name, context) && !module.wakeOnly?.includes(name);
+	return handlesEvent(module, name, context) && !isWakeOnly(module, name, context);
 }
 
 /** The events a handler runs for here without a wake; `context` applies the Modules' `when` gates. */

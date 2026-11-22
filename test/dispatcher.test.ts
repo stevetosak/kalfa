@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { dispatch } from '../src/core/dispatcher.ts';
 import type { CoreEvent } from '../src/core/events.ts';
+import type { HandlerContext } from '../src/core/modules.ts';
+import { wakePath } from '../src/core/wake.ts';
 import { handlerContext, registry } from './fakes.ts';
+import { gitRepo } from './helpers.ts';
 
 const command: CoreEvent = { harness: 'fake', cwd: '/repo', name: 'command.before', command: 'git push' };
 const toolAfter: CoreEvent = { harness: 'fake', cwd: '/repo', name: 'tool.after', tool: 'Bash' };
@@ -62,4 +67,59 @@ test('a failing fail-closed handler stops the action', async () => {
 	const strict = { ...broken, failClosed: ['command.before' as const] };
 	const result = await dispatch(command, registry(core, strict), handlerContext(['broken']));
 	assert.match(result.block[0] ?? '', /boom \(the action is stopped/);
+});
+
+/** Two Modules that each ask a wake at session start and say what they got back on the first prompt. */
+function wakingModules() {
+	const got: Record<string, unknown> = {};
+	const waking = (name: string) => ({
+		name,
+		handlers: {
+			'session.start': () => ({ wake: { event: 'prompt.submit' as const, data: { from: name } } }),
+			'prompt.submit': (_event: CoreEvent, context: HandlerContext) => {
+				got[name] = context.wake;
+				return undefined;
+			},
+		},
+		wakeOnly: { 'prompt.submit': true as const },
+	});
+	return { modules: registry(waking('core'), waking('docs')), got };
+}
+
+const sessionStart = (cwd: string, sessionId: string, extra: Partial<CoreEvent> = {}): CoreEvent => ({ harness: 'fake', cwd, name: 'session.start', source: 'startup', sessionId, ...extra }) as CoreEvent;
+const promptOf = (cwd: string, sessionId: string, extra: Partial<CoreEvent> = {}): CoreEvent => ({ harness: 'fake', cwd, name: 'prompt.submit', prompt: 'hi', sessionId, ...extra }) as CoreEvent;
+
+test('each Module gets back the data of its own wake, once, in its own session', async () => {
+	const root = gitRepo({ '.gitignore': '.kalfa/\n' });
+	const context = handlerContext(['docs'], root);
+	const { modules, got } = wakingModules();
+	await dispatch(sessionStart(root, 's1'), modules, context);
+	await dispatch(sessionStart(root, 's2'), modules, context);
+	assert.ok(existsSync(wakePath(root, 'prompt.submit', 's1')) && existsSync(wakePath(root, 'prompt.submit', 's2')), 'one marker per session');
+
+	await dispatch(promptOf(root, 's1'), modules, context);
+	assert.deepEqual(got, { core: { from: 'core' }, docs: { from: 'docs' } });
+	assert.ok(!existsSync(wakePath(root, 'prompt.submit', 's1')), 'taken once');
+	assert.ok(existsSync(wakePath(root, 'prompt.submit', 's2')), "the other session's stays");
+
+	await dispatch(promptOf(root, 's1'), modules, context);
+	assert.deepEqual(got, { core: undefined, docs: undefined }, 'the next prompt has no wake');
+	await dispatch(promptOf(root, 's2'), modules, context);
+	assert.deepEqual(got, { core: { from: 'core' }, docs: { from: 'docs' } });
+});
+
+test('a subagent neither sets nor takes a wake, and a checkout that does not ignore .kalfa/ gets none', async () => {
+	const root = gitRepo({ '.gitignore': '.kalfa/\n' });
+	const { modules, got } = wakingModules();
+	await dispatch(sessionStart(root, 's1', { subagent: true }), modules, handlerContext(['docs'], root));
+	assert.ok(!existsSync(wakePath(root, 'prompt.submit', 's1')));
+	await dispatch(sessionStart(root, 's1'), modules, handlerContext(['docs'], root));
+	await dispatch(promptOf(root, 's1', { subagent: true }), modules, handlerContext(['docs'], root));
+	assert.deepEqual(got, { core: undefined, docs: undefined });
+	assert.ok(existsSync(wakePath(root, 'prompt.submit', 's1')), "the subagent's prompt leaves the session's wake");
+
+	const open = gitRepo();
+	const result = await dispatch(sessionStart(open, 's1'), modules, handlerContext(['docs'], open));
+	assert.deepEqual(result.notice, []);
+	assert.ok(!existsSync(join(open, '.kalfa')), 'nothing written');
 });
