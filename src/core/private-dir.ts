@@ -1,10 +1,10 @@
 // `<repo>/.kalfa/` holds the Task Records, the Checkpoints and generated
 // state. The repositories are public, so kalfa writes there only when git
 // ignores the folder. A worktree is a second checkout of one repository: the
-// repository's state (Task Records, Checkpoints, the session stamp) lives in
-// the main checkout, so every checkout sees all Tasks; what the hook shim
-// reads (the event table, the wake markers) stays in each checkout, where the
-// shim looks.
+// repository's state (Task Records, Checkpoints, the session stamp, the
+// Active days) lives in the main checkout, so every checkout sees all Tasks;
+// what the hook shim reads (the event table, the wake markers) stays in each
+// checkout, where the shim looks.
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
