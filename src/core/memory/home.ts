@@ -71,7 +71,7 @@ export function projectLayerOfKey(home: string, key: string): Layer {
 }
 
 /** The folders a layer keeps beside its record files; a project folder with one of them, or with a record, is a layer. */
-const LAYER_FOLDERS = new Set(['tasks', 'deferred', 'rules', 'skills']);
+const LAYER_FOLDERS = new Set(['tasks', 'checkpoints', 'deferred', 'rules', 'skills']);
 
 /** Every layer of the Memory home: the Personal layer, then each project's layer in key order. */
 export function allLayers(home: string): Layer[] {
@@ -133,9 +133,18 @@ export function readLayer(layer: Layer): MemoryRecord[] {
 	return records;
 }
 
-/** The folder of a project's closed Task Records in the Memory home. */
+/**
+ * The folder of a project's closed Task Records in the Memory home: each is
+ * copied here at Task close, and the copy is the archive once the record has
+ * left the repository (ADR 0003).
+ */
 export function projectTasksDir(home: string, project: Project): string {
 	return join(projectLayer(home, project).dir, 'tasks');
+}
+
+/** The folder of the archived Task Records' Checkpoints in the Memory home: `<task>/<file>`, as in the repository. */
+export function projectCheckpointsDir(home: string, project: Project): string {
+	return join(projectLayer(home, project).dir, 'checkpoints');
 }
 
 // The home's git runs with no hooks, no signing and its own identity, so a

@@ -10,8 +10,8 @@ Memory records, the Task Records, the tracked Markdown of the repository and
 the old archives. Use the words a page would use: names of tools, commands,
 files and errors. Read the hit at its reference before you rely on it; a hit
 is a pointer, not a proof. Hits come in tiers: the Memory records, the docs and
-the open deferred items; then the Task Records; then the closed records and
-the old archives; the most recently used first in each. A weak match comes
+the open deferred items; then the Task Records in the repository; then the
+closed records, the archived Task Records and the old archives; the most recently used first in each. A weak match comes
 after every strong one, whatever its tier. kalfa searches for you once: the
 first prompt of a session brings the relevant hits for the prompt and the
 branch's Task. After that, search yourself.
@@ -38,7 +38,10 @@ related records and into the Hub of its subject. When a layer is over its
 budget, the steps also list its likely duplicates and its open items: merge
 the duplicates and close each item whose work you can show is done. You
 decide; do not ask the Operator. Then mark the record with `kalfa task
-reconciled --task <id>`.
+reconciled --task <id>`. A marked record stays in the repository while its
+Plan is open, an open Task names it, or fewer than five Active days follow its
+close; a later Task close then moves it with its Checkpoints to the archive in
+the Memory home, where search still finds it.
 
 Candidates from before the Cleanup wait in the inbox (`kalfa memory inbox`)
 until the Migration decides them (Plan Part 5); leave them.

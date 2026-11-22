@@ -29,7 +29,7 @@ export const RELEVANT_SHARE = 0.25;
 
 export interface Rankable {
 	kind: SourceKind;
-	/** A Memory record or a deferred item that is closed: it no longer holds. */
+	/** A Memory record or a deferred item that is closed (it no longer holds), or an archived Task Record. */
 	closed?: boolean;
 	score: number;
 }

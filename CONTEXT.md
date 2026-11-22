@@ -124,7 +124,7 @@ _Avoid_: compaction (a `/compact` is not a Reset), restart, handoff
 ### Memory
 
 **Short-term memory**:
-The detailed memory of a project's recent work: the Task Records and Checkpoints of its open Tasks, and of each closed Task that open work still links to or that closed only a few Active days ago. The agent cleans it up into Long-term memory; a record that leaves it moves to the archive and stays searchable.
+The detailed memory of a project's recent work: the Task Records and Checkpoints of its open Tasks, and of each closed Task whose Plan is still open, that an open Task names, or that closed only a few Active days ago. The agent cleans it up into Long-term memory; only then can a record leave it, and leaving moves the record and its Checkpoints to the archive in the Memory home, where search still finds it.
 _Avoid_: working memory, session memory, journal
 
 **Active day**:
