@@ -4,9 +4,12 @@
 // the most recently used or confirmed first. The Stored tier is every other
 // active record: kept, searchable, and named at the session start. A budget
 // decides only what loads; nothing is ever refused for space.
+// A layer with a Root Hub loads no index lines and has no Stored tier: the
+// memory Module loads its Root Hub in their place (ADR 0003).
 import type { LayerBudget, MemoryBudgets } from '../settings.ts';
 import type { Layer } from './home.ts';
 import { type MemoryRecord, ruleText } from './record.ts';
+import { rootHubOf } from './root-hub.ts';
 import { type Usage, useDay } from './usage.ts';
 
 export interface LayerView {
@@ -19,6 +22,8 @@ export interface LayerView {
 	/** Active rules over the layer's rule count (they all load). */
 	overRules: number;
 	indexBytes: number;
+	/** The layer's Root Hub, which loads in place of the index lines. */
+	rootHub?: MemoryRecord;
 }
 
 export const indexLine = (record: MemoryRecord): string => `- [${record.header.type}] ${record.header.summary} (${record.id})`;
@@ -34,6 +39,9 @@ const byRank = (usage: Usage) => (a: MemoryRecord, b: MemoryRecord) =>
 export function layerView(layer: Layer, records: readonly MemoryRecord[], budget: LayerBudget, usage: Usage = {}): LayerView {
 	const active = records.filter((r) => r.header.status === 'active');
 	const rules = active.filter((r) => r.header.type === 'rule');
+	const overRules = Math.max(0, rules.length - budget.rules);
+	const rootHub = rootHubOf(records);
+	if (rootHub) return { layer, rules, index: [], stored: [], overRules, indexBytes: 0, rootHub };
 	const index: string[] = [];
 	const stored: MemoryRecord[] = [];
 	let used = 0;
@@ -46,7 +54,7 @@ export function layerView(layer: Layer, records: readonly MemoryRecord[], budget
 			used += cost;
 		}
 	}
-	return { layer, rules, index, stored, overRules: Math.max(0, rules.length - budget.rules), indexBytes: used };
+	return { layer, rules, index, stored, overRules, indexBytes: used };
 }
 
 /** The layer's budget from the machine settings. */

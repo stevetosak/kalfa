@@ -17,6 +17,8 @@ const memorySettings = z.strictObject({
 	project: layerBudget.partial().optional(),
 	/** The longest rule (summary and body), in characters: a rule is short and exact. */
 	'rule-chars': z.int().positive().optional(),
+	/** The most characters a layer's Root Hub takes in the session report, its heading included; a longer one loads cut. */
+	'root-hub-chars': z.int().min(200, 'a Root Hub limit under 200 characters cannot hold its heading and the pointer line').optional(),
 });
 
 const settingsSchema = z.strictObject({
@@ -74,17 +76,21 @@ export interface MemoryBudgets {
 	personal: LayerBudget;
 	project: LayerBudget;
 	ruleChars: number;
+	rootHubChars: number;
 }
 
 /**
  * The rule count limits how many instructions load; the index bytes limit
  * what the Loaded index lines cost in context. Neither ever refuses a write:
  * a record past the bytes is Stored, not lost (ADR 0002, amendment 2026-11-08).
+ * A layer with a Root Hub loads no index lines; the Root Hub limit takes the
+ * budget's place there (ADR 0003).
  */
 export const DEFAULT_MEMORY_BUDGETS: MemoryBudgets = {
 	personal: { rules: 25, 'index-bytes': 4096 },
 	project: { rules: 15, 'index-bytes': 8192 },
 	ruleChars: 600,
+	rootHubChars: 1500,
 };
 
 export function memoryBudgets(settings: Settings): MemoryBudgets {
@@ -93,6 +99,7 @@ export function memoryBudgets(settings: Settings): MemoryBudgets {
 		personal: { ...DEFAULT_MEMORY_BUDGETS.personal, ...memory.personal },
 		project: { ...DEFAULT_MEMORY_BUDGETS.project, ...memory.project },
 		ruleChars: memory['rule-chars'] ?? DEFAULT_MEMORY_BUDGETS.ruleChars,
+		rootHubChars: memory['root-hub-chars'] ?? DEFAULT_MEMORY_BUDGETS.rootHubChars,
 	};
 }
 

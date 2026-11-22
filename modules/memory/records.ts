@@ -22,6 +22,7 @@ import {
 	RULE_IS_NOT_MEMORY,
 	slugOf,
 } from '../../src/core/memory/record.ts';
+import { ROOT_HUB_ID } from '../../src/core/memory/root-hub.ts';
 import { markUsed } from '../../src/core/memory/usage.ts';
 import { LinkGraph, neighbourLines } from './links.ts';
 
@@ -40,8 +41,17 @@ function findRecord(io: Io, id: string, name: LayerName | undefined): { layer: L
 	return found[0]!;
 }
 
-function uniqueId(records: readonly MemoryRecord[], wanted: string): string {
+/**
+ * The id of a new record: the one asked for, else one from the summary that
+ * no record has. The Root Hub's id is kept for a Hub, so the layer's map is
+ * never a record of another type.
+ */
+function newId(records: readonly MemoryRecord[], type: NewRecordType, summary: string, asked: string | undefined): string {
+	if (asked === ROOT_HUB_ID && type !== 'hub') throw new UsageError(`the id '${ROOT_HUB_ID}' is kept for the layer's Root Hub: give --type hub, or another id`);
 	const taken = new Set(records.map((r) => r.id));
+	if (asked) return asked;
+	if (type !== 'hub') taken.add(ROOT_HUB_ID);
+	const wanted = slugOf(summary);
 	if (!taken.has(wanted)) return wanted;
 	for (let n = 2; ; n++) if (!taken.has(`${wanted}-${n}`)) return `${wanted}-${n}`;
 }
@@ -89,7 +99,7 @@ export function addRecord(io: Io, layer: Layer, input: NewRecord, also: HomeChan
 	const records = readLayer(layer);
 	if (input.id && records.some((r) => r.id === input.id)) throw new KalfaError(`'${input.id}' already exists in the ${layer.label} layer`);
 	const header = newRecordHeader({ type: input.type, summary: input.summary, source: input.source }, today());
-	const record: MemoryRecord = { id: input.id ?? uniqueId(records, slugOf(header.summary)), header, body: (input.body ?? '').trim() };
+	const record: MemoryRecord = { id: newId(records, input.type, header.summary, input.id), header, body: (input.body ?? '').trim() };
 	const [path] = writeRecords(memoryHome(io.env), [{ layer, record }], `add ${input.type} ${record.id} (${layer.label})`, also);
 	return { ...record, layer, path: path! };
 }
@@ -129,7 +139,7 @@ export const recordSubcommands: Record<string, MemorySubcommand> = {
 		if (!isNewRecordType(type)) throw new KalfaError(`'${old.id}' is a rule record, and ${RULE_IS_NOT_MEMORY}; kalfa rule migrate moves this one into its Rule pack`);
 		// The successor is active, also for a proposed record: the supersede decides it.
 		const next: MemoryRecord = {
-			id: values.id ?? uniqueId(records, slugOf(values.summary)),
+			id: newId(records, type, values.summary, values.id),
 			header: newRecordHeader({ type, summary: values.summary, source: old.header.source }, today()),
 			body: (await io.stdin()).trim(),
 		};

@@ -1,5 +1,6 @@
-// The memory Module's code (ADR 0002): recall at session start from the open
-// Task, recall on each prompt when a setting turns it on, and at Task close
+// The memory Module's code (ADR 0002, 0003): each layer's Root Hub and recall
+// from the open Task at session start, recall on each prompt when a setting
+// turns it on, and at Task close
 // the copy of the Task Record into the Memory home and its Memory candidates
 // into the inbox, in one commit, plus the upkeep proposals for a layer over
 // its budget.
@@ -15,6 +16,7 @@ import { CANDIDATES_PART, parseRecord, readRecord, type TaskRecord, taskIdOf } f
 import { budgetProblem } from '../../src/core/memory/standing.ts';
 import { candidateFiles, readInbox, splitCandidates } from './inbox.ts';
 import { duplicateFindings, type Finding, findingLine, lint } from './lint.ts';
+import { rootHubText } from './root-hubs.ts';
 import { hitLine, openIndex } from './search.ts';
 import { type MemorySettings, memorySettings } from './settings.ts';
 import type { SourceScope } from './sources.ts';
@@ -63,6 +65,24 @@ function attempt(name: string, run: () => Part): Part {
 	}
 }
 
+/** Each layer's Root Hub, the Personal one first, cut at its limit; the Core left out these layers' index lines. */
+function rootHubsPart(context: HandlerContext): Part {
+	const limit = memoryBudgets(context.settings).rootHubChars;
+	const hubs = sessionLayers(memoryHome(context.env), context.project).flatMap((layer) => {
+		const hub = rootHubText(layer, scanLayer(layer).records, limit);
+		return hub ? [hub] : [];
+	});
+	if (!hubs.length) return {};
+	const cut = hubs.filter((h) => h.cut);
+	return {
+		context: hubs.map((h) => h.text).join('\n\n'),
+		summary: `${plural(hubs.length, 'Root Hub')} (${hubs.map((h) => h.layer.label).join(', ')})`,
+		notice: cut.length
+			? cut.map((h) => `kalfa: memory: the Root Hub of ${h.layer.label} is ${h.chars} characters, over its limit of ${limit}; it loads cut (kalfa memory lint)`).join('\n')
+			: undefined,
+	};
+}
+
 function recallPart(context: HandlerContext, settings: MemorySettings): Part {
 	const task = ownOpenTask(context.project);
 	if (!task) return {};
@@ -97,7 +117,12 @@ function lintPart(context: HandlerContext, settings: MemorySettings): Part {
 function sessionStart(event: CoreEvent, context: HandlerContext): HandlerResult | undefined {
 	if (event.name !== 'session.start' || event.subagent) return undefined;
 	const settings = settingsOf(context);
-	const parts = [attempt('recall', () => recallPart(context, settings)), attempt('inbox', () => inboxPart(context.env)), attempt('lint', () => lintPart(context, settings))];
+	const parts = [
+		attempt('Root Hubs', () => rootHubsPart(context)),
+		attempt('recall', () => recallPart(context, settings)),
+		attempt('inbox', () => inboxPart(context.env)),
+		attempt('lint', () => lintPart(context, settings)),
+	];
 	const context_ = parts.map((p) => p.context).filter(Boolean).join('\n\n');
 	const summary = parts.map((p) => p.summary).filter(Boolean).join(' · ');
 	const notice = [summary ? `kalfa: memory: ${summary}` : undefined, ...parts.map((p) => p.notice)].filter(Boolean).join('\n');

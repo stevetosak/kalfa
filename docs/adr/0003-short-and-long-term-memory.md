@@ -65,7 +65,14 @@ rejected because each write must pick a type from a list that drifts. The
 **The session start loads a map, not the memory.** It loads the Root Hub of the
 Project layer and of the Personal layer (1,500 characters each at most), the
 current Task's Short-term memory as before, one line for each open Task and
-Plan, and a count of the deferred items; no index lines. On the first prompt
+Plan, and a count of the deferred items; no index lines. A layer's Root Hub is
+its Hub `root`, or the record at the end of that record's supersede chain, so
+it keeps its place when a supersede gives it a new id, and the id `root` is
+kept for a Hub. One over its limit loads cut at a line end, with a pointer to
+the rest, and the lint names it; a write is never refused for its length. The
+memory Module loads the Root Hubs; the Core only finds them, to leave out
+those layers' index lines and to keep room for each Root Hub under the hook's
+cap. On the first prompt
 of a session one search with the prompt and the Task adds the best few
 summaries, because the session-start hook runs before the prompt and, on a
 branch without a Task, has nothing to search with. After that the agent pulls

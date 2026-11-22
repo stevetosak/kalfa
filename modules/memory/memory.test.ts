@@ -269,6 +269,35 @@ test('session start recalls for the open Task without its own record, and counts
 	assert.ok(result.notice.includes('kalfa: memory: recall 1 hit · 1 in the inbox'), result.notice.join('\n'));
 });
 
+test('session start loads the Root Hub of a layer that has one, first, in place of its index lines; a cut one gets a notice', async () => {
+	const { repo, env } = machine('memory:\n  root-hub-chars: 300\n');
+	const add = async (layer: string, type: string, summary: string, body = '', id?: string) => {
+		const out = await memory(repo, env, ['add', '--type', type, '--layer', layer, '--summary', summary, ...(id ? ['--id', id] : [])], body);
+		assert.equal(out.code, 0, out.error);
+	};
+	await startTask(repo, env, 'none');
+	await add('personal', 'fact', 'The keyboard has a Compose key.');
+	await add('project', 'fact', 'The zeppelin gateway runs on Envoy.');
+	await add('project', 'hub', 'The map of this project.', 'Gateways: [[the-zeppelin-gateway-runs-on-envoy]].', 'root');
+	const result = await dispatch({ name: 'session.start', harness: 'fake', cwd: repo, source: 'startup' }, modules, contextOf(repo, env));
+	const context = result.context.join('\n\n');
+	assert.match(context, /Personal layer\nIndex[^\n]*\n- \[fact\] The keyboard has a Compose key\./, 'a layer without a Root Hub loads its index lines');
+	assert.doesNotMatch(context, /Project layer \(github\.com\/someone\/project\)\nIndex/);
+	assert.match(context, /\n\nRoot Hub of the Project layer \(github\.com\/someone\/project\);[^\n]*\nThe map of this project\.\n\nGateways: \[\[the-zeppelin-gateway-runs-on-envoy\]\]\.\n\nRecall for Task/);
+	assert.ok(context.indexOf('Root Hub of') < context.indexOf('Recall for Task feat-rotation'), 'the Root Hub comes before recall');
+	assert.match(result.notice.join('\n'), /^kalfa: memory: 1 Root Hub \(github\.com\/someone\/project\) · recall \d hits?$/m);
+	assert.doesNotMatch(result.notice.join('\n'), /over its limit|memory lint/);
+
+	await memory(repo, env, ['supersede', 'root', '--layer', 'project', '--summary', 'The map of this project, longer.'], `${'- A subject: [[the-zeppelin-gateway-runs-on-envoy]]\n'.repeat(12)}`);
+	const cut = await dispatch({ name: 'session.start', harness: 'fake', cwd: repo, source: 'startup' }, modules, contextOf(repo, env));
+	const hub = cut.context.join('\n\n').split('\n\nRoot Hub of ')[1]?.split('\n\nRecall for Task')[0] ?? '';
+	assert.ok(`Root Hub of ${hub}`.length <= 300, `${hub.length} characters`);
+	assert.match(hub, /kalfa memory show the-map-of-this-project-longer for this one[\s\S]*\n… cut at 300 characters: kalfa memory show the-map-of-this-project-longer has the rest$/);
+	const notices = cut.notice.join('\n');
+	assert.match(notices, /^kalfa: memory: the Root Hub of github\.com\/someone\/project is \d+ characters, over its limit of 300; it loads cut \(kalfa memory lint\)$/m);
+	assert.match(notices, /^kalfa: memory lint: 1 finding/m, 'the lint names it too');
+});
+
 test('recall on each prompt is off by default: the shim does not run for it, and the Dispatcher skips it', async () => {
 	const off = machine();
 	const offContext = contextOf(off.repo, off.env);

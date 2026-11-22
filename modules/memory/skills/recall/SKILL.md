@@ -14,6 +14,11 @@ the open deferred items; then the Task Records; then the closed records and
 the old archives; the most recently used first in each. A weak match comes
 after every strong one, whatever its tier.
 
+**The Root Hub is the map.** At session start each layer that has a Root Hub
+(the Hub `root`) loads it in place of its index lines. Follow a link `[[id]]`
+with `kalfa memory show <id>` (`[[personal:id]]` with `--layer personal`); add
+`--depth 2` when the summaries of the linked records are not enough.
+
 **What you find yourself is a candidate, never a record.** Put it in the
 **Memory candidates:** part of the Section, one bullet per candidate. Only
 what the Operator states goes straight in: a rule with `kalfa rule add` (into
@@ -32,6 +37,6 @@ A candidate the Operator does not answer stays in the inbox; session start
 says how many wait. `kalfa memory inbox` lists them.
 
 **The lint only reports.** `kalfa memory lint` names stale, duplicate and
-over-budget records, broken links, and personal records that link into a
-project. Fix one only with the Operator: confirm it with proof, supersede it,
+over-budget records, broken links, personal records that link into a
+project, and a Root Hub over its limit or a root record that is not a Hub. Fix one only with the Operator: confirm it with proof, supersede it,
 or merge two.

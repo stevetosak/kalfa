@@ -90,6 +90,40 @@ test('under a cap the rules always load and the index lines fill the room left',
 	assert.ok(capped!.context!.length <= 2400 - 1500, `${capped!.context!.length} characters`);
 });
 
+test('a personal Root Hub leaves the index lines out of the instruction file and names where it loads', async () => {
+	const { home, repo, env } = machine();
+	seedRecord(env, personalLayer(memoryHome(env)), 'never-push-to-main', { type: 'fact', summary: 'Never push to main.' });
+	await install.run([], captureIo(home, env));
+	assert.match(readFileSync(file(home), 'utf8'), /Never push to main\./);
+	seedRecord(env, personalLayer(memoryHome(env)), 'root', { type: 'hub', summary: 'The map of the Personal layer.' });
+	await start(repo, env, ['instruction-file']);
+	const text = readFileSync(file(home), 'utf8');
+	assert.doesNotMatch(text, /Never push to main|Index/, 'the session start renews the file without the index lines');
+	assert.match(text, /\n\nPersonal layer\nIts Root Hub loads in the session report \(kalfa memory show root\)\.\n$/);
+});
+
+test('under a cap the report keeps room for each Root Hub, also the Personal one from the instruction file, and the other layer still loads its index lines', async () => {
+	const { home, repo, env } = machine();
+	const layer = projectLayer(memoryHome(env), { root: repo, file: undefined });
+	for (const n of [1, 2, 3, 4, 5, 6]) seedRecord(env, layer, `fact-number-${n}`, { type: 'fact', summary: `Fact number ${n} ${'x'.repeat(200)}.` });
+	await install.run([], captureIo(home, env));
+	const cap = 2500 + 2500;
+
+	const before = await start(repo, env, ['instruction-file'], cap);
+	assert.match(before!.context!, /Fact number 6/);
+	assert.doesNotMatch(before!.context!, /Stored/, 'without a Root Hub the six lines fit');
+
+	seedRecord(env, personalLayer(memoryHome(env)), 'root', { type: 'hub', summary: 'The map of the Personal layer.' });
+	const after = await start(repo, env, ['instruction-file'], cap);
+	assert.match(after!.context!, /Project layer \(github\.com\/someone\/project\)\nIndex/, 'a layer without a Root Hub still loads its index lines');
+	assert.match(after!.context!, /Stored: [45] more active records/, 'the Personal Root Hub takes 1,500 characters of the room');
+	assert.ok(after!.context!.length <= cap - 2500 - 1500, `${after!.context!.length} characters`);
+
+	seedRecord(env, layer, 'root', { type: 'hub', summary: 'The map of the project.' });
+	const both = await start(repo, env, ['instruction-file'], cap);
+	assert.equal(both?.context, undefined, 'with two Root Hubs the Core loads no index lines');
+});
+
 test('the hook records the session start size; doctor reads it against the cap', () => {
 	const { repo, env } = machine();
 	assert.deepEqual(contextSizes(env, repo), {});
