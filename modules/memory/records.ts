@@ -10,7 +10,7 @@ import { parseCommandArgs, UsageError } from '../../src/cli/command.ts';
 import type { Io } from '../../src/cli/io.ts';
 import { layerFor, layerName, layersFor } from '../../src/cli/layers.ts';
 import { KalfaError } from '../../src/core/errors.ts';
-import { type HomeChange, type Layer, type LayerName, memoryHome, readLayer, recordHistory, recordPath, writeRecords } from '../../src/core/memory/home.ts';
+import { type Layer, type LayerName, memoryHome, readLayer, recordHistory, recordPath, writeRecords } from '../../src/core/memory/home.ts';
 import {
 	checkHeader,
 	isNewRecordType,
@@ -89,18 +89,14 @@ export interface NewRecord {
 	body?: string;
 }
 
-/**
- * Checks and writes one new active record in `layer` as one commit, with any
- * other change of the Memory home (`also`, e.g. the inbox file it came from).
- * Never refused for space.
- */
-export function addRecord(io: Io, layer: Layer, input: NewRecord, also: HomeChange = {}): MemoryRecord & { layer: Layer; path: string } {
+/** Checks and writes one new active record in `layer` as one commit. Never refused for space. */
+export function addRecord(io: Io, layer: Layer, input: NewRecord): MemoryRecord & { layer: Layer; path: string } {
 	if (!input.summary?.trim()) throw new UsageError('give --summary "<one line>"');
 	const records = readLayer(layer);
 	if (input.id && records.some((r) => r.id === input.id)) throw new KalfaError(`'${input.id}' already exists in the ${layer.label} layer`);
 	const header = newRecordHeader({ type: input.type, summary: input.summary, source: input.source }, today());
 	const record: MemoryRecord = { id: newId(records, input.type, header.summary, input.id), header, body: (input.body ?? '').trim() };
-	const [path] = writeRecords(memoryHome(io.env), [{ layer, record }], `add ${input.type} ${record.id} (${layer.label})`, also);
+	const [path] = writeRecords(memoryHome(io.env), [{ layer, record }], `add ${input.type} ${record.id} (${layer.label})`);
 	return { ...record, layer, path: path! };
 }
 

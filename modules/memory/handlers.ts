@@ -17,7 +17,6 @@ import type { Project } from '../../src/core/project.ts';
 import { memoryBudgets, type Settings } from '../../src/core/settings.ts';
 import { listRecords, parseRecord, readRecord, type TaskRecord, taskIdOf } from '../../src/core/task-record.ts';
 import { cleanupSteps, MISSED_PER_CLOSE, type MissedCleanup, rememberFindings, upkeepHere } from './cleanup.ts';
-import { readInbox } from './inbox.ts';
 import { lint } from './lint.ts';
 import { rootHubOf } from '../../src/core/memory/root-hub.ts';
 import { rootHubText } from './root-hubs.ts';
@@ -104,18 +103,6 @@ function shortTermPart(context: HandlerContext, settings: MemorySettings): Part 
 	return shortTermReport(missedCleanups(records), idleTasks(records, { activeDays: activeDays(root), days, lastWrite: lastWriteDay }), days);
 }
 
-function inboxPart(env: NodeJS.ProcessEnv): Part {
-	const { candidates, problems } = readInbox(memoryHome(env));
-	const notice = problems.length ? `kalfa: memory inbox: ${problems.join('; ')}` : undefined;
-	if (!candidates.length) return { notice };
-	const count = plural(candidates.length, 'Memory candidate');
-	return {
-		context: `${count} from before the Cleanup wait${candidates.length === 1 ? 's' : ''} in the inbox until the Migration decides them (kalfa memory inbox).`,
-		summary: `${candidates.length} in the inbox`,
-		notice,
-	};
-}
-
 function lintPart(context: HandlerContext, settings: MemorySettings): Part {
 	const findings = lintHere(context.project, context.settings, settings, context.env);
 	return findings.length ? { notice: `kalfa: memory lint: ${plural(findings.length, 'finding')} (kalfa memory lint)` } : {};
@@ -127,7 +114,6 @@ function sessionStart(event: CoreEvent, context: HandlerContext): HandlerResult 
 	const parts = [
 		attempt('Root Hubs', () => rootHubsPart(context)),
 		attempt('Short-term memory', () => shortTermPart(context, settings)),
-		attempt('inbox', () => inboxPart(context.env)),
 		attempt('lint', () => lintPart(context, settings)),
 	];
 	const context_ = parts.map((p) => p.context).filter(Boolean).join('\n\n');

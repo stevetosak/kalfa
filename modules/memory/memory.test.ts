@@ -20,7 +20,6 @@ import { fakeAdapter, registry } from '../../test/fakes.ts';
 import { captureIo, gitRepo, tempRepo } from '../../test/helpers.ts';
 import { renderItem } from '../plans/deferred.ts';
 import { memoryCommand } from './command.ts';
-import { readInbox } from './inbox.ts';
 import { lint } from './lint.ts';
 import { memoryModule, SEARCHABLE_PROMPT, sourceScope } from './handlers.ts';
 import { openIndex, type SearchOptions } from './search.ts';
@@ -203,14 +202,14 @@ test('search ranks the relevant Long-term sources first, then the Task Records, 
 	assert.ok(after.indexOf('vault-b') < after.indexOf('vault-a'), `the record used later leads its tier: ${after.join(', ')}`);
 });
 
-test('task close copies the record into the Memory home and gives the Cleanup of each Remember finding, with no inbox candidate', async () => {
+test('task close copies the record into the Memory home and gives the Cleanup of each Remember finding', async () => {
 	const { repo, env } = machine();
 	await startTask(repo, env, '- The rotation needs kluster.\n- Envoy times out at 15 s.');
 	const close = await run(taskCommand(adapters, modules), repo, env, ['close'], '**Remember:** The close found the timeout.\n\n**Done when:** holds — the test ran.\n');
 	assert.equal(close.code, 0, close.error ?? close.err);
 	const home = memoryHome(env);
 	assert.ok(existsSync(join(home, 'projects', ...KEY.split('/'), 'tasks', 'feat-rotation.md')));
-	assert.deepEqual(readInbox(home).candidates, []);
+	assert.equal(existsSync(join(home, 'inbox')), false, 'no inbox is written');
 	assert.deepEqual(homeLog(env), [`close task feat-rotation (${KEY}): copy the record`]);
 	assert.match(close.out, /^Cleanup of Task feat-rotation \(ADR 0003\)/m);
 	assert.match(close.out, /^- Rotation: The rotation needs kluster\.\n- Rotation: Envoy times out at 15 s\.\n- Task close: The close found the timeout\.$/m);
@@ -246,16 +245,12 @@ function sessionIn(repo: string, env: NodeJS.ProcessEnv, sessionId = 's1') {
 	return { start, prompt };
 }
 
-test('session start does not recall, asks a wake and counts the inbox; the first prompt recalls once for the Task without its own record', async () => {
+test('session start does not recall and asks a wake; the first prompt recalls once for the Task without its own record', async () => {
 	const { repo, env } = machine();
 	await startTask(repo, env, 'none');
-	mkdirSync(join(memoryHome(env), 'inbox'), { recursive: true });
-	writeFileSync(join(memoryHome(env), 'inbox', 'x-1.md'), `---\nschema: 1\nproject: ${KEY}\ntask: other\ncreated: 2026-10-31\n---\n\nA candidate.\n`);
 	const { start, prompt } = sessionIn(repo, env);
 	const result = await start();
 	assert.doesNotMatch(result.context.join('\n'), /Recall/);
-	assert.match(result.context.join('\n'), /1 Memory candidate from before the Cleanup waits in the inbox until the Migration decides them/);
-	assert.ok(result.notice.includes('kalfa: memory: 1 in the inbox'), result.notice.join('\n'));
 	assert.ok(existsSync(wakePath(repo, 'prompt.submit', 's1')));
 	assert.deepEqual((await prompt('/kalfa-status')).context, [], 'a slash command keeps the wake, also with a Task');
 
@@ -430,36 +425,19 @@ test('a shadow log that cannot be written is a notice, and recall still comes', 
 	assert.match(result.notice.join('\n'), /^kalfa: memory: recall 1 hit$/m);
 });
 
-/** A Memory candidate that waits in the inbox, as Task close wrote one before the Cleanup. */
-function waitingCandidate(env: NodeJS.ProcessEnv, id: string, text: string) {
-	mkdirSync(join(memoryHome(env), 'inbox'), { recursive: true });
-	writeFileSync(join(memoryHome(env), 'inbox', `${id}.md`), `---\nschema: 1\nproject: ${KEY}\ntask: feat-rotation\ncreated: 2026-10-31\n---\n\n${text}\n`);
-}
-
-test('inbox accept writes the record into the layer of the candidate project and removes the candidate in one commit', async () => {
+test('kalfa memory inbox is refused with its reason, since the Cleanup took its place', async () => {
 	const { repo, env } = machine();
-	// Task close no longer adds to the inbox; these two wait from before the Cleanup.
-	waitingCandidate(env, 'project-feat-rotation-1', 'The rotation needs kluster.');
-	waitingCandidate(env, 'project-feat-rotation-2', 'A wrong idea.');
-	// Run from outside the repository: the project layer still is the candidate's.
-	const elsewhere = gitRepo();
-	const asRule = await memory(elsewhere, env, ['inbox', 'accept', 'project-feat-rotation-1', '--type', 'rule', '--layer', 'project', '--summary', 'Rotate with kluster.']);
-	assert.match(asRule.error ?? '', /a rule is not a Memory record .*kalfa rule add/);
-	const accept = await memory(elsewhere, env, ['inbox', 'accept', 'project-feat-rotation-1', '--type', 'fact', '--layer', 'project', '--summary', 'Rotating a password needs kluster.']);
-	assert.equal(accept.code, 0, accept.error);
-	const record = join(memoryHome(env), 'projects', ...KEY.split('/'), 'rotating-a-password-needs-kluster.md');
-	assert.match(readFileSync(record, 'utf8'), /source: Task feat-rotation \(github\.com\/someone\/project\)/);
-	const reject = await memory(repo, env, ['inbox', 'reject', 'project-feat-rotation-2', 'not true']);
-	assert.equal(reject.code, 0, reject.error);
-	assert.equal(readInbox(memoryHome(env)).candidates.length, 0);
-	assert.deepEqual(homeLog(env).slice(0, 2), ['reject candidate project-feat-rotation-2: not true', `add fact rotating-a-password-needs-kluster (${KEY})`]);
-	assert.match((await memory(repo, env, ['inbox'])).out, /the inbox is empty/);
+	for (const args of [['inbox'], ['inbox', 'list'], ['inbox', 'accept', 'x-1', '--type', 'fact']]) {
+		const result = await memory(repo, env, args);
+		assert.match(result.error ?? '', /^the inbox is gone \(ADR 0003\): the Cleanup at Task close writes the findings as records/, args.join(' '));
+	}
+	assert.equal(existsSync(join(memoryHome(env), 'inbox')), false, 'nothing was written');
 });
 
 test('every subcommand is refused where the memory Module is off, and the project file can turn it on', async () => {
 	const repo = gitRepo({ 'kalfa.yaml': 'schema: 1\nmodules: []\n' });
 	const env = { HOME: tempRepo({ '.config/kalfa/config.yaml': 'schema: 1\nmodules: []\n' }) };
-	for (const args of [['search', 'x'], ['inbox'], ['list'], ['show', 'x'], ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'A fact.']]) {
+	for (const args of [['search', 'x'], ['lint'], ['list'], ['show', 'x'], ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'A fact.']]) {
 		assert.match((await memory(repo, env, args)).error ?? '', /the memory Module is not on here/, args.join(' '));
 	}
 	assert.equal(existsSync(memoryHome(env)), false, 'nothing was written');

@@ -64,7 +64,7 @@ export function projectLayer(home: string, project: Project): Layer {
 	return projectLayerOfKey(home, projectKey(project.root));
 }
 
-/** A project's layer from its key (e.g. one a Memory candidate names), wherever the command runs. */
+/** A project's layer from its key, wherever the command runs. */
 export function projectLayerOfKey(home: string, key: string): Layer {
 	if (!key.split('/').every((s) => /^[a-z0-9._-]+$/.test(s) && s !== '.' && s !== '..')) throw new KalfaError(`'${key}' is not a project key`);
 	return { name: 'project', dir: join(home, 'projects', ...key.split('/')), label: key };
@@ -204,10 +204,10 @@ export function commitHome(home: string, change: HomeChange, message: string): v
 	git(home, ['commit', '-q', '--allow-empty', '-m', message]);
 }
 
-/** Writes records (and any other change) and commits them with `message`; returns the records' paths. */
-export function writeRecords(home: string, writes: { layer: Layer; record: Pick<MemoryRecord, 'id' | 'header' | 'body'> }[], message: string, also: HomeChange = {}): string[] {
+/** Writes records and commits them with `message`; returns the records' paths. */
+export function writeRecords(home: string, writes: { layer: Layer; record: Pick<MemoryRecord, 'id' | 'header' | 'body'> }[], message: string): string[] {
 	const records = writes.map(({ layer, record }) => ({ path: recordPath(layer, record.id), text: renderMemoryRecord(record) }));
-	commitHome(home, { write: [...records, ...(also.write ?? [])], remove: also.remove }, message);
+	commitHome(home, { write: records }, message);
 	return records.map((r) => r.path);
 }
 

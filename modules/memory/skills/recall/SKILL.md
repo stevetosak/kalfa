@@ -45,9 +45,6 @@ in the repository while its Plan is open, an open Task names it, or fewer than
 five Active days follow its close; a later Task close then moves it with its
 Checkpoints to the archive in the Memory home, where search still finds it.
 
-Candidates from before the Cleanup wait in the inbox (`kalfa memory inbox`)
-until the Migration decides them (Plan Part 5); leave them.
-
 **The lint only reports.** `kalfa memory lint` names stale, duplicate and
 over-budget records, broken links, personal records that link into a
 project, and a Root Hub over its limit or a root record that is not a Hub. Fix
