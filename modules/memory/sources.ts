@@ -27,6 +27,8 @@ export interface SourceFile {
 	refPath: string;
 	mtimeMs: number;
 	size: number;
+	/** A Task Record in the archive: its repository's record is gone, so it ranks with the archive. */
+	archived?: boolean;
 }
 
 export interface Chunk {
@@ -41,7 +43,7 @@ export interface Chunk {
 	task?: string;
 	/** For a Memory record chunk: its id and its layer's label, so a search can mark it used. */
 	record?: RecordRef;
-	/** A Memory record or a deferred item that is closed: it no longer holds. */
+	/** A Memory record or a deferred item that is closed (it no longer holds), or an archived Task Record: it ranks with the archive. */
 	closed?: boolean;
 	/** The day (`YYYY-MM-DD`) a Memory record was last confirmed, or a Task Record last written; its use day starts here. */
 	touched?: string;
@@ -85,13 +87,13 @@ export function listSources(scope: SourceScope): SourceFile[] {
 	const files: SourceFile[] = [];
 	const seen = new Set<string>();
 	const root = scope.project?.root;
-	const add = (path: string, kind: SourceKind, label: string) => {
+	const add = (path: string, kind: SourceKind, label: string, archived = false) => {
 		if (seen.has(path)) return;
 		const stat = statOf(path);
 		if (!stat || stat.size > MAX_FILE_BYTES) return;
 		seen.add(path);
 		const inRepo = root !== undefined && !relative(root, path).startsWith('..');
-		files.push({ path, kind, label, refPath: inRepo ? relative(root, path) : path, ...stat });
+		files.push({ path, kind, label, refPath: inRepo ? relative(root, path) : path, ...stat, ...(archived ? { archived } : {}) });
 	};
 	const home = memoryHome(scope.env);
 	for (const layer of sessionLayers(home, scope.project)) {
@@ -101,12 +103,12 @@ export function listSources(scope: SourceScope): SourceFile[] {
 
 	const project = scope.project;
 	if (!project) return files;
-	// The repository's record is the newer one while the Task is open; a copy
-	// counts when its work tree is gone.
+	// The repository's record is the newer one while it is in Short-term
+	// memory; a copy whose record has left the repository is the archive.
 	const repoTasks = markdownIn(tasksDir(project.root));
 	for (const name of repoTasks) add(join(tasksDir(project.root), name), 'task', relative(project.root, join(tasksDir(project.root), name)));
 	const copies = projectTasksDir(home, project);
-	for (const name of markdownIn(copies)) if (!repoTasks.includes(name)) add(join(copies, name), 'task', `memory home: tasks/${name}`);
+	for (const name of markdownIn(copies)) if (!repoTasks.includes(name)) add(join(copies, name), 'task', `memory home: tasks/${name}`, true);
 	for (const path of trackedMarkdown(project.root)) add(join(project.root, path), 'doc', path);
 	const archives = scope.archives.length ? globSync([...scope.archives], { cwd: project.root, dot: true, absolute: true, onlyFiles: true }) : [];
 	for (const path of archives.sort()) add(path, 'archive', relative(project.root, path));
@@ -229,6 +231,7 @@ function taskChunks(file: SourceFile, text: string): Chunk[] {
 			text: parts(block.parts),
 			ref: `${file.refPath}:${line}`,
 			task: id,
+			...(file.archived ? { closed: true } : {}),
 			touched: dayOf(file.mtimeMs),
 		};
 	});

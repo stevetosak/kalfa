@@ -2,8 +2,9 @@
 // session start, recall on the first prompt of a session with the prompt and
 // the branch's Task (and on each prompt when a setting turns it on), the
 // shadow log of each prompt's hits when a setting turns it on, and at
-// Task close the copy of the Task Record into the Memory home and the steps
-// of its Cleanup, with the upkeep of a layer over its budget.
+// Task close the copy of the Task Record into the Memory home, the steps of
+// its Cleanup with the upkeep of a layer over its budget, and the move of the
+// records outside the Short-term window to the archive.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CoreEvent, HandlerResult, SessionStartSource } from '../../src/core/events.ts';
@@ -22,6 +23,7 @@ import { type Hit, hitLine, openIndex, type SearchIndex } from './search.ts';
 import { type MemorySettings, memorySettings } from './settings.ts';
 import { appendShadow, shadowEntry } from './shadow.ts';
 import type { SourceScope } from './sources.ts';
+import { archiveOutsideWindow } from './window.ts';
 
 const today = () => new Date().toLocaleDateString('sv-SE');
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -268,8 +270,19 @@ function taskClose(event: CoreEvent, context: HandlerContext): HandlerResult | u
 	const notice = [
 		`kalfa: memory: Task Record copied to the Memory home; the Cleanup has ${plural(findings.length, 'finding')}`,
 		...(upkeep.length ? [`kalfa: memory: the Cleanup holds the upkeep of ${upkeep.map((u) => u.layer).join(', ')} (over budget)`] : []),
+		...windowNotice(project, home, settingsOf(context)['window-days']),
 	].join('\n');
 	return { context: cleanupSteps({ id: record.id, key }, findings, upkeep), notice };
+}
+
+/** Moves the records outside the window to the archive; a failure keeps them and is only reported, since the close and its Cleanup matter more. */
+function windowNotice(project: Project, home: string, days: number): string[] {
+	try {
+		const moved = archiveOutsideWindow(project, home, days);
+		return moved.length ? [`kalfa: memory: ${plural(moved.length, 'closed Task Record')} left the Short-term window for the archive in the Memory home: ${moved.join(', ')}`] : [];
+	} catch (error) {
+		return [`kalfa: memory: the move to the archive failed, so the closed Task Records stay in .kalfa: ${(error as Error).message}`];
+	}
 }
 
 export const memoryModule = {

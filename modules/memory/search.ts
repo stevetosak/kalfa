@@ -16,7 +16,7 @@ import { type Chunk, chunksOf, listSources, type RecordRef, type SourceFile, typ
 import { keepTerm } from './words.ts';
 
 /** Changes when the chunks or the options change, so an old cache is not read. */
-const INDEX_VERSION = 3;
+const INDEX_VERSION = 4;
 const SNIPPET_CHARS = 240;
 
 type Stored = Pick<Chunk, 'kind' | 'title' | 'ref' | 'task' | 'record' | 'closed' | 'touched'> & { snippet: string };
