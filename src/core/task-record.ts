@@ -41,6 +41,8 @@ const headerSchema = z.strictObject({
 	status: z.enum(['open', 'closed']),
 	started: z.iso.date(),
 	closed: z.iso.date().optional(),
+	/** The day the Cleanup took the closed record's findings into Long-term memory (ADR 0003). */
+	reconciled: z.iso.date().optional(),
 });
 
 export type TaskHeader = z.infer<typeof headerSchema>;

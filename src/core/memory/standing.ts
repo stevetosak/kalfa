@@ -64,8 +64,8 @@ export function budgetOf(layer: Layer, budgets: MemoryBudgets): LayerBudget {
 
 /**
  * How far a layer is over its budget, or `undefined` when everything loads.
- * Never a reason to refuse a write: the lint and the upkeep at Task close
- * report it.
+ * Never a reason to refuse a write: the lint and the upkeep in the Cleanup
+ * at Task close report it.
  */
 export function budgetProblem(layer: Layer, records: readonly MemoryRecord[], budgets: MemoryBudgets): string | undefined {
 	const budget = budgetOf(layer, budgets);
@@ -105,5 +105,5 @@ export function renderLayer(view: LayerView): string {
 /** One line for the Operator when a layer's rules are over their count; the Stored tier is normal and needs no line. */
 export function overBudgetNotice(view: LayerView, budget: LayerBudget): string | undefined {
 	if (!view.overRules) return undefined;
-	return `kalfa: memory: the ${view.layer.label} layer has ${view.rules.length} rules, limit ${budget.rules} (all loaded; the upkeep at Task close proposes merges)`;
+	return `kalfa: memory: the ${view.layer.label} layer has ${view.rules.length} rules, limit ${budget.rules} (all loaded; the upkeep in the Cleanup at Task close merges them)`;
 }
