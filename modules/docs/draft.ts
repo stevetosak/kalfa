@@ -3,10 +3,10 @@
 // draft puts it in page order, and the agent edits it into the site's style
 // and cuts what a later reader does not need.
 import { basename, join } from 'node:path';
-import type { Parts, TaskRecord } from '../../src/core/task-record.ts';
+import { type Parts, REMEMBER_PART, type TaskRecord } from '../../src/core/task-record.ts';
 
 /** The parts the draft gathers at the end, not per Section. */
-const GATHERED = new Set(['Next', 'Memory candidates']);
+const GATHERED = new Set(['Next', REMEMBER_PART]);
 
 function sectionBlock(title: string, parts: Parts): string[] {
 	const lines = [`## ${title}`, ''];
@@ -26,8 +26,8 @@ export function logDraft(record: TaskRecord, today: string): string {
 	if (header.plan) lines.push(`Plan: ${header.plan}`, '');
 	for (const section of sections) lines.push(...sectionBlock(section.title, section.parts));
 	if (close) lines.push(...sectionBlock('Close', close));
-	const candidates = sections.flatMap((s) => s.parts.get('Memory candidates')?.trim() || []);
-	if (candidates.length) lines.push('## Memory candidates', '', ...candidates.flatMap((c) => [c, '']));
+	const remember = sections.flatMap((s) => s.parts.get(REMEMBER_PART)?.trim() || []);
+	if (remember.length) lines.push(`## ${REMEMBER_PART}`, '', ...remember.flatMap((r) => [r, '']));
 	const next = close?.get('Next') ?? sections.at(-1)?.parts.get('Next');
 	if (next?.trim()) lines.push('## Next', '', next.trim(), '');
 	return `${lines.join('\n').trimEnd()}\n`;

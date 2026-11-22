@@ -279,7 +279,7 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 	{
 		name: 'memory Module: Task close puts the candidates into the inbox, accept writes a record, search finds it, a Root Hub loads in place of the index lines, the first prompt recalls once, the shadow log holds each prompt\'s hits',
 		run(world) {
-			const parts = `**Done:** smoke work.\n\n**Memory candidates:**\n- ${CANDIDATE}\n\n**Next:** nothing.`;
+			const parts = `**Done:** smoke work.\n\n**Remember:**\n- ${CANDIDATE}\n\n**Next:** nothing.`;
 			const section = exec(world, 'kalfa', ['section', 'close', 'Smoke section'], { input: parts });
 			expect(section.status === 0, `kalfa section close exited ${section.status}: ${section.stderr.trim()}`);
 			const refused = exec(world, 'kalfa', ['task', 'close']);

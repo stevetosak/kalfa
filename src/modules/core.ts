@@ -132,7 +132,7 @@ function recapReport(project: Project, settings: Settings, event: Extract<CoreEv
 	};
 }
 
-const MEMORY_HEADER = 'Standing memory (kalfa memory). Write a rule only through `kalfa rule add|change|remove`, a record only through `kalfa memory add|supersede|confirm`; what you find yourself is a Memory candidate first.';
+const MEMORY_HEADER = 'Standing memory (kalfa memory). Write a rule only through `kalfa rule add|change|remove`, a record only through `kalfa memory add|supersede|confirm`; what you find yourself goes in the **Remember:** part of a Section first.';
 /** What a layer's index heading costs, with the blank line before it. */
 const INDEX_HEADING = 'Index (the body: kalfa memory show <id>):'.length + 3;
 

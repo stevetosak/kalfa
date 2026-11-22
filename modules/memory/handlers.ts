@@ -13,7 +13,7 @@ import { commitHome, memoryHome, projectKey, projectTasksDir, scanLayer, session
 import { type GateContext, type HandlerContext, type ModuleDefinition, moduleSettings } from '../../src/core/modules.ts';
 import type { Project } from '../../src/core/project.ts';
 import { memoryBudgets, type Settings } from '../../src/core/settings.ts';
-import { CANDIDATES_PART, parseRecord, readRecord, type TaskRecord, taskIdOf } from '../../src/core/task-record.ts';
+import { parseRecord, REMEMBER_PART, readRecord, type TaskRecord, taskIdOf } from '../../src/core/task-record.ts';
 import { budgetProblem } from '../../src/core/memory/standing.ts';
 import { candidateFiles, readInbox, splitCandidates } from './inbox.ts';
 import { duplicateFindings, type Finding, findingLine, lint } from './lint.ts';
@@ -306,7 +306,7 @@ function taskClose(event: CoreEvent, context: HandlerContext): HandlerResult | u
 	const text = readFileSync(event.record, 'utf8');
 	const record = parseRecord(text, event.record, event.task);
 	const parts = [...record.sections.map((s) => s.parts), ...(record.close ? [record.close] : [])];
-	const texts = parts.flatMap((p) => splitCandidates(p.get(CANDIDATES_PART) ?? ''));
+	const texts = parts.flatMap((p) => splitCandidates(p.get(REMEMBER_PART) ?? ''));
 	const key = projectKey(project.root);
 	const inbox = candidateFiles(home, { project: key, task: record.id, created: today() }, texts);
 	const copy = join(projectTasksDir(home, project), `${record.id}.md`);

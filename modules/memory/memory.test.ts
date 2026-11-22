@@ -70,7 +70,7 @@ const homeLog = (env: NodeJS.ProcessEnv) => execFileSync('git', ['-C', memoryHom
 
 async function startTask(repo: string, env: NodeJS.ProcessEnv, candidates: string) {
 	await run(taskCommand(adapters, modules), repo, env, ['start', '--done-when', 'it works', 'Rotate the database password']);
-	const parts = `**Done:** Wrote the rotation.\n\n**Memory candidates:** ${candidates}\n\n**Next:** Rotate the database password with kluster.`;
+	const parts = `**Done:** Wrote the rotation.\n\n**Remember:** ${candidates}\n\n**Next:** Rotate the database password with kluster.`;
 	const section = await run(sectionCommand(adapters, modules), repo, env, ['close', 'Rotation'], parts);
 	assert.equal(section.code, 0, section.error ?? section.err);
 }

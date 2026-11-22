@@ -21,13 +21,14 @@ branch's Task. After that, search yourself.
 with `kalfa memory show <id>` (`[[personal:id]]` with `--layer personal`); add
 `--depth 2` when the summaries of the linked records are not enough.
 
-**What you find yourself is a candidate, never a record.** Put it in the
-**Memory candidates:** part of the Section, one bullet per candidate. Only
+**What you find yourself goes in the Remember part, never straight into a
+record.** Put it in the **Remember:** part of the Section, one bullet per
+finding; the old names Memory candidates and Lesson candidates still work. Only
 what the Operator states goes straight in: a rule with `kalfa rule add` (into
 its layer's Rule pack), anything else with `kalfa memory add`.
 
 **At Task close** kalfa copies the Task Record into the Memory home, puts each
-candidate into the inbox and asks you to put ONE question to the Operator:
+bullet of the Remember parts into the inbox as a candidate and asks you to put ONE question to the Operator:
 each candidate with the type (rule, fact, decision, open), the layer
 (personal, project) and the one-line summary you propose. Then, per answer:
 

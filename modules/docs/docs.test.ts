@@ -134,7 +134,7 @@ test('--repo that is not the origin is not checked, and says so', () => {
 	assert.deepEqual(gate(root, 'gh pr create --repo owner/other --fill'), { notice: 'kalfa docs: not checked; --repo owner/other is not this repository\'s origin (owner/this).' });
 });
 
-test('the draft puts the Task Record in page order: Sections, then Memory candidates (the old part name too) and Next', async () => {
+test('the draft puts the Task Record in page order: Sections, then Remember (from an old part name too) and Next', async () => {
 	const root = repoOnBranch();
 	const env = { HOME: tempDir() };
 	const adapters = new Map([['fake', fakeAdapter]]);
@@ -166,7 +166,7 @@ test('the draft puts the Task Record in page order: Sections, then Memory candid
 			'',
 			'**Decisions:** No overwrite.',
 			'',
-			'## Memory candidates',
+			'## Remember',
 			'',
 			'A test proves only the inputs it runs.',
 			'',

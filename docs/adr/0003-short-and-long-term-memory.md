@@ -36,11 +36,12 @@ after its Cleanup, and leaving moves it and its Checkpoints to the archive in
 the Memory home, where search still finds it.
 
 **The Cleanup reconciles a closed Task into Long-term memory.** At Task close
-the agent reads the record, takes each finding a Section marked in its Keep
-part, and updates, supersedes, confirms or adds the Memory record for it,
-linked into its subject's Hub and to related records, with the Task Record as
-its source; a finding that is a rule goes to a Rule pack. kalfa then marks the
-record reconciled. Running the Cleanup at each Section close was rejected
+the agent reads the record, takes each finding a Section marked in its
+Remember part, and updates, supersedes, confirms or adds the Memory record for
+it, linked into its subject's Hub and to related records, with the Task Record
+as its source; a finding that is a rule goes to a Rule pack. kalfa then marks
+the record reconciled. The part is not named Keep, because `kalfa section close
+--keep` already tells Auto mode to keep the session's context. Running the Cleanup at each Section close was rejected
 because an early Section's finding is often wrong by the last one; a scheduled
 headless run was rejected because it starts work with no one present. A closed
 record that missed its Cleanup is named at session start and reconciled at the

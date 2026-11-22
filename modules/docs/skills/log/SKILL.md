@@ -18,7 +18,7 @@ happened.
 2. **Draft it**: `kalfa docs draft --out <logs folder>/` (add
    `--task <id>` when the Task is not the one of the checked-out branch). The
    draft holds each Section's Done, Found and Decisions parts, then the
-   Lesson candidates and the Next step. Without `--out` it only prints.
+   Remember parts and the Next step. Without `--out` it only prints.
 3. **Edit the draft into a Log.** Follow the site's own rules for Logs when
    the repository has them (a docs skill, a Contract, a Style Guide). Cut
    what a later reader does not need; keep each fault with its proof and each

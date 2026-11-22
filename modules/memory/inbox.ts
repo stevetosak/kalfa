@@ -57,7 +57,7 @@ export function findCandidate(home: string, id: string): Candidate {
 const EMPTY = /^(none|n\/a|nothing|-)\.?$/i;
 
 /**
- * The candidates in a Memory candidates part: one per top-level bullet (its
+ * The candidates in a Remember part: one per top-level bullet (its
  * indented lines belong to it), or the whole text when it has no bullets.
  * "none" is no candidate.
  */
