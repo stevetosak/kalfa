@@ -10,6 +10,7 @@ import type { CoreEventName } from '../../core/events.ts';
 import type { UserFiles } from '../adapter.ts';
 import { CLAUDE_HOOKS } from './hooks.ts';
 import { claudeApprovals } from './project.ts';
+import { claudeRules } from './rules.ts';
 
 /** The shim and the status tap, by the name of the program they run. */
 const SHIM = 'kalfa-hook';
@@ -96,6 +97,7 @@ export const claudeUser: UserFiles = {
 	settings: '.claude/settings.json',
 	// Claude Code loads every file in ~/.claude/rules/ in full, before the project's rules.
 	instructions: '.claude/rules/kalfa-memory.md',
+	rules: claudeRules,
 	hooks: setHooks,
 	statusLine: setStatusLine,
 	approvals: claudeApprovals,

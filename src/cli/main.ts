@@ -13,6 +13,7 @@ import { hookCommand } from './commands/hook.ts';
 import { memoryCommand } from './commands/memory.ts';
 import { planCommand } from './commands/plan.ts';
 import { recapCommand } from './commands/recap.ts';
+import { ruleCommand } from './commands/rule.ts';
 import { sectionCommand, taskCommand } from './commands/task.ts';
 import type { Io } from './io.ts';
 import { version } from './version.ts';
@@ -33,6 +34,7 @@ const commands: Record<string, Command> = {
 	plan: planCommand,
 	recap: recapCommand,
 	memory: memoryCommand(memoryExtensions),
+	rule: ruleCommand(adapters, moduleDirs),
 	...Object.fromEntries(Object.entries(moduleCommands).map(([name, command]) => [name, command(adapters)])),
 };
 

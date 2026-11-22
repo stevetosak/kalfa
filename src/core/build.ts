@@ -1,5 +1,6 @@
-// `kalfa build`: writes the enabled Modules' files into a repository in the
-// form each harness reads, and nothing else. `.kalfa/build.yaml` records every
+// `kalfa build`: writes the enabled Modules' files and the project layer's
+// rules (its Rule pack, ADR 0003) into a repository in the form each harness
+// reads, and nothing else. `.kalfa/build.yaml` records every
 // file and approval entry kalfa wrote, with a hash, so a later build removes
 // what a Module no longer produces and never overwrites or removes a file
 // kalfa did not write or the Operator changed by hand. Every target must be
@@ -15,6 +16,7 @@ import { mergeApprovals, planApprovals } from './approvals.ts';
 import { KalfaError } from './errors.ts';
 import type { Approvals, ModuleSource } from './module-source.ts';
 import { PRIVATE_DIR, privateDir } from './private-dir.ts';
+import type { PlannedRules } from './rules/files.ts';
 import { readVersioned, type VersionedFormat } from './versioned-file.ts';
 
 const entries = z.array(z.string()).default([]);
@@ -74,8 +76,15 @@ export interface PlannedHarness {
 	approvals: Approvals;
 }
 
-/** What the Modules produce for one harness. `skills` gives each Module's skill bundles. */
-export function planHarness(sources: ModuleSource[], project: ProjectFiles, skills: (source: ModuleSource) => SkillBundle[]): PlannedHarness {
+/** Who writes the project layer's rules, in a message about two writers of one file. */
+const PROJECT_LAYER = 'the project layer';
+
+/**
+ * What the Modules and the project layer's rules produce for one harness.
+ * `skills` gives each Module's skill bundles; a skill-form rule is copied from
+ * the Rule pack like a Module's skill.
+ */
+export function planHarness(sources: ModuleSource[], project: ProjectFiles, skills: (source: ModuleSource) => SkillBundle[], rules?: PlannedRules): PlannedHarness {
 	const files = new Map<string, Buffer>();
 	const owner = new Map<string, string>();
 	const add = (path: string, content: Buffer, module: string) => {
@@ -92,6 +101,10 @@ export function planHarness(sources: ModuleSource[], project: ProjectFiles, skil
 			const { path, text } = project.rule(source.name, rule);
 			add(path, Buffer.from(text), source.name);
 		}
+	}
+	for (const [path, text] of rules?.files ?? []) add(path, Buffer.from(text), PROJECT_LAYER);
+	for (const skill of rules?.skills ?? []) {
+		for (const [path, content] of readTree(skill.source)) add(`${skill.target}/${path}`, content, PROJECT_LAYER);
 	}
 	return { files, approvals: planApprovals(sources, project.approvals) };
 }

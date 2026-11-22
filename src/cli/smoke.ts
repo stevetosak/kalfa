@@ -20,6 +20,8 @@ const SETTINGS = '.claude/settings.local.json';
 const PLAN_TITLE = 'Smoke plan';
 const PERSONAL_RULE = 'Smoke personal rule.';
 const PROJECT_FACT = 'Smoke project fact.';
+const PROJECT_RULE = 'Smoke project rule.';
+const PERSONAL_RULES = '.claude/rules/kalfa-personal/always.md';
 /** The Memory home kalfa memory creates, the Operator's data: kalfa uninstall keeps it. */
 const MEMORY_HOME = '.local/share/kalfa/memory';
 const CANDIDATE = 'Smoke candidate from the Task.';
@@ -28,7 +30,7 @@ const GOAL = 'smoke goal';
 
 /** The Operator's own settings: an approval and a hook that kalfa must keep. */
 /** The session report's summary line (src/modules/core.ts). */
-const SUMMARY = /^kalfa: (memory: \d+ rules?|\d+ open Plans?|Task \S+ open|\d+ (other )?open Tasks?|continuing Task)/;
+const SUMMARY = /^kalfa: (memory: \d+ (rules?|index lines?)|\d+ open Plans?|Task \S+ open|\d+ (other )?open Tasks?|continuing Task)/;
 
 const OPERATOR_SETTINGS = {
 	permissions: { allow: ['Bash(git status)'] },
@@ -238,7 +240,25 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			const rules = join(world.home, '.claude', 'rules', 'kalfa-memory.md');
 			expect(existsSync(rules) && readFileSync(rules, 'utf8').includes(PERSONAL_RULE), 'the instruction file does not hold the personal rule');
 			expect(!context.includes(PERSONAL_RULE) && context.includes(`[fact] ${PROJECT_FACT}`), 'session.start does not inject the project layer alone');
-			expect(String(output.systemMessage ?? '').includes('memory: 0 rules, 1 index line (+ the Personal layer from the instruction file)'), `the summary does not count the records: ${output.systemMessage}`);
+			expect(String(output.systemMessage ?? '').includes('memory: 1 index line (+ the Personal layer from the instruction file)'), `the summary does not count the records: ${output.systemMessage}`);
+		},
+	},
+	{
+		name: 'rules: migrate moves the rule record into its Rule pack, kalfa rule and build write the Instruction files, session.start injects no rule',
+		run(world) {
+			expect(kalfa(world, ['rule', 'migrate']).includes('Personal rules written for claude'), 'migrate did not write the personal rule files');
+			const personal = join(world.home, PERSONAL_RULES);
+			expect(existsSync(personal) && readFileSync(personal, 'utf8').includes(PERSONAL_RULE), 'the personal rule file does not hold the moved rule');
+			expect(!readFileSync(join(world.home, '.claude', 'rules', 'kalfa-memory.md'), 'utf8').includes(PERSONAL_RULE), 'the instruction file still holds the moved rule');
+			kalfa(world, ['rule', 'add', '--layer', 'project', '--summary', PROJECT_RULE, '--path', 'src/**', '--id', 'smoke-project-rule']);
+			const scoped = join(world.repo, '.claude', 'rules', 'kalfa-project', 'paths', 'smoke-project-rule.md');
+			expect(existsSync(scoped) && readFileSync(scoped, 'utf8').startsWith('---\npaths:\n  - src/**\n---\n'), 'kalfa rule add did not build the path-scoped rule file');
+			const start = exec(world, 'sh', ['-c', installedHook(world, 'SessionStart')], { input: hookPayload(world, 'SessionStart', { source: 'startup' }) });
+			expect(start.status === 0, `session.start exited ${start.status}: ${start.stderr.trim()}`);
+			const context = String(JSON.parse(start.stdout || '{}').hookSpecificOutput?.additionalContext ?? '');
+			expect(!context.includes(PERSONAL_RULE) && !context.includes(PROJECT_RULE), 'session.start injects a rule that loads from its file');
+			kalfa(world, ['rule', 'remove', 'smoke-project-rule', 'the smoke is done with it']);
+			expect(!existsSync(scoped), 'kalfa rule remove left the rule file');
 		},
 	},
 	{

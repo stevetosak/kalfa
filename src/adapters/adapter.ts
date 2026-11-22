@@ -80,6 +80,45 @@ export interface UserFiles {
 	 * Personal layer's Loaded tier into it (ADR 0002, amendment 2026-11-12).
 	 */
 	instructions?: string;
+	/** Where the Personal layer's Rule pack goes, relative to HOME (ADR 0003); `undefined` puts its rules in the session report. */
+	rules?: RuleLayout;
+}
+
+/**
+ * A rule of a layer's Rule pack in the form the harness loads it. The Core has
+ * already applied the fallbacks for the Capabilities the harness lacks.
+ */
+export interface LoadedRule {
+	id: string;
+	/** The rule's text: its first line is the rule, the rest its reasons. */
+	text: string;
+	/** Globs relative to the folder the session runs in; only on a rule the harness loads by path. */
+	paths?: string[];
+}
+
+/** The rules of one layer that the Instruction files hold. */
+export interface LayerRules {
+	layer: 'personal' | 'project';
+	/** How messages name the layer: `personal`, or the project key. */
+	label: string;
+	/** The rules that load in every session, with the pointer lines of skill-form rules where the harness has no skills. */
+	always: LoadedRule[];
+	/** The rules the harness loads when the agent works on a file their paths match. */
+	scoped: LoadedRule[];
+}
+
+/**
+ * Where a harness loads a Memory layer's rules from (ADR 0003). Paths are
+ * relative to the base folder: HOME for the Personal layer, the repository
+ * root for a project's layer.
+ */
+export interface RuleLayout {
+	/** The folder of the layer's rule files; kalfa owns every file in it. */
+	dir(layer: LayerRules['layer']): string;
+	/** The Instruction files of the layer, each inside `dir(layer)`; none when the layer has no rule. */
+	files(rules: LayerRules): { path: string; text: string }[];
+	/** Where the harness finds a skill-form rule (the `skills` Capability). */
+	skillDir(name: string): string;
 }
 
 /** One user setting kalfa sets, such as the switch that turns off the harness's own memory. */
@@ -125,6 +164,8 @@ export interface ProjectFiles {
 	 * next to it, and the line that imports `AGENTS.md` into it.
 	 */
 	instructions?: { file: string; importLine: string };
+	/** Where a project's Rule pack goes, relative to the repository root (ADR 0003); `undefined` puts its rules in the session report. */
+	rules?: RuleLayout;
 }
 
 /** The harness's own file of command approvals, which kalfa shares with the Operator's entries. */

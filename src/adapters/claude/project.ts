@@ -4,6 +4,7 @@
 // `.claude/settings.local.json`, next to the Operator's own entries.
 import { stringify } from 'yaml';
 import type { ApprovalLayout, ProjectFiles } from '../adapter.ts';
+import { claudeRules } from './rules.ts';
 
 const generated = (module: string) => `<!-- Written by kalfa build from the Module '${module}'. Change the Module, not this file. -->`;
 
@@ -38,4 +39,5 @@ export const claudeProject: ProjectFiles = {
 	// Claude Code reads AGENTS.md only when there is no CLAUDE.md (APM spike Log).
 	instructions: { file: 'CLAUDE.md', importLine: '@AGENTS.md' },
 	approvals: { ...claudeApprovals, path: '.claude/settings.local.json' },
+	rules: claudeRules,
 };

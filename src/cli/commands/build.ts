@@ -1,13 +1,17 @@
-// `kalfa build`: writes the files of the Modules that `kalfa.yaml` turns on, for
-// every harness whose Adapter has a project layout. With no Modules left on, it
-// removes what it wrote before.
+// `kalfa build`: writes the files of the Modules that `kalfa.yaml` turns on, and
+// the project layer's rules from its Rule pack, for every harness whose Adapter
+// has a project layout. With no Modules and no rules left, it removes what it
+// wrote before.
 import type { Adapter } from '../../adapters/adapter.ts';
 import { applyHarness, type BuildOptions, type BuildState, planHarness, readBuildState, readTree, type SkillBundle, writeBuildState } from '../../core/build.ts';
 import { KalfaError } from '../../core/errors.ts';
+import { memoryHome, projectLayer } from '../../core/memory/home.ts';
 import type { ModuleDirs } from '../../core/module-dirs.ts';
 import { loadModuleSource, type ModuleSource } from '../../core/module-source.ts';
 import { isPrivateDirIgnored, PRIVATE_DIR } from '../../core/private-dir.ts';
 import { type Project, PROJECT_FILE } from '../../core/project.ts';
+import { planRuleFiles } from '../../core/rules/files.ts';
+import { readPack } from '../../core/rules/pack.ts';
 import { cacheRoot, composeThirdParty } from '../../core/third-party.ts';
 import { type Command, parseCommandArgs } from '../command.ts';
 import { requireProject } from '../project.ts';
@@ -64,10 +68,14 @@ export function buildProject(
 	const { skills, pins } = composeSkills(sources, cacheRoot(env), previous, options.offline ?? false, report);
 	let changes = report.length;
 
+	const layer = projectLayer(memoryHome(env), project);
+	const pack = readPack(layer);
+
 	const state: BuildState = { schema: 1, harnesses: { ...previous.harnesses }, pins };
 	for (const adapter of adapters.values()) {
 		if (!adapter.project) continue;
-		const planned = planHarness(sources, adapter.project, (source) => skills.get(source.name) ?? []);
+		const rules = adapter.project.rules ? planRuleFiles(layer, pack, adapter.project.rules, adapter.capabilities) : undefined;
+		const planned = planHarness(sources, adapter.project, (source) => skills.get(source.name) ?? [], rules);
 		const result = applyHarness(project.root, adapter.project, planned, previous.harnesses[adapter.name], options);
 		const lines = result.report.filter((line) => !line.endsWith('unchanged'));
 		changes += lines.length;
@@ -80,7 +88,7 @@ export function buildProject(
 
 export function buildCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs): Command {
 	return {
-		summary: "Write the enabled Modules' skills, rules and approvals into this repository",
+		summary: "Write the enabled Modules' skills, rules and approvals, and the project layer's rules, into this repository",
 		usage: 'kalfa build [--dry-run] [--force]',
 		async run(args, io) {
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' }, force: { type: 'boolean' } });

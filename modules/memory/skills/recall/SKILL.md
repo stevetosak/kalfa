@@ -13,7 +13,8 @@ is a pointer, not a proof.
 
 **What you find yourself is a candidate, never a record.** Put it in the
 **Memory candidates:** part of the Section, one bullet per candidate. Only
-what the Operator states goes straight in with `kalfa memory add`.
+what the Operator states goes straight in: a rule with `kalfa rule add` (into
+its layer's Rule pack), anything else with `kalfa memory add`.
 
 **At Task close** kalfa copies the Task Record into the Memory home, puts each
 candidate into the inbox and asks you to put ONE question to the Operator:

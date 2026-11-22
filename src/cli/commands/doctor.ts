@@ -4,7 +4,8 @@
 // steps would still change, the machine settings, the project file and its Plans, the
 // Capabilities each harness lacks with what the Core and the Modules do
 // without them, the size of the last session start's context against the
-// harness's cap, and whether the build is up to date. A broken part is
+// harness's cap, each layer's Rule pack against its Instruction files, and
+// whether the build is up to date. A broken part is
 // reported and the next part still runs; only a broken project file stops it.
 // `--smoke` runs the clean-state smoke instead (see smoke.ts).
 import { existsSync, readFileSync } from 'node:fs';
@@ -12,12 +13,17 @@ import { delimiter, join } from 'node:path';
 import type { Adapter } from '../../adapters/adapter.ts';
 import { contextSizeLine, contextSizes } from '../../core/context-size.ts';
 import { KalfaError } from '../../core/errors.ts';
+import { readInstallState } from '../../core/install.ts';
+import { type Layer, memoryHome, scanLayer, sessionLayers } from '../../core/memory/home.ts';
 import type { MachineStep } from '../../core/machine-step.ts';
 import type { ModuleDirs } from '../../core/module-dirs.ts';
 import { loadModuleSource, MODULE_FILE, moduleFolders, type ModuleManifest } from '../../core/module-source.ts';
 import { findPlans, isOpenPlan } from '../../core/plans.ts';
 import { AGENTS_FILE, loadProject, type Project, PROJECT_FILE } from '../../core/project.ts';
-import { loadSettings, settingsPath } from '../../core/settings.ts';
+import { planRuleFiles, staleFiles } from '../../core/rules/files.ts';
+import { type PackRule, SKILL_FILE, scanPack } from '../../core/rules/pack.ts';
+import { applyUserRules, planUserRules } from '../../core/rules/user-files.ts';
+import { loadSettings, memoryBudgets, settingsPath } from '../../core/settings.ts';
 import { installedSkills, skillRefs } from '../../core/skill-refs.ts';
 import { coreNeeds } from '../../modules/core.ts';
 import { type Command, parseCommandArgs } from '../command.ts';
@@ -121,6 +127,49 @@ function skillRefLines(root: string, env: NodeJS.ProcessEnv, adapters: ReadonlyM
 	return ['', ...lines];
 }
 
+/** Whether one harness's Instruction files of a layer hold its Rule pack as it is now. */
+function ruleFileLines(adapter: Adapter, layer: Layer, pack: PackRule[], project: Project | undefined, env: NodeJS.ProcessEnv): string[] {
+	if (layer.name === 'personal') {
+		const layout = adapter.user?.rules;
+		if (!layout || !adapter.capabilities.has('instruction-file') || !env.HOME) return [`${adapter.name}: no rule files; the rules load from the session report`];
+		const owned = readInstallState(env).harnesses[adapter.name]?.rules;
+		if (!owned) return [`${adapter.name}: no rule files yet; run kalfa install (until then the rules load from the session report)`];
+		const { problems: _, ...planned } = planUserRules(env, { layout, capabilities: adapter.capabilities });
+		const result = applyUserRules(env.HOME, layout, planned, owned, true);
+		return result.changed ? [`${adapter.name}: files missing or changed; run kalfa install`, ...result.report.map((line) => `  ${line}`)] : [`${adapter.name}: files current`];
+	}
+	const layout = adapter.project?.rules;
+	if (!layout || !project) return [`${adapter.name}: no rule files; the rules load from the session report`];
+	const planned = planRuleFiles(layer, pack, layout, adapter.capabilities);
+	const { missing, changed } = staleFiles(project.root, planned.files);
+	missing.push(...planned.skills.filter((skill) => !existsSync(join(project.root, skill.target, SKILL_FILE))).map((skill) => skill.target));
+	if (!missing.length && !changed.length) return [`${adapter.name}: files current`];
+	return [
+		`${adapter.name}: ${missing.length} missing, ${changed.length} changed; run kalfa build (until then the rules load from the session report)`,
+		...missing.map((path) => `  missing ${path}`),
+		...changed.map((path) => `  changed ${path}`),
+	];
+}
+
+/** Per layer this directory sees: its Rule pack, the rule records not moved yet, the count limit, and each harness's files. */
+function ruleLines(project: Project | undefined, adapters: ReadonlyMap<string, Adapter>, env: NodeJS.ProcessEnv): string[] {
+	const budgets = memoryBudgets(loadSettings(env));
+	const lines: string[] = [];
+	for (const layer of sessionLayers(memoryHome(env), project)) {
+		const { rules, problems } = scanPack(layer);
+		const forms = (form: PackRule['form']) => rules.filter((r) => r.form === form).length;
+		lines.push(`${layer.label}: ${rules.length ? `${rules.length} rule(s): ${forms('always')} always, ${forms('path')} by path, ${forms('skill')} skill(s)` : 'no rules'}`);
+		for (const problem of problems) lines.push(`  problem: ${problem}`);
+		const records = scanLayer(layer).records.filter((r) => r.header.type === 'rule' && r.header.status === 'active').length;
+		if (records) lines.push(`  ${records} active rule record(s) still in memory; kalfa rule migrate moves them into the Rule pack`);
+		const limit = budgets[layer.name].rules;
+		if (forms('always') > limit) lines.push(`  warning: ${forms('always')} rules load always (limit ${limit}); give a rule its paths or the skill form, or merge rules`);
+		if (!rules.length) continue;
+		for (const adapter of adapters.values()) lines.push(...ruleFileLines(adapter, layer, rules, project, env).map((line) => `  ${line}`));
+	}
+	return ['', ...lines];
+}
+
 export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs, packageRoot: () => string, steps: ReadonlyMap<string, MachineStep> = new Map()): Command {
 	return {
 		summary: 'Report what kalfa sees on this machine and in this repository',
@@ -141,9 +190,11 @@ export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs
 
 			const project = loadProject(io.cwd);
 			if (!project) {
+				part(io, 'rules', () => ruleLines(undefined, adapters, io.env));
 				io.out('project: none (not in a git repository)');
 				return 0;
 			}
+			part(io, 'rules', () => ruleLines(project, adapters, io.env));
 			io.out(`project: ${project.root}`);
 			if (!project.file) io.out(`project file: none (no ${PROJECT_FILE}, Core only)`);
 			else {

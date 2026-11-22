@@ -12,6 +12,8 @@ export const CAPABILITIES = {
 	'turn-stop': "a hook can end the agent's turn after a tool ran",
 	compaction: 'a hook can tell the harness what its context summary must keep, and reads the summary after',
 	'instruction-file': 'the harness loads a user file of instructions in full at every session start',
+	'path-rules': 'the harness loads a rule file only when the agent works on a file that its path patterns match',
+	skills: 'the harness finds skills in a folder and loads a skill in full only when the work fits its description',
 } as const;
 
 export type Capability = keyof typeof CAPABILITIES;

@@ -112,7 +112,7 @@ const sessionArgs = ({ name, prompt, model }: SessionStart) => ['-n', name, ...(
 
 export const claudeAdapter: Adapter = {
 	name: 'claude',
-	capabilities: new Set<Capability>(['context-injection', 'command-block', 'transcript', 'task-list', 'status-line', 'background-agent', 'usage', 'turn-stop', 'compaction', 'instruction-file']),
+	capabilities: new Set<Capability>(['context-injection', 'command-block', 'transcript', 'task-list', 'status-line', 'background-agent', 'usage', 'turn-stop', 'compaction', 'instruction-file', 'path-rules', 'skills']),
 	// Claude Code sets CLAUDECODE=1 for the commands it runs.
 	detect: (env) => env.CLAUDECODE === '1',
 	// Not portable: Claude Code gives its commands the session id; another harness may not.
