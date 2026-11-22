@@ -152,7 +152,7 @@ export function uninstallCommand(adapters: ReadonlyMap<string, Adapter>, moduleD
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' } });
 			const dryRun = values['dry-run'] ?? false;
 			const code = run(adapters, io, () => NOTHING, { steps, moduleDirs, want: [] }, dryRun, true);
-			// Everything in the cache folder is written again on use (event table, usage limits, pinned skills).
+			// The cache folder holds what is written again on use (event table, usage limits, pinned skills) and the memory shadow log, a trial that ends with kalfa.
 			const cache = machineCacheDir(io.env);
 			if (existsSync(cache)) {
 				io.out(`remove ${cache} (kalfa's cache)`);

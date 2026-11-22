@@ -86,6 +86,14 @@ event let each new session take the last one's. After that the agent pulls
 with `kalfa memory show` and `search`. Searching on every prompt waits for
 data: each prompt's hits go to a shadow log and are not injected, and after two
 weeks of use the log is compared with what the agent searched for and read.
+The memory Module writes the log in the prompt hook when its setting
+`shadow-log` is on, which it is only on the machines that run the trial, since
+the search costs about 0.2 s a prompt: one JSON line per prompt of three words
+or more, in the cache folder's `memory-shadow/`, with up to ten hits of the
+prompt's own words (each with its score, its share of the best score, its band
+and whether the session already holds it) and the hits recall injected. The
+prompt's text stays in the transcript, which the line joins by session and
+time.
 Search ranks Long-term memory first (with the project's docs and the open
 deferred items), then Short-term, then the archive (with the closed records),
 and by use within each. The order holds among the hits that score at least a
