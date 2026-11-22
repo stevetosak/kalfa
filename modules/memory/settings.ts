@@ -11,13 +11,14 @@ export const memorySettings = z.strictObject({
 	'recall-on-prompt': z.boolean().default(false),
 	/** How many hits a recall injects. */
 	'recall-hits': z.number().int().min(1).max(20).default(5),
-	/** The lint's age limits per record type. A decision changes by a supersede, so it has none. */
+	/** The lint's age limits per record type. A decision changes by a supersede, and a Hub as its records change, so they have none. */
 	'age-limits': z
 		.strictObject({
 			rule: ageLimit.default(180),
 			fact: ageLimit.default(90),
 			decision: ageLimit.default(null),
 			open: ageLimit.default(30),
+			hub: ageLimit.default(null),
 		})
 		.prefault({}),
 	/** Globs (from the repository root) of old memory archives to search; they are often not tracked by git. */

@@ -221,16 +221,18 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 		},
 	},
 	{
-		name: 'memory: kalfa memory writes records in the Memory home; the instruction file holds the Personal layer, session.start the project layer',
+		name: 'memory: kalfa memory writes records in the Memory home and refuses a rule; the instruction file holds the Personal layer, session.start the project layer',
 		run(world) {
-			kalfa(world, ['memory', 'add', '--type', 'rule', '--layer', 'personal', '--summary', PERSONAL_RULE]);
-			kalfa(world, ['memory', 'add', '--type', 'fact', '--layer', 'project', '--summary', PROJECT_FACT]);
 			const home = join(world.home, MEMORY_HOME);
-			expect(existsSync(join(home, 'personal', 'smoke-personal-rule.md')), 'the personal record is not in the Memory home');
+			// A rule record as an older kalfa wrote it: no write makes one now (ADR 0003), and the rules step migrates it.
+			writeFiles(home, { 'personal/smoke-personal-rule.md': `---\nschema: 1\ntype: rule\nstatus: active\nsummary: ${PERSONAL_RULE}\ncreated: 2026-11-01\nconfirmed: 2026-11-01\n---\n` });
+			const refused = exec(world, 'kalfa', ['memory', 'add', '--type', 'rule', '--layer', 'personal', '--summary', 'Another rule.']);
+			expect(refused.status !== 0 && refused.stderr.includes('kalfa rule add'), `kalfa memory add --type rule was not refused with where a rule goes (exit ${refused.status}): ${refused.stderr.trim()}`);
+			kalfa(world, ['memory', 'add', '--type', 'fact', '--layer', 'project', '--summary', PROJECT_FACT]);
 			// The smoke repository has no origin, so its layer is keyed by the folder name.
 			expect(existsSync(join(home, 'projects', 'local', 'repo', 'smoke-project-fact.md')), 'the project record is not keyed local/repo');
 			const log = exec(world, 'git', ['log', '--format=%s'], { cwd: home });
-			expect(log.status === 0 && log.stdout.trim().split('\n').length === 2, `the Memory home does not hold one commit per write: ${log.stdout.trim()}`);
+			expect(log.status === 0 && log.stdout.trim() === 'add fact smoke-project-fact (local/repo)\nhand edits', `the Memory home does not hold the hand edit and the write as two commits: ${log.stdout.trim()}`);
 			kalfa(world, ['memory', 'confirm', 'smoke-personal-rule', 'read back in the smoke']);
 			expect(kalfa(world, ['memory', 'show', 'smoke-personal-rule']).includes('confirm smoke-personal-rule: read back in the smoke'), 'show does not list the proof of the confirm');
 			const start = exec(world, 'sh', ['-c', installedHook(world, 'SessionStart')], { input: hookPayload(world, 'SessionStart', { source: 'startup' }) });

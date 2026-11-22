@@ -123,7 +123,7 @@ export const memoryExtension: MemoryExtension = {
 		'kalfa memory search <words> [--limit <n>]   (the memory Module)',
 		'kalfa memory lint',
 		'kalfa memory inbox [list]',
-		'kalfa memory inbox accept <id> --type rule|fact|decision|open --layer personal|project --summary "<one line>" [--id <id>] [--source <link>]   (body on stdin, optional)',
+		'kalfa memory inbox accept <id> --type fact|decision|open|hub --layer personal|project --summary "<one line>" [--id <id>] [--source <link>]   (body on stdin, optional)',
 		'kalfa memory inbox reject <id> "<reason>"',
 	],
 };

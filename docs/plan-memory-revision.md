@@ -31,7 +31,7 @@ it, and the agent keeps its memory without a review by the Operator.
 
 **Done when:** a Memory record is a fact, a decision, an open item or a Hub, and new writes take no rule type and no `proposed` status; `[[id]]` and `[[personal:id]]` links are read from the body, back-links are found at read time, and `kalfa memory show <id> --depth 1|2` returns the record with its neighbours' summary lines; the write commands live in the memory Module; search ranks Long-term, then Short-term, then archived records, by use within each; the lint reports broken links and a personal record that links into a project; local checks pass.
 
-- [ ] The record format: the `hub` type; the `rule` type and the `proposed` status refused for new writes and still read for the migration.
+- [x] The record format: the `hub` type; the `rule` type and the `proposed` status refused for new writes and still read for the migration.
 - [ ] Links: parse `[[id]]` and `[[personal:id]]`, find back-links, and `kalfa memory show --depth`.
 - [ ] The write commands (`add`, `supersede`, `confirm`, `close`, `show`, `list`) move from the Core to the memory Module; the Core keeps the Memory home.
 - [ ] Search ranking in three tiers, by use within each.
