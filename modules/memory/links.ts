@@ -12,6 +12,9 @@ export interface Link {
 	id: string;
 }
 
+/** The one prefix that names a layer. */
+export const PERSONAL_PREFIX = 'personal';
+
 const CODE = /```[\s\S]*?```|`[^`\n]*`/g;
 const LINK = /\[\[(?:([a-z][a-z0-9./-]*):)?([a-z0-9][a-z0-9-]{0,79})\]\]/g;
 
@@ -42,7 +45,7 @@ export interface LinkNode {
 }
 
 /** Where a link points: a record, or nothing (the link as written). */
-export type LinkTarget = { node: LinkNode } | { missing: string };
+export type LinkTarget = { node: LinkNode } | { missing: Link };
 
 /** One neighbour in `show`'s tree: `out` the record links to it, `in` it links to the record. */
 export interface Neighbour {
@@ -76,13 +79,18 @@ export class LinkGraph {
 		return this.nodes.get(keyOf(layer, id));
 	}
 
+	/** The record a link written in a record of `from` names: its own layer without a prefix, the Personal layer with `personal:`. */
+	private resolve(from: Layer, link: Link): LinkNode | undefined {
+		const layer = link.prefix === undefined ? from : link.prefix === PERSONAL_PREFIX ? this.personal : undefined;
+		return layer && this.find(layer, link.id);
+	}
+
 	/** What the record links to. A superseded record links to nothing: its successor holds the current text. */
 	links(node: LinkNode): LinkTarget[] {
 		if (node.record.header.status === 'superseded') return [];
 		return parseLinks(node.record.body).map((link) => {
-			const layer = link.prefix === undefined ? node.layer : link.prefix === 'personal' ? this.personal : undefined;
-			const target = layer && this.find(layer, link.id);
-			return target ? { node: target } : { missing: linkText(link) };
+			const target = this.resolve(node.layer, link);
+			return target ? { node: target } : { missing: link };
 		});
 	}
 
@@ -125,7 +133,7 @@ export class LinkGraph {
 export function neighbourLines(from: LinkNode, tree: readonly Neighbour[], indent = ''): string[] {
 	return tree.flatMap((item) => {
 		const arrow = item.direction === 'out' ? '→' : '←';
-		if (!('node' in item.target)) return [`${indent}- ${arrow} ${item.target.missing}: no such record`];
+		if (!('node' in item.target)) return [`${indent}- ${arrow} ${linkText(item.target.missing)}: no such record`];
 		const { layer, record } = item.target.node;
 		const { type, status, summary } = record.header;
 		const mark = status === 'active' ? '' : status === 'superseded' ? `, superseded by ${record.header['superseded-by']}` : `, ${status}`;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { personalLayer, projectLayerOfKey } from '../../src/core/memory/home.ts';
-import { LinkGraph, type LinkNode, neighbourLines, parseLinks } from './links.ts';
+import { LinkGraph, type LinkNode, linkText, neighbourLines, parseLinks } from './links.ts';
 import type { MemoryRecord, RecordStatus, RecordType } from '../../src/core/memory/record.ts';
 
 const personal = personalLayer('/home');
@@ -31,7 +31,7 @@ test('a link resolves in its own layer, or in the Personal layer with the prefix
 		{ layer: project, records: [rec('ci-secret', 'See [[personal:git-habits]], [[deploy]], [[work:x]] and [[stage-by-name]].'), rec('deploy', '')] },
 	]);
 	const node = (layer: typeof personal, id: string) => graph.find(layer, id)!;
-	const targets = graph.links(node(project, 'ci-secret')).map((t) => ('node' in t ? `${t.node.layer.label}/${t.node.record.id}` : t.missing));
+	const targets = graph.links(node(project, 'ci-secret')).map((t) => ('node' in t ? `${t.node.layer.label}/${t.node.record.id}` : linkText(t.missing)));
 	assert.deepEqual(targets, ['personal/git-habits', 'github.com/someone/project/deploy', '[[work:x]]', '[[stage-by-name]]'], 'a plain id never leaves its layer');
 	assert.deepEqual(
 		graph.backLinks(node(personal, 'git-habits')).map((n) => n.record.id),
