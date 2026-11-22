@@ -7,7 +7,6 @@ import type { Io } from '../../src/cli/io.ts';
 import { layerName } from '../../src/cli/layers.ts';
 import { requireModule } from '../../src/cli/project.ts';
 import { commitHome, memoryHome, personalLayer, projectLayerOfKey, sessionLayers } from '../../src/core/memory/home.ts';
-import { refreshInstructions } from '../../src/core/memory/instructions.ts';
 import { markUsed } from '../../src/core/memory/usage.ts';
 import { loadProject, type Project } from '../../src/core/project.ts';
 import { loadSettings } from '../../src/core/settings.ts';
@@ -135,14 +134,7 @@ export function memoryCommand(): Command {
 			const run = sub && Object.hasOwn(subcommands, sub) ? subcommands[sub] : undefined;
 			if (!run) throw new UsageError(sub ? `unknown subcommand '${sub}'` : 'give a subcommand');
 			requireModule(loadProject(io.cwd), 'memory', io.env);
-			const code = await run(rest, io);
-			// A write, or a read that changes a record's rank, can change the Personal layer's Loaded tier.
-			try {
-				refreshInstructions(io.env, loadSettings(io.env));
-			} catch (error) {
-				io.err(`kalfa memory: the instruction file was not written again: ${(error as Error).message}`);
-			}
-			return code;
+			return run(rest, io);
 		},
 	};
 }

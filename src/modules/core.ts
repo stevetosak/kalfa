@@ -13,16 +13,14 @@
 // files are not there for this harness gets its rules in the report (ADR 0003).
 // Standing memory: the Personal layer in every session, and the project's
 // layer inside a repository: the Loaded tier under their budgets, and a line
-// for the Stored tier (ADR 0002). Where the harness loads kalfa's instruction
-// file, the Personal layer comes from it instead, and the report is fitted
-// under the Adapter's cap on one hook's context (amendment 2026-11-12).
-// A layer with a Root Hub loads no index lines: the memory Module loads the
-// Root Hub, and the report keeps room for it (ADR 0003).
+// for the Stored tier (ADR 0002), fitted under the Adapter's cap on one hook's
+// context (amendment 2026-11-12). A layer with a Root Hub loads no index
+// lines: the memory Module loads the Root Hub, and the report keeps room for
+// it (ADR 0003).
 import { statSync } from 'node:fs';
 import { writeCheckpoint } from '../core/checkpoint.ts';
 import { currentBranch } from '../core/git.ts';
 import { type Layer, type LayerScan, memoryHome, scanLayer, sessionLayers } from '../core/memory/home.ts';
-import { refreshInstructions } from '../core/memory/instructions.ts';
 import { rootHubOf } from '../core/memory/root-hub.ts';
 import { budgetOf, type LayerView, layerView, overBudgetNotice, renderLayer } from '../core/memory/standing.ts';
 import { readUsage } from '../core/memory/usage.ts';
@@ -161,29 +159,23 @@ function fitViews(scans: { layer: Layer; scan: LayerScan }[], budgets: MemoryBud
 	});
 }
 
-/**
- * Standing memory for the session report. `personal: false` leaves out the
- * Personal layer, which the instruction file loads; `room` is the most
- * characters it may take.
- */
-function memoryReport(project: Project | undefined, settings: Settings, env: NodeJS.ProcessEnv, fit: { personal: boolean; room?: number }): ReportPart {
+/** Standing memory for the session report, in at most `room` characters. */
+function memoryReport(project: Project | undefined, settings: Settings, env: NodeJS.ProcessEnv, room: number | undefined): ReportPart {
 	const budgets = memoryBudgets(settings);
 	const all = sessionLayers(memoryHome(env), project).map((layer) => ({ layer, scan: scanLayer(layer) }));
 	// The memory Module loads every Root Hub in the report, the Personal one too, each at most its limit.
 	const rootHubs = all.filter(({ scan }) => rootHubOf(scan.records)).length;
-	const scans = all.filter(({ layer }) => fit.personal || layer.name !== 'personal');
-	const views = fitViews(scans, budgets, env, fit.room === undefined ? undefined : fit.room - rootHubs * budgets.rootHubChars);
+	const views = fitViews(all, budgets, env, room === undefined ? undefined : room - rootHubs * budgets.rootHubChars);
 	const blocks = views.map(renderLayer).filter(Boolean);
 	// A broken file is left out and named; the other records still load.
-	const unreadable = scans.flatMap(({ scan }) => scan.problems.map((p) => `kalfa: memory: left out: ${p}`));
+	const unreadable = all.flatMap(({ scan }) => scan.problems.map((p) => `kalfa: memory: left out: ${p}`));
 	const notices = [...views.map((v) => overBudgetNotice(v, budgetOf(v.layer, budgets))).filter(Boolean), ...unreadable];
 	const rules = views.reduce((n, v) => n + v.rules.length, 0);
 	const lines = views.reduce((n, v) => n + v.index.length, 0);
 	const stored = views.reduce((n, v) => n + v.stored.length, 0);
-	const file = fit.personal ? '' : ' (+ the Personal layer from the instruction file)';
 	return {
 		context: blocks.length ? [MEMORY_HEADER, ...blocks].join('\n\n') : undefined,
-		summary: blocks.length || file ? `memory: ${rules ? `${plural(rules, 'rule')}, ` : ''}${plural(lines, 'index line')}${stored ? `, ${stored} Stored` : ''}${file}` : undefined,
+		summary: blocks.length ? `memory: ${rules ? `${plural(rules, 'rule')}, ` : ''}${plural(lines, 'index line')}${stored ? `, ${stored} Stored` : ''}` : undefined,
 		notice: notices.length ? notices.join('\n') : undefined,
 	};
 }
@@ -200,14 +192,12 @@ function rulesReportPart(project: Project | undefined, env: NodeJS.ProcessEnv, h
  */
 const sessionReport: Handler = (event, { project, settings, env, capabilities, contextCap, rules: layouts }) => {
 	if (event.name !== 'session.start') return undefined;
-	// The Personal layer loads from the instruction file when it is current.
-	const personal = !(capabilities.has('instruction-file') && refreshInstructions(env, settings, event.harness).length);
 	const rules = rulesReportPart(project, env, event.harness, layouts ?? {}, capabilities);
 	// The Recap comes first: a harness can show only the start of a long report.
 	const recap = project ? recapReport(project, settings, event) : undefined;
 	const rest = recap ? [recap, planReport(project!)] : project ? [planReport(project), taskReport(project, event)] : [];
 	const used = [rules, ...rest].reduce((sum, part) => sum + (part.context ? part.context.length + 2 : 0), 0);
-	const memory = memoryReport(project, settings, env, { personal, room: contextCap === undefined ? undefined : contextCap - OTHER_MODULES_ROOM - used });
+	const memory = memoryReport(project, settings, env, contextCap === undefined ? undefined : contextCap - OTHER_MODULES_ROOM - used);
 	const parts = recap ? [recap, rules, memory, rest[1]!] : [rules, memory, ...rest];
 	const context = parts.map((p) => p.context).filter(Boolean).join('\n\n');
 	const summary = parts.map((p) => p.summary).filter(Boolean).join(' · ');
@@ -264,7 +254,7 @@ export const coreNeeds: ModuleManifest['needs'] = [
 	{ capability: 'context-injection', without: 'no session report; the agent runs kalfa plan list and kalfa task list itself' },
 	{ capability: 'task-list', without: 'a closed Section stays in the Task Record only' },
 	{ capability: 'compaction', without: "a compaction keeps what the harness chooses, and the Task gets no Checkpoint" },
-	{ capability: 'instruction-file', without: "the Personal layer's index and rules load in the session report, under the harness's cap" },
+	{ capability: 'instruction-file', without: "the Personal layer's rules load in the session report, under the harness's cap" },
 	{ capability: 'path-rules', without: 'a path-scoped rule loads in every session, with its paths named after it' },
 	{ capability: 'skills', without: 'a skill-form rule loads as a pointer line among the rules that load always' },
 ];

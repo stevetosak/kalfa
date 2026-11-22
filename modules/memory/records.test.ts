@@ -210,14 +210,11 @@ test('list shows the active records of every layer this directory sees', async (
 	assert.match((await memory(env, repo, ['list', '--status', 'proposed'])).out, /proposed-rule/);
 });
 
-test('a command renews the installed instruction file; before kalfa install it writes none', async () => {
+test('a command writes no instruction file, also after kalfa install (ADR 0003: the Personal layer loads in the session report)', async () => {
 	const { home, repo, env } = machine();
-	const file = join(home, '.claude/rules/kalfa-memory.md');
-	await memory(env, repo, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'Stage files by name.']);
-	assert.ok(!existsSync(file), 'no instruction file before kalfa install');
 	const pkg = tempRepo({ 'package.json': '{}\n', 'dist/kalfa-hook': '', 'dist/adapters/claude/status-tap': '' });
 	const installed = captureIo(home, env);
 	assert.equal(await installCommand(new Map([['claude', claudeAdapter]]), () => [join(import.meta.dirname, '..')], () => pkg).run([], installed), 0, installed.stderr.join('\n'));
 	await memory(env, repo, ['add', '--type', 'fact', '--layer', 'personal', '--summary', 'Never push to main.']);
-	assert.match(readFileSync(file, 'utf8'), /Never push to main\./);
+	assert.ok(!existsSync(join(home, '.claude/rules/kalfa-memory.md')));
 });

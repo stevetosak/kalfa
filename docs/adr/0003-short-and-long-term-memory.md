@@ -142,7 +142,7 @@ bring the infrastructure repository below the cap. Then a Task for each layer
 picks the form of each rule, writes the Hubs and links, and decides each
 proposed record and inbox item, in the order kalfa, personal, the
 infrastructure repository, the rest. Until a layer has its Root Hub, it loads
-its index lines as before.
+its index lines in the session report.
 
 ## What this changes in ADR 0002
 
@@ -152,6 +152,8 @@ the source ends: the agent writes what it finds, and what the Operator states is
 still written at once, a rule to its Rule pack and anything else to Long-term
 memory. The budgets no longer decide which index lines load; the Root Hub
 limit and a warning on the count of rules that load always take their place.
-The Personal layer's instruction file holds only rules. The Memory home, the
+The instruction file that held the Personal layer's Loaded tier retires: the
+Personal layer's rules load from its Rule pack's files, and its memory from
+its Root Hub in the session report. The Memory home, the
 file per record, the layers keyed by `origin`, keyword search with MiniSearch,
 the confirm dates and the lint stay.
