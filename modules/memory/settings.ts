@@ -9,6 +9,8 @@ const ageLimit = z.number().int().positive().nullable();
 export const memorySettings = z.strictObject({
 	/** Search with each prompt too, not only at session start (a trial; off by default). */
 	'recall-on-prompt': z.boolean().default(false),
+	/** Write each prompt's search hits to the shadow log in the cache folder, without injecting them (the data for recall on every prompt; off by default). */
+	'shadow-log': z.boolean().default(false),
 	/** How many hits a recall injects. */
 	'recall-hits': z.number().int().min(1).max(20).default(5),
 	/** The lint's age limits per record type. A decision changes by a supersede, and a Hub as its records change, so they have none. */

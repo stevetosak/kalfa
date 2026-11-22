@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { sectionCommand, taskCommand } from '../../src/cli/commands/task.ts';
 import { dispatch } from '../../src/core/dispatcher.ts';
 import { KalfaError } from '../../src/core/errors.ts';
 import type { SessionStartSource } from '../../src/core/events.ts';
-import { handledEvents } from '../../src/core/fast-path.ts';
+import { handledEvents, writeEventTable } from '../../src/core/fast-path.ts';
 import { deferredDir, memoryHome, personalLayer, projectLayerOfKey, scanLayer } from '../../src/core/memory/home.ts';
 import { markUsed, readUsage } from '../../src/core/memory/usage.ts';
 import { renderMemoryRecord } from '../../src/core/memory/record.ts';
@@ -22,9 +22,10 @@ import { renderItem } from '../plans/deferred.ts';
 import { memoryCommand } from './command.ts';
 import { candidateFiles, readInbox, splitCandidates } from './inbox.ts';
 import { lint } from './lint.ts';
-import { memoryModule } from './handlers.ts';
+import { memoryModule, SEARCHABLE_PROMPT, sourceScope } from './handlers.ts';
 import { openIndex, type SearchOptions } from './search.ts';
 import { memorySettings } from './settings.ts';
+import { SHADOW_HITS, type ShadowEntry, shadowDir } from './shadow.ts';
 import { markdownPieces } from './sources.ts';
 
 const KEY = 'github.com/someone/project';
@@ -387,6 +388,68 @@ test('recall on each prompt is off by default: the shim runs only on a wake, and
 	assert.ok(handledEvents([memoryModule], onContext).includes('prompt.submit'));
 	assert.match((await dispatch({ ...prompt, cwd: on.repo }, modules, onContext)).context.join('\n'), /Recall for this prompt[\s\S]*docs\/runbook\.md:3/);
 	assert.deepEqual((await dispatch({ ...prompt, cwd: on.repo, prompt: '/meter 200k' }, modules, onContext)).context, []);
+});
+
+const SHADOW_ON = 'settings:\n  memory:\n    shadow-log: true\n';
+
+function shadowLines(env: NodeJS.ProcessEnv): ShadowEntry[] {
+	const dir = shadowDir(env);
+	if (!existsSync(dir)) return [];
+	return readdirSync(dir).flatMap((file) => readFileSync(join(dir, file), 'utf8').trimEnd().split('\n').map((line) => JSON.parse(line) as ShadowEntry));
+}
+
+test('the shadow log: each prompt with words writes its own hits and what recall injected, and the agent sees what it sees without the log', async () => {
+	const seen = async (settings: string) => {
+		const { home, repo, env } = machine(settings);
+		await startTask(repo, env, 'none');
+		const { start, prompt } = sessionIn(repo, env);
+		const results = [await start()];
+		for (const text of ['/kalfa-status', 'continue', 'how do we rotate the database password', 'go on']) results.push(await prompt(text));
+		const view = JSON.stringify(results.map(({ context, notice }) => ({ context, notice }))).replaceAll(repo, '<repo>').replaceAll(home, '<home>');
+		return { view, lines: shadowLines(env) };
+	};
+	const off = await seen('');
+	const on = await seen(SHADOW_ON);
+	assert.equal(on.view, off.view);
+	assert.deepEqual(off.lines, []);
+	assert.equal(on.lines.length, 2, 'no line for a slash command or a prompt of two words');
+	const [first, second] = on.lines;
+	assert.deepEqual({ ...first, at: '' }, { at: '', session: 's1', project: KEY, task: 'feat-rotation', first: true, prompt: { sha256: first!.prompt.sha256, words: 1 }, matches: 0, hits: [], injected: ['docs/runbook.md:3'] });
+	assert.deepEqual([second!.first, second!.prompt.words, second!.injected], [false, 7, []]);
+	const hit = (kind: string) => second!.hits.find((h) => h.kind === kind);
+	assert.deepEqual({ ...hit('doc'), score: 0 }, { kind: 'doc', tier: 'long-term', ref: 'docs/runbook.md:3', score: 0, share: 1, band: true, held: false });
+	assert.equal(hit('task')?.held, true, "the Task's own record is held");
+});
+
+test('a shadow line counts every match of the prompt and keeps the first ten', async () => {
+	const { repo, env } = machine(SHADOW_ON);
+	for (let i = 0; i < 12; i++) await memory(repo, env, ['add', '--type', 'fact', '--layer', 'project', '--summary', `Zeppelin hangar note ${i}.`]);
+	const words = 'where is the zeppelin hangar';
+	const all = openIndex(sourceScope(loadProject(repo), memorySettings.parse({}), env)).search(words, 1000);
+	await dispatch({ name: 'prompt.submit', harness: 'fake', cwd: repo, prompt: words, sessionId: 's1' }, modules, contextOf(repo, env));
+	const [line] = shadowLines(env);
+	assert.ok(all.length > SHADOW_HITS, `${all.length} matches`);
+	assert.deepEqual([line!.first, line!.matches, line!.hits.length], [false, all.length, SHADOW_HITS]);
+});
+
+test('with the shadow log on, the shim runs on prompts with words to search, through the filter in the event table', () => {
+	const { repo, env } = machine(SHADOW_ON);
+	const context = contextOf(repo, env);
+	assert.ok(handledEvents([memoryModule], context).includes('prompt.submit'));
+	const table = readFileSync(writeEventTable(repo, [memoryModule], context), 'utf8');
+	assert.ok(table.split('\n').includes(`prompt.submit\t(${SEARCHABLE_PROMPT})`), table);
+});
+
+test('a shadow log that cannot be written is a notice, and recall still comes', async () => {
+	const { repo, env } = machine(SHADOW_ON);
+	mkdirSync(join(shadowDir(env), '..'), { recursive: true });
+	writeFileSync(shadowDir(env), 'a file where the folder goes');
+	const { start, prompt } = sessionIn(repo, env);
+	await start();
+	const result = await prompt('how do we rotate the database password');
+	assert.match(result.context.join('\n'), /^Recall for this prompt[\s\S]*docs\/runbook\.md:3/);
+	assert.match(result.notice.join('\n'), /^kalfa: memory shadow log: /m);
+	assert.match(result.notice.join('\n'), /^kalfa: memory: recall 1 hit$/m);
 });
 
 test('inbox accept writes the record into the layer of the candidate project and removes the candidate in one commit', async () => {

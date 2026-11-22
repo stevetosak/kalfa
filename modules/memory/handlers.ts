@@ -1,6 +1,7 @@
 // The memory Module's code (ADR 0002, 0003): each layer's Root Hub at
 // session start, recall on the first prompt of a session with the prompt and
-// the branch's Task (and on each prompt when a setting turns it on), and at
+// the branch's Task (and on each prompt when a setting turns it on), the
+// shadow log of each prompt's hits when a setting turns it on, and at
 // Task close the copy of the Task Record into the Memory home and its Memory
 // candidates into the inbox, in one commit, plus the upkeep proposals for a
 // layer over its budget.
@@ -18,8 +19,9 @@ import { candidateFiles, readInbox, splitCandidates } from './inbox.ts';
 import { duplicateFindings, type Finding, findingLine, lint } from './lint.ts';
 import { rootHubOf } from '../../src/core/memory/root-hub.ts';
 import { rootHubText } from './root-hubs.ts';
-import { type Hit, hitLine, openIndex } from './search.ts';
+import { type Hit, hitLine, openIndex, type SearchIndex } from './search.ts';
 import { type MemorySettings, memorySettings } from './settings.ts';
+import { appendShadow, shadowEntry } from './shadow.ts';
 import type { SourceScope } from './sources.ts';
 
 const today = () => new Date().toLocaleDateString('sv-SE');
@@ -123,11 +125,30 @@ function sessionStart(event: CoreEvent, context: HandlerContext): HandlerResult 
 	return { context: context_ || undefined, notice: notice || undefined, ...(wake && { wake }) };
 }
 
-/** What a prompt gives to search with: nothing for a slash command or a prompt of a word or two. */
-function promptWords(prompt: string): string {
+/** What separates the words of a prompt: the whitespace the shim's filter can see in the raw payload. */
+const WORD_GAP = /[ \t\n\r]+/;
+
+const wordCount = (prompt: string) => {
 	const text = prompt.trim();
-	return text.startsWith('/') || text.split(/\s+/).length < PROMPT_MIN_WORDS ? '' : text.slice(0, PROMPT_MAX_CHARS);
+	return text ? text.split(WORD_GAP).length : 0;
+};
+
+/** What a prompt gives to search with: nothing for a slash command or a prompt of a word or two. */
+export function promptWords(prompt: string): string {
+	const text = prompt.trim();
+	return text.startsWith('/') || wordCount(text) < PROMPT_MIN_WORDS ? '' : text.slice(0, PROMPT_MAX_CHARS);
 }
+
+// The shim's filter for `prompt.submit` (a POSIX extended regex over the raw
+// JSON payload): a prompt `promptWords` keeps, at least three words and no
+// slash first. In the payload a newline, tab or return is an escape, and `\\`
+// and `\"` are one character each. It matches every prompt `promptWords`
+// keeps; a prompt it matches in vain only starts Node.
+const GAP = String.raw`( |\\[tnr])`;
+const CHAR = String.raw`(\\.|[^"\\])`;
+const WORD = String.raw`([^"\\ ]|\\[^tnr])`;
+const FIRST = String.raw`([^"\\ /]|\\[^tnr])`;
+export const SEARCHABLE_PROMPT = `"prompt"[[:space:]]*:[[:space:]]*"${GAP}*${FIRST}${CHAR}*${GAP}${WORD}${CHAR}*${GAP}${WORD}`;
 
 /** The Root Hubs the session start loaded, as `<layer label> <id>`; a hit on one adds nothing. */
 function rootHubKeys(project: Project | undefined, env: NodeJS.ProcessEnv): Set<string> {
@@ -141,6 +162,38 @@ function rootHubKeys(project: Project | undefined, env: NodeJS.ProcessEnv): Set<
 
 const searchNotice = (problems: readonly string[]) => (problems.length ? `kalfa: memory search left out: ${problems.join('; ')}` : undefined);
 
+/** One prompt's search: its words, the branch's Task, what the session already holds, and the index, opened once on first use. */
+interface PromptScope {
+	prompt: string;
+	words: string;
+	task?: TaskRecord;
+	/** The Task's own record and the Root Hubs the session start loaded. */
+	held: (hit: Hit) => boolean;
+	index: () => SearchIndex;
+}
+
+function promptScope(prompt: string, context: HandlerContext, settings: MemorySettings): PromptScope {
+	const task = ownOpenTask(context.project);
+	let hubs: Set<string> | undefined;
+	let index: SearchIndex | undefined;
+	return {
+		prompt,
+		words: promptWords(prompt),
+		task,
+		held: (hit) =>
+			(task !== undefined && hit.task === task.id) || (hit.record !== undefined && (hubs ??= rootHubKeys(context.project, context.env)).has(`${hit.record.layer} ${hit.record.id}`)),
+		index: () => (index ??= openIndex(sourceScope(context.project, settings, context.env))),
+	};
+}
+
+/** What recall gives the prompt, and the hits it injected. */
+interface Recall {
+	result?: HandlerResult;
+	injected: readonly Hit[];
+}
+
+const NO_RECALL: Recall = { injected: [] };
+
 /**
  * The first prompt of a session (the wake from the session start): one search
  * with the prompt and the branch's Task, the relevant hits only, without the
@@ -148,37 +201,59 @@ const searchNotice = (problems: readonly string[]) => (problems.length ? `kalfa:
  * command, or a short prompt on a branch without a Task, gives nothing to
  * search with and keeps the wake for the next prompt.
  */
-function firstPromptRecall(prompt: string, context: HandlerContext, settings: MemorySettings): HandlerResult {
-	const words = promptWords(prompt);
-	const task = ownOpenTask(context.project);
-	if (prompt.trim().startsWith('/') || (!words && !task)) return { wake: { event: 'prompt.submit' } };
-	const hubs = rootHubKeys(context.project, context.env);
-	const held = (hit: Hit) => (task !== undefined && hit.task === task.id) || (hit.record !== undefined && hubs.has(`${hit.record.layer} ${hit.record.id}`));
-	const index = openIndex(sourceScope(context.project, settings, context.env));
+function firstPromptRecall(scope: PromptScope, settings: MemorySettings): Recall {
+	const { words, task } = scope;
+	if (scope.prompt.trim().startsWith('/') || (!words && !task)) return { result: { wake: { event: 'prompt.submit' } }, injected: [] };
+	const index = scope.index();
 	const query = [words, ...(task ? [taskQuery(task)] : [])].filter(Boolean).join('\n');
-	const hits = index.search(query, settings['recall-hits'], { keep: (hit) => !held(hit), relevantOnly: true });
+	const hits = index.search(query, settings['recall-hits'], { keep: (hit) => !scope.held(hit), relevantOnly: true });
 	const problems = searchNotice(index.problems);
-	if (!hits.length) return problems ? { notice: problems } : {};
+	if (!hits.length) return { result: problems ? { notice: problems } : {}, injected: [] };
 	return {
-		context: [`Recall for this prompt${task ? ` and Task ${task.id}` : ''} (kalfa memory search "<words>" finds more; read a hit before you rely on it):`, ...hits.map(hitLine)].join('\n'),
-		notice: [`kalfa: memory: recall ${plural(hits.length, 'hit')}`, problems].filter(Boolean).join('\n'),
+		result: {
+			context: [`Recall for this prompt${task ? ` and Task ${task.id}` : ''} (kalfa memory search "<words>" finds more; read a hit before you rely on it):`, ...hits.map(hitLine)].join('\n'),
+			notice: [`kalfa: memory: recall ${plural(hits.length, 'hit')}`, problems].filter(Boolean).join('\n'),
+		},
+		injected: hits,
 	};
 }
 
 /** Recall on each prompt, when the setting turns it on: the prompt alone. */
-function promptRecall(prompt: string, context: HandlerContext, settings: MemorySettings): HandlerResult | undefined {
-	const words = promptWords(prompt);
-	if (!words) return undefined;
-	const hits = openIndex(sourceScope(context.project, settings, context.env)).search(words, settings['recall-hits']);
-	if (!hits.length) return undefined;
-	return { context: ['Recall for this prompt (kalfa memory search; read a hit before you rely on it):', ...hits.map(hitLine)].join('\n') };
+function promptRecall(scope: PromptScope, settings: MemorySettings): Recall {
+	if (!scope.words) return NO_RECALL;
+	const hits = scope.index().search(scope.words, settings['recall-hits']);
+	if (!hits.length) return NO_RECALL;
+	return { result: { context: ['Recall for this prompt (kalfa memory search; read a hit before you rely on it):', ...hits.map(hitLine)].join('\n') }, injected: hits };
+}
+
+/**
+ * The prompt's line in the shadow log: every hit of its own words, and what
+ * recall injected. A prompt with no words to search and no recall writes none.
+ * A failure is a notice; the prompt goes on.
+ */
+function writeShadow(scope: PromptScope, recall: Recall, first: boolean, session: string | undefined, context: HandlerContext): string | undefined {
+	if (!scope.words && !recall.injected.length) return undefined;
+	try {
+		const at = new Date();
+		const hits = scope.words ? scope.index().search(scope.words, Number.POSITIVE_INFINITY) : [];
+		const project = context.project && projectKey(context.project.root);
+		const entry = shadowEntry({ at, session, project, task: scope.task?.id, first, prompt: scope.prompt, words: wordCount(scope.prompt), hits, held: scope.held, injected: recall.injected });
+		appendShadow(context.env, at, entry);
+		return undefined;
+	} catch (error) {
+		return `kalfa: memory shadow log: ${(error as Error).message}`;
+	}
 }
 
 function promptSubmit(event: CoreEvent, context: HandlerContext): HandlerResult | undefined {
 	if (event.name !== 'prompt.submit' || event.subagent) return undefined;
 	const settings = settingsOf(context);
-	if (context.wake) return firstPromptRecall(event.prompt, context, settings);
-	return settings['recall-on-prompt'] ? promptRecall(event.prompt, context, settings) : undefined;
+	const scope = promptScope(event.prompt, context, settings);
+	const first = Boolean(context.wake);
+	const recall = first ? firstPromptRecall(scope, settings) : settings['recall-on-prompt'] ? promptRecall(scope, settings) : NO_RECALL;
+	const problem = settings['shadow-log'] ? writeShadow(scope, recall, first, event.sessionId, context) : undefined;
+	if (!problem) return recall.result;
+	return { ...recall.result, notice: [recall.result?.notice, problem].filter(Boolean).join('\n') };
 }
 
 /** The question the agent puts to the Operator at Task close. */
@@ -252,7 +327,14 @@ function taskClose(event: CoreEvent, context: HandlerContext): HandlerResult | u
 export const memoryModule = {
 	name: 'memory',
 	settings: memorySettings,
-	// The first prompt's recall comes on a wake; recall on each prompt needs the shim on every prompt.
-	wakeOnly: { 'prompt.submit': (context) => !settingsOf(context)['recall-on-prompt'] },
+	// The first prompt's recall comes on a wake; recall on each prompt and the
+	// shadow log need the shim on every prompt that has words to search.
+	wakeOnly: {
+		'prompt.submit': (context) => {
+			const settings = settingsOf(context);
+			return !settings['recall-on-prompt'] && !settings['shadow-log'];
+		},
+	},
+	filters: { 'prompt.submit': SEARCHABLE_PROMPT },
 	handlers: { 'session.start': sessionStart, 'prompt.submit': promptSubmit, 'task.close': taskClose },
 } satisfies ModuleDefinition & { settings: typeof memorySettings };

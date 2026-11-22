@@ -276,7 +276,7 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 		},
 	},
 	{
-		name: 'memory Module: Task close puts the candidates into the inbox, accept writes a record, search finds it, a Root Hub loads in place of the index lines, the first prompt recalls once',
+		name: 'memory Module: Task close puts the candidates into the inbox, accept writes a record, search finds it, a Root Hub loads in place of the index lines, the first prompt recalls once, the shadow log holds each prompt\'s hits',
 		run(world) {
 			const parts = `**Done:** smoke work.\n\n**Memory candidates:**\n- ${CANDIDATE}\n\n**Next:** nothing.`;
 			const section = exec(world, 'kalfa', ['section', 'close', 'Smoke section'], { input: parts });
@@ -309,6 +309,17 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			expect(first.status === 0 && recall.startsWith('Recall for this prompt') && recall.includes(ACCEPTED), `the first prompt does not recall the accepted record (exit ${first.status}): ${recall || first.stderr.trim()}`);
 			const next = prompt({ KALFA_NODE: join(world.root, 'no-node') });
 			expect(next.status === 0 && next.stdout === '', `the second prompt started Node (exit ${next.status}: ${next.stderr.trim()})`);
+			// The shadow log: the first prompt writes the event table again, the
+			// second starts Node through its filter; neither injects anything.
+			const project = parse(read(world, 'kalfa.yaml'));
+			writeFileSync(join(world.repo, 'kalfa.yaml'), stringify({ ...project, settings: { memory: { 'shadow-log': true } } }));
+			for (const run of [prompt(), prompt()]) expect(run.status === 0 && run.stdout === '', `a prompt with the shadow log on injected or failed (exit ${run.status}): ${run.stdout || run.stderr.trim()}`);
+			const shadow = join(world.home, '.cache', 'kalfa', 'memory-shadow');
+			const lines = existsSync(shadow) ? readdirSync(shadow).flatMap((file) => readFileSync(join(shadow, file), 'utf8').trimEnd().split('\n')) : [];
+			const logged = lines.map((line) => JSON.parse(line) as { first: boolean; hits: { record?: string }[] });
+			expect(logged.length === 2 && logged.every((l) => !l.first && l.hits.some((h) => h.record?.endsWith('/smoke-accepted-candidate'))), `the shadow log does not hold the two prompts' hits: ${lines.join('\n')}`);
+			const short = exec(world, 'sh', ['-c', installedHook(world, 'UserPromptSubmit')], { input: hookPayload(world, 'UserPromptSubmit', { prompt: 'go on' }), env: { KALFA_NODE: join(world.root, 'no-node') } });
+			expect(short.status === 0 && short.stdout === '', `a prompt of two words started Node with the shadow log on (exit ${short.status}: ${short.stderr.trim()})`);
 		},
 	},
 	{
