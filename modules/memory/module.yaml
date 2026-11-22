@@ -1,8 +1,8 @@
 schema: 1
-description: Long-term memory. kalfa memory writes, shows and lists the Memory records (add, supersede, confirm, close, show with the linked records, list); keyword search over the Memory records, the Task Records, the project's documentation and the old archives; each layer's Root Hub at session start, and recall on the first prompt of a session with the prompt and the branch's Task; the Remember parts of the Task Record go to an inbox at Task close; a lint that reports stale, broken and duplicate records and a Root Hub over its limit. The Core keeps the Memory home and the record format.
+description: Long-term memory. kalfa memory writes, shows and lists the Memory records (add, supersede, confirm, close, show with the linked records, list); keyword search over the Memory records, the Task Records, the project's documentation and the old archives; each layer's Root Hub at session start, and recall on the first prompt of a session with the prompt and the branch's Task; at Task close the steps of the Cleanup, which takes the findings of the Remember parts into Long-term memory; a lint that reports stale, broken and duplicate records and a Root Hub over its limit. The Core keeps the Memory home and the record format.
 needs:
   - capability: context-injection
-    without: no Root Hub, no recall on the first prompt and no question at Task close; kalfa memory still works on demand
+    without: no Root Hub, no recall on the first prompt and no Cleanup steps at Task close; kalfa memory still works on demand
 commands:
   allow:
     - kalfa memory search *

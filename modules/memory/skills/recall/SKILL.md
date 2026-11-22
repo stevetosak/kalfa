@@ -1,6 +1,6 @@
 ---
 name: recall
-description: Searches what kalfa remembers (Memory records, Task Records, project docs, old archives) and handles the Memory candidates in the inbox. Use before work that may repeat an old decision or fault, when the Operator asks what was decided or found before, when a recall hit on the first prompt looks relevant, or at Task close when kalfa lists Memory candidates.
+description: Searches what kalfa remembers (Memory records, Task Records, project docs, old archives) and does the Cleanup that takes a closed Task's findings into Long-term memory. Use before work that may repeat an old decision or fault, when the Operator asks what was decided or found before, when a recall hit on the first prompt looks relevant, or at Task close when kalfa gives the Cleanup steps.
 ---
 
 # Recall memory
@@ -21,25 +21,30 @@ branch's Task. After that, search yourself.
 with `kalfa memory show <id>` (`[[personal:id]]` with `--layer personal`); add
 `--depth 2` when the summaries of the linked records are not enough.
 
-**What you find yourself goes in the Remember part, never straight into a
-record.** Put it in the **Remember:** part of the Section, one bullet per
-finding; the old names Memory candidates and Lesson candidates still work. Only
-what the Operator states goes straight in: a rule with `kalfa rule add` (into
-its layer's Rule pack), anything else with `kalfa memory add`.
+**What you find yourself goes in the Remember part; the Cleanup writes it.**
+Put it in the **Remember:** part of the Section, one bullet per finding; the
+old names Memory candidates and Lesson candidates still work. In a session
+without a Task, write the finding at once with `kalfa memory add`, linked as
+the Cleanup links one. What the Operator states goes straight in: a rule with
+`kalfa rule add` (into its layer's Rule pack), anything else with `kalfa
+memory add`.
 
-**At Task close** kalfa copies the Task Record into the Memory home, puts each
-bullet of the Remember parts into the inbox as a candidate and asks you to put ONE question to the Operator:
-each candidate with the type (rule, fact, decision, open), the layer
-(personal, project) and the one-line summary you propose. Then, per answer:
+**At Task close you do the Cleanup.** kalfa copies the Task Record into the
+Memory home and gives the steps: each finding of the Remember parts and the
+commands for it. Check each finding against the later Sections, which may
+correct it; search for its subject; then confirm, supersede or add its record
+(the Task as its source), or add a rule with `kalfa rule add`. Link it to the
+related records and into the Hub of its subject. When a layer is over its
+budget, the steps also list its likely duplicates and its open items: merge
+the duplicates and close each item whose work you can show is done. You
+decide; do not ask the Operator. Then mark the record with `kalfa task
+reconciled --task <id>`.
 
-- `kalfa memory inbox accept <id> --type <type> --layer <layer> --summary "<one line>"`
-  (a body on stdin when the summary does not say it all)
-- `kalfa memory inbox reject <id> "<reason>"`
-
-A candidate the Operator does not answer stays in the inbox; session start
-says how many wait. `kalfa memory inbox` lists them.
+Candidates from before the Cleanup wait in the inbox (`kalfa memory inbox`)
+until the Migration decides them (Plan Part 5); leave them.
 
 **The lint only reports.** `kalfa memory lint` names stale, duplicate and
 over-budget records, broken links, personal records that link into a
-project, and a Root Hub over its limit or a root record that is not a Hub. Fix one only with the Operator: confirm it with proof, supersede it,
-or merge two.
+project, and a Root Hub over its limit or a root record that is not a Hub. Fix
+one when you can prove the fix: confirm it with proof, supersede it, or merge
+two.

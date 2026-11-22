@@ -78,6 +78,21 @@ export function taskCommand(adapters: ReadonlyMap<string, Adapter>, registry: Re
 			report(await raise({ name: 'task.close', task: record.id, record: path }, project, io, adapters, registry), io);
 			return 0;
 		},
+		async reconciled(args, io) {
+			const { values } = parseCommandArgs(args, taskOption);
+			const project = requireProject(io);
+			const id = taskId(project, values.task);
+			const record = readRecord(project.root, id);
+			if (!record) throw new KalfaError(`no Task Record '${id}'`);
+			if (record.header.status !== 'closed') throw new KalfaError(`Task '${id}' is open; close it with kalfa task close, then do its Cleanup`);
+			if (record.header.reconciled) {
+				io.out(`Task ${id} was reconciled on ${record.header.reconciled}`);
+				return 0;
+			}
+			const path = writeRecord(project.root, { ...record, header: { ...record.header, reconciled: today() } });
+			io.out(`Task ${id} reconciled: ${path}`);
+			return 0;
+		},
 		async show(args, io) {
 			const { values } = parseCommandArgs(args, { ...taskOption, handoff: { type: 'boolean' } });
 			const project = requireProject(io);
@@ -97,8 +112,8 @@ export function taskCommand(adapters: ReadonlyMap<string, Adapter>, registry: Re
 	};
 
 	return {
-		summary: 'Start, close, show or list the Task Records of this repository',
-		usage: 'kalfa task start "<goal>" --done-when "<finish line>" [--plan <path>] [--task <id>]\n       kalfa task close [--task <id>]   (closing parts on stdin; **Done when:** holds — <proof> | not met — <why>)\n       kalfa task show [--handoff] [--task <id>]\n       kalfa task list',
+		summary: 'Start, close, mark reconciled, show or list the Task Records of this repository',
+		usage: 'kalfa task start "<goal>" --done-when "<finish line>" [--plan <path>] [--task <id>]\n       kalfa task close [--task <id>]   (closing parts on stdin; **Done when:** holds — <proof> | not met — <why>)\n       kalfa task reconciled [--task <id>]   (after the Cleanup of a closed Task)\n       kalfa task show [--handoff] [--task <id>]\n       kalfa task list',
 		async run(args, io) {
 			const [sub, ...rest] = args;
 			const run = sub && Object.hasOwn(subcommands, sub) ? subcommands[sub] : undefined;

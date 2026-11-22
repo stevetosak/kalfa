@@ -26,8 +26,8 @@ const PERSONAL_RULES = '.claude/rules/kalfa-personal/always.md';
 const RETIRED_INSTRUCTIONS = '.claude/rules/kalfa-memory.md';
 /** The Memory home kalfa memory creates, the Operator's data: kalfa uninstall keeps it. */
 const MEMORY_HOME = '.local/share/kalfa/memory';
-const CANDIDATE = 'Smoke candidate from the Task.';
-const ACCEPTED = 'Smoke accepted candidate.';
+const FINDING = 'Smoke finding from the Task.';
+const REMEMBERED = 'Smoke remembered finding.';
 const ROOT_HUB = 'Smoke map of the project layer.';
 const GOAL = 'smoke goal';
 
@@ -277,9 +277,9 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 		},
 	},
 	{
-		name: 'memory Module: Task close puts the candidates into the inbox, accept writes a record, search finds it, a Root Hub loads in place of the index lines, the first prompt recalls once, the shadow log holds each prompt\'s hits',
+		name: 'memory Module: Task close gives the Cleanup of the Remember finding, its record is written and the Task marked reconciled, search finds it, a Root Hub loads in place of the index lines, the first prompt recalls once, the shadow log holds each prompt\'s hits',
 		run(world) {
-			const parts = `**Done:** smoke work.\n\n**Remember:**\n- ${CANDIDATE}\n\n**Next:** nothing.`;
+			const parts = `**Done:** smoke work.\n\n**Remember:**\n- ${FINDING}\n\n**Next:** nothing.`;
 			const section = exec(world, 'kalfa', ['section', 'close', 'Smoke section'], { input: parts });
 			expect(section.status === 0, `kalfa section close exited ${section.status}: ${section.stderr.trim()}`);
 			const refused = exec(world, 'kalfa', ['task', 'close']);
@@ -287,14 +287,16 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			const ran = exec(world, 'kalfa', ['task', 'close'], { input: '**Done when:** holds — the smoke ran.\n' });
 			expect(ran.status === 0, `kalfa task close exited ${ran.status}: ${ran.stderr.trim()}`);
 			const close = ran.stdout;
-			expect(close.includes('Ask the Operator ONE question') && close.includes(CANDIDATE), `task close does not ask about the candidate: ${close.trim()}`);
+			const task = /`kalfa task reconciled --task (\S+)`/.exec(close)?.[1];
+			expect(close.includes('Cleanup of Task') && close.includes(`: ${FINDING}`) && task !== undefined, `task close does not give the Cleanup of the finding: ${close.trim()}`);
 			const home = join(world.home, MEMORY_HOME);
 			const copies = readdirSync(join(home, 'projects', 'local', 'repo', 'tasks'));
 			expect(copies.length === 1, `the Task Record is not copied into the Memory home: ${copies.join(', ')}`);
-			const id = kalfa(world, ['memory', 'inbox']).split(/\s/)[0]!;
-			kalfa(world, ['memory', 'inbox', 'accept', id, '--type', 'fact', '--layer', 'project', '--summary', ACCEPTED]);
-			expect(kalfa(world, ['memory', 'inbox']).includes('the inbox is empty'), 'accept left the candidate in the inbox');
-			expect(kalfa(world, ['memory', 'search', 'accepted candidate']).includes(`[memory] fact: ${ACCEPTED}`), 'search does not find the accepted record');
+			expect(kalfa(world, ['memory', 'inbox']).includes('the inbox is empty'), 'task close put a candidate into the inbox');
+			kalfa(world, ['memory', 'add', '--type', 'fact', '--layer', 'project', '--summary', REMEMBERED, '--source', `Task ${task}`]);
+			kalfa(world, ['task', 'reconciled', '--task', task!]);
+			expect(/\nreconciled: \d{4}-\d{2}-\d{2}\n/.test(kalfa(world, ['task', 'show', '--task', task!])), 'kalfa task reconciled did not mark the record');
+			expect(kalfa(world, ['memory', 'search', 'remembered finding']).includes(`[memory] fact: ${REMEMBERED}`), 'search does not find the remembered record');
 			expect(kalfa(world, ['memory', 'lint']).trim() === 'no findings', 'the lint has findings on fresh records');
 			kalfa(world, ['memory', 'add', '--type', 'hub', '--layer', 'project', '--id', 'root', '--summary', ROOT_HUB]);
 			const start = exec(world, 'sh', ['-c', installedHook(world, 'SessionStart')], { input: hookPayload(world, 'SessionStart', { source: 'startup' }) });
@@ -304,10 +306,10 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			expect(!context.includes(`[fact] ${PROJECT_FACT}`), 'session.start still loads the index lines of a layer with a Root Hub');
 			// The session's wake starts Node for its first prompt alone.
 			const prompt = (env?: NodeJS.ProcessEnv) =>
-				exec(world, 'sh', ['-c', installedHook(world, 'UserPromptSubmit')], { input: hookPayload(world, 'UserPromptSubmit', { prompt: 'where is the accepted candidate' }), ...(env && { env }) });
+				exec(world, 'sh', ['-c', installedHook(world, 'UserPromptSubmit')], { input: hookPayload(world, 'UserPromptSubmit', { prompt: 'where is the remembered finding' }), ...(env && { env }) });
 			const first = prompt();
 			const recall = String(JSON.parse(first.stdout || '{}').hookSpecificOutput?.additionalContext ?? '');
-			expect(first.status === 0 && recall.startsWith('Recall for this prompt') && recall.includes(ACCEPTED), `the first prompt does not recall the accepted record (exit ${first.status}): ${recall || first.stderr.trim()}`);
+			expect(first.status === 0 && recall.startsWith('Recall for this prompt') && recall.includes(REMEMBERED), `the first prompt does not recall the remembered record (exit ${first.status}): ${recall || first.stderr.trim()}`);
 			const next = prompt({ KALFA_NODE: join(world.root, 'no-node') });
 			expect(next.status === 0 && next.stdout === '', `the second prompt started Node (exit ${next.status}: ${next.stderr.trim()})`);
 			// The shadow log: the first prompt writes the event table again, the
@@ -318,7 +320,7 @@ const steps: Array<{ name: string; run: (world: World) => void }> = [
 			const shadow = join(world.home, '.cache', 'kalfa', 'memory-shadow');
 			const lines = existsSync(shadow) ? readdirSync(shadow).flatMap((file) => readFileSync(join(shadow, file), 'utf8').trimEnd().split('\n')) : [];
 			const logged = lines.map((line) => JSON.parse(line) as { first: boolean; hits: { record?: string }[] });
-			expect(logged.length === 2 && logged.every((l) => !l.first && l.hits.some((h) => h.record?.endsWith('/smoke-accepted-candidate'))), `the shadow log does not hold the two prompts' hits: ${lines.join('\n')}`);
+			expect(logged.length === 2 && logged.every((l) => !l.first && l.hits.some((h) => h.record?.endsWith('/smoke-remembered-finding'))), `the shadow log does not hold the two prompts' hits: ${lines.join('\n')}`);
 			const short = exec(world, 'sh', ['-c', installedHook(world, 'UserPromptSubmit')], { input: hookPayload(world, 'UserPromptSubmit', { prompt: 'go on' }), env: { KALFA_NODE: join(world.root, 'no-node') } });
 			expect(short.status === 0 && short.stdout === '', `a prompt of two words started Node with the shadow log on (exit ${short.status}: ${short.stderr.trim()})`);
 		},
