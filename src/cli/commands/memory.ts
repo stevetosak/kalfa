@@ -31,6 +31,7 @@ import {
 	slugOf,
 } from '../../core/memory/record.ts';
 import { refreshInstructions } from '../../core/memory/instructions.ts';
+import { LinkGraph, neighbourLines } from '../../core/memory/links.ts';
 import { markUsed } from '../../core/memory/usage.ts';
 import { loadProject } from '../../core/project.ts';
 import { loadSettings } from '../../core/settings.ts';
@@ -84,6 +85,16 @@ function refuseRetired(record: MemoryRecord, action: string): void {
 	const { status } = record.header;
 	if (status === 'superseded') throw new KalfaError(`'${record.id}' is already superseded by '${record.header['superseded-by']}'; ${action} that one`);
 	if (status === 'closed') throw new KalfaError(`'${record.id}' is closed; add a new record instead`);
+}
+
+const LINK_DEPTHS = [0, 1, 2];
+
+/** Parses a --depth value: how many levels of linked records `show` lists; 1 when not given. */
+function linkDepth(value: string | undefined): number {
+	if (value === undefined) return 1;
+	const depth = LINK_DEPTHS.find((d) => String(d) === value);
+	if (depth === undefined) throw new UsageError(`--depth is ${LINK_DEPTHS.join(', ')}, not '${value}'`);
+	return depth;
 }
 
 /** Parses a --type value: a type a write can make. */
@@ -231,15 +242,30 @@ const subcommands: Record<string, MemorySubcommand> = {
 		return 0;
 	},
 
+	/**
+	 * The record in full, the summary line of each record it links to or that
+	 * links to it (to --depth levels), and its history. Only the record shown
+	 * counts as used: a summary line is not a read.
+	 */
 	async show(args, io) {
-		const { values, positionals } = parseCommandArgs(args, layerOption, true);
+		const { values, positionals } = parseCommandArgs(args, { ...layerOption, depth: { type: 'string' } }, true);
 		const [id, ...extra] = positionals;
 		if (!id || extra.length) throw new UsageError('give one id');
+		const depth = linkDepth(values.depth);
 		const { layer } = findRecord(io, id, layerName(values.layer));
 		markUsed(layer, [id], io.env);
 		const path = recordPath(layer, id);
+		const graph = new LinkGraph(layersFor(io, undefined).map((l) => ({ layer: l, records: readLayer(l) })));
+		const node = graph.find(layer, id)!;
+		const links = neighbourLines(node, graph.neighbourhood(node, depth));
 		const history = recordHistory(memoryHome(io.env), path, id);
-		io.out(`${path} (${layer.label})\n\n${readFileSync(path, 'utf8').trimEnd()}${history.length ? `\n\nHistory:\n${history.map((h) => `- ${h}`).join('\n')}` : ''}`);
+		io.out(
+			[
+				`${path} (${layer.label})\n\n${readFileSync(path, 'utf8').trimEnd()}`,
+				...(links.length ? [`Links, depth ${depth} (→ it links to, ← links to it):\n${links.join('\n')}`] : []),
+				...(history.length ? [`History:\n${history.map((h) => `- ${h}`).join('\n')}`] : []),
+			].join('\n\n'),
+		);
 		return 0;
 	},
 
@@ -266,7 +292,7 @@ const CORE_USAGE = [
 	'       kalfa memory confirm <id> "<how you checked it>" [--layer …]',
 	'       kalfa memory close <id> "<why it is done>" [--layer …]   (it leaves the session start; search keeps it)',
 	'       kalfa memory activate [<id>…] [--layer …]   (the proposed records of the old review become active; no id: all of them)',
-	'       kalfa memory show <id> [--layer …]',
+	'       kalfa memory show <id> [--layer …] [--depth 0|1|2]   (with the summary line of each linked record, to depth 1 when not given)',
 	'       kalfa memory list [--layer personal|project] [--status active|proposed|superseded|closed|all]',
 ];
 
