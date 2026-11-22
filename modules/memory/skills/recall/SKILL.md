@@ -31,6 +31,7 @@ each candidate with the type (rule, fact, decision, open), the layer
 A candidate the Operator does not answer stays in the inbox; session start
 says how many wait. `kalfa memory inbox` lists them.
 
-**The lint only reports.** `kalfa memory lint` names stale, broken, duplicate
-and over-budget records. Fix one only with the Operator: confirm it with
-proof, supersede it, or merge two.
+**The lint only reports.** `kalfa memory lint` names stale, duplicate and
+over-budget records, broken links, and personal records that link into a
+project. Fix one only with the Operator: confirm it with proof, supersede it,
+or merge two.

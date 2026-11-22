@@ -53,7 +53,8 @@ one fact, decision or open item; a Hub maps one subject with links to its
 records, and the Root Hub of each layer maps the layer. Links are `[[id]]` in
 the body, untyped, so the sentence around a link says why it is there; a
 project record links to a personal one as `[[personal:id]]`, and a personal
-record never links into one project. Back-links are found when a record is
+record never links into one project, since it loads in every project; the lint
+reports such a link and each link that names no record. Back-links are found when a record is
 read, and `kalfa memory show` returns a record with the summary line of each
 neighbour, to a chosen depth, so the agent goes deeper only when the summaries
 are not enough. One note per subject was rejected because every change
