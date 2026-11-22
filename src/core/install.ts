@@ -4,7 +4,9 @@
 // only when `install.yaml` in the machine config folder says kalfa added them,
 // so an entry the Operator wrote is never taken away. The same holds for the
 // settings kalfa sets (the Adapter's `owned` list): kalfa owns one only when it
-// changed it, and puts back the earlier value. A changed settings file
+// changed it, and puts back the earlier value. The entries a machine step
+// wants in the environment of the agent's commands are such settings too,
+// named `agent-env:<variable>`. A changed settings file
 // is backed up next to itself before kalfa writes it. The instruction file
 // (the Personal layer, where a harness loads one) is kalfa's by its name.
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -21,8 +23,8 @@ import { readVersioned, type VersionedFormat } from './versioned-file.ts';
 
 const entries = z.array(z.string()).default([]);
 
-/** A setting kalfa changed: the value it had before (`previous` left out when it was not there). */
-const settingStateSchema = z.strictObject({ previous: z.unknown().optional() });
+/** A setting kalfa changed: the value it had before (`previous` left out when it was not there), and the value kalfa wrote. */
+const settingStateSchema = z.strictObject({ previous: z.unknown().optional(), value: z.unknown().optional() });
 type SettingState = z.infer<typeof settingStateSchema>;
 
 const harnessStateSchema = z
@@ -76,6 +78,8 @@ export interface UserWants {
 	ownedSettings?: boolean;
 	/** The text of the Adapter's instruction file; left out, kalfa removes the file it wrote. */
 	instructions?: string;
+	/** The machine steps' entries in the environment of the agent's commands; one kalfa set before and left out here is put back. */
+	agentEnv?: Record<string, string>;
 }
 
 export const NOTHING: UserWants = { approvals: noApprovals() };
@@ -132,7 +136,8 @@ function applySetting(data: Data, setting: OwnedSetting, set: boolean, owned: Se
 	if (set) {
 		if (isSet) return { data, owned };
 		report.push(`${setting.name}: ${where} = ${JSON.stringify(setting.value)}; ${setting.why}`);
-		return { data: setAt(data, setting.path, setting.value), owned: owned ?? (now.found ? { previous: now.value } : {}) };
+		const before = owned ?? (now.found ? { previous: now.value } : {});
+		return { data: setAt(data, setting.path, setting.value), owned: { ...before, value: setting.value } };
 	}
 	if (!owned) return { data, owned: undefined };
 	if (!isSet) {
@@ -143,9 +148,33 @@ function applySetting(data: Data, setting: OwnedSetting, set: boolean, owned: Se
 	return { data: 'previous' in owned ? setAt(data, setting.path, owned.previous) : setAt(data, setting.path), owned: undefined };
 }
 
-function applySettings(data: Data, settings: readonly OwnedSetting[], set: boolean, owned: HarnessState['settings'], report: string[]): { data: Data; owned: HarnessState['settings'] } {
+/** A setting and whether kalfa wants it set (else put back). */
+interface SettingWant {
+	setting: OwnedSetting;
+	set: boolean;
+}
+
+/** The name of an agent environment entry in `install.yaml`. */
+const AGENT_ENV = 'agent-env:';
+
+/** The agent environment entries as settings: the wanted ones, and the ones kalfa set before that are no longer wanted. */
+function agentEnvSettings(user: UserFiles, wanted: Record<string, string>, owned: HarnessState['settings'], report: string[]): SettingWant[] {
+	const keys = user.agentEnv;
+	if (!keys) {
+		if (Object.keys(wanted).length) report.push(`agent environment: the harness has none; not written (${Object.keys(wanted).join(', ')})`);
+		return [];
+	}
+	const why = "in the environment of the agent's commands";
+	const wants = Object.entries(wanted).map(([name, value]) => ({ setting: { name: `${AGENT_ENV}${name}`, path: [...keys, name], value, why }, set: true }));
+	const gone = Object.entries(owned ?? {})
+		.filter(([name]) => name.startsWith(AGENT_ENV) && !Object.hasOwn(wanted, name.slice(AGENT_ENV.length)))
+		.map(([name, state]) => ({ setting: { name, path: [...keys, name.slice(AGENT_ENV.length)], value: state.value, why }, set: false }));
+	return [...wants, ...gone];
+}
+
+function applySettings(data: Data, settings: readonly SettingWant[], owned: HarnessState['settings'], report: string[]): { data: Data; owned: HarnessState['settings'] } {
 	const after: NonNullable<HarnessState['settings']> = {};
-	for (const setting of settings) {
+	for (const { setting, set } of settings) {
 		const result = applySetting(data, setting, set, owned?.[setting.name], report);
 		data = result.data;
 		if (result.owned) after[setting.name] = result.owned;
@@ -213,7 +242,11 @@ export function applyUser(home: string, user: UserFiles, want: UserWants, owned:
 
 	const merged = mergeApprovals(tapped, user.approvals, want.approvals, owned?.approvals);
 	report.push(...merged.report);
-	const settings = applySettings(merged.after, user.owned ?? [], want.ownedSettings ?? false, owned?.settings, report);
+	const wanted = [
+		...(user.owned ?? []).map((setting) => ({ setting, set: want.ownedSettings ?? false })),
+		...agentEnvSettings(user, want.agentEnv ?? {}, owned?.settings, report),
+	];
+	const settings = applySettings(merged.after, wanted, owned?.settings, report);
 	const after = settings.data;
 
 	const settingsChanged = after !== before && !(existing === undefined && isDeepStrictEqual(after, {}));

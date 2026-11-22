@@ -99,6 +99,8 @@ export const claudeUser: UserFiles = {
 	hooks: setHooks,
 	statusLine: setStatusLine,
 	approvals: claudeApprovals,
+	// Claude Code sets `env` for the session and every command the agent runs.
+	agentEnv: ['env'],
 	owned: [
 		// Auto memory (code.claude.com/docs/en/memory): the `/memory` toggle saves this key.
 		{ name: 'native-memory', path: ['autoMemoryEnabled'], value: false, why: "kalfa's Standing memory replaces it (ADR 0002)" },

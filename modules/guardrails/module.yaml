@@ -2,7 +2,7 @@ schema: 1
 description: No push lands on a protected branch, and git commands that throw work away ask first.
 needs:
   - capability: command-block
-    without: the push rule does not run; only branch protection on the server stops a push to a protected branch
+    without: the shell rule does not run, so a command that skips the agent's git hooks (--no-verify, core.hooksPath for one command, git config in the environment) is not refused; the pre-push hook still checks every other push
 commands:
   ask:
     - git reset --hard*

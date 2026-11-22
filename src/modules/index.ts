@@ -6,6 +6,8 @@ import type { Command } from '../cli/command.ts';
 import type { MemoryExtension } from '../cli/commands/memory.ts';
 import { docsCommand } from '../../modules/docs/command.ts';
 import { docsModule } from '../../modules/docs/handlers.ts';
+import { guardrailsCommand } from '../../modules/guardrails/command.ts';
+import { gitHooksStep } from '../../modules/guardrails/git-hooks.ts';
 import { guardrailsModule } from '../../modules/guardrails/handlers.ts';
 import { boardCommand, herdrCommand, spaceCommand } from '../../modules/herdr/command.ts';
 import { herdrModule } from '../../modules/herdr/handlers.ts';
@@ -25,6 +27,7 @@ export const modules: ReadonlyMap<string, ModuleDefinition> = new Map([coreModul
 /** The Modules' own CLI commands, `kalfa <name> …` (the Module's name, or a verb of its own); each says whether it needs its Module on in the repository. */
 export const moduleCommands: Record<string, (adapters: ReadonlyMap<string, Adapter>) => Command> = {
 	docs: () => docsCommand(),
+	guardrails: () => guardrailsCommand(),
 	herdr: (adapters) => herdrCommand(adapters),
 	board: (adapters) => boardCommand(adapters),
 	space: (adapters) => spaceCommand(adapters),
@@ -33,7 +36,10 @@ export const moduleCommands: Record<string, (adapters: ReadonlyMap<string, Adapt
 };
 
 /** The Modules' own parts of `kalfa install` / `uninstall`, by Module name. */
-export const machineSteps: ReadonlyMap<string, MachineStep> = new Map([['herdr', machineStepOf(herdrPluginStep(), keyBindingStep())]]);
+export const machineSteps: ReadonlyMap<string, MachineStep> = new Map([
+	['guardrails', gitHooksStep()],
+	['herdr', machineStepOf(herdrPluginStep(), keyBindingStep())],
+]);
 
 /** The Modules' subcommands of the Core's `kalfa memory`; each checks that its Module is on. */
 export const memoryExtensions: readonly MemoryExtension[] = [memoryExtension];

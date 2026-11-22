@@ -173,6 +173,32 @@ test('the Claude user layout knows a quoted shim and a quoted tap as kalfa\'s', 
 	assert.equal(claudeUser.hooks(same, undefined), same, 'unchanged data is the same object');
 });
 
+test("a machine step's entries go into the agent's environment beside the Operator's; a Module switched off or uninstall puts back what was there", async () => {
+	const step = {
+		install: () => [],
+		uninstall: () => [],
+		agentEnv: (context: MachineStepContext) => ({ GIT_CONFIG_COUNT: '1', GIT_CONFIG_VALUE_0: join(context.env.HOME!, 'hooks') }),
+	};
+	const withEnv = installCommand(adapters, () => [modulesDir], () => pkg, new Map([['guardrails', step]]));
+	const operator = { ...OPERATOR, env: { MY_VAR: '1', GIT_CONFIG_COUNT: '2' } };
+	const home = machine(operator);
+
+	const { out } = await run(withEnv, home);
+	assert.deepEqual(settings(home).env, { MY_VAR: '1', GIT_CONFIG_COUNT: '1', GIT_CONFIG_VALUE_0: join(home, 'hooks'), CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS: '100000' });
+	assert.match(out, /agent-env:GIT_CONFIG_VALUE_0: env\.GIT_CONFIG_VALUE_0 = ".*hooks"; in the environment of the agent's commands/);
+	assert.deepEqual(JSON.parse(readFileSync(join(home, '.config/kalfa/install.yaml'), 'utf8')).harnesses.claude.settings['agent-env:GIT_CONFIG_COUNT'], { previous: '2', value: '1' });
+	assert.equal((await run(withEnv, home)).out.includes('agent-env'), false, 'a second install changes nothing');
+
+	writeFileSync(join(home, '.config/kalfa/config.yaml'), 'schema: 1\nmodules: []\n');
+	await run(withEnv, home);
+	assert.deepEqual(settings(home).env, { MY_VAR: '1', GIT_CONFIG_COUNT: '2', CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS: '100000' }, 'the Module is off: its entries go, the earlier value comes back');
+
+	writeFileSync(join(home, '.config/kalfa/config.yaml'), 'schema: 1\nmodules: [guardrails]\n');
+	await run(withEnv, home);
+	await run(uninstall, home);
+	assert.deepEqual(settings(home), operator);
+});
+
 test('install runs the steps of the machine Modules that are on and records them; uninstall and an install with the Module off undo only those; a failed step gives exit 1', async () => {
 	const calls: string[] = [];
 	const step = (name: string, fail = false) => ({

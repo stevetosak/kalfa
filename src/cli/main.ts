@@ -22,7 +22,7 @@ const registry = withFolderModules(modules, moduleDirsOrOwn(process.env));
 const commands: Record<string, Command> = {
 	init: initCommand(adapters, moduleDirs),
 	build: buildCommand(adapters, moduleDirs),
-	doctor: doctorCommand(adapters, moduleDirs, () => packageRoot()),
+	doctor: doctorCommand(adapters, moduleDirs, () => packageRoot(), machineSteps),
 	install: installCommand(adapters, moduleDirs, () => packageRoot(), machineSteps),
 	uninstall: uninstallCommand(adapters, moduleDirs, machineSteps),
 	link: linkCommand(() => packageRoot()),

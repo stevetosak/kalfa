@@ -33,16 +33,21 @@ function built(path: string): string {
 }
 
 /** What `kalfa install` wants in each harness's user settings; `kalfa doctor` compares the settings with it. */
-export function installWants(env: NodeJS.ProcessEnv, moduleDirs: ModuleDirs, packageRoot: string): (adapter: Adapter) => UserWants {
+export function installWants(env: NodeJS.ProcessEnv, moduleDirs: ModuleDirs, packageRoot: string, steps: ReadonlyMap<string, MachineStep> = new Map()): (adapter: Adapter) => UserWants {
 	const settings = loadSettings(env);
 	const sources = settings.modules.map((name) => loadModuleSource(moduleDirs(env), name));
 	const instructions = personalInstructions(env, settings);
 	const shim = quote([built(join(packageRoot, 'dist', 'kalfa-hook'))]);
+	const agentEnv = Object.assign(
+		{},
+		...sources.map((source) => steps.get(source.name)?.agentEnv?.({ env, moduleDir: source.dir, dryRun: true }) ?? {}),
+	) as Record<string, string>;
 	return (adapter) => ({
 		hook: (event) => `${shim} ${adapter.name} ${event}`,
 		tap: quote([built(join(packageRoot, 'dist', 'adapters', adapter.name, 'status-tap'))]),
 		approvals: planApprovals(sources, adapter.user!.approvals),
 		ownedSettings: true,
+		agentEnv,
 		...(adapter.capabilities.has('instruction-file') ? { instructions } : {}),
 	});
 }
@@ -123,7 +128,7 @@ export function installCommand(adapters: ReadonlyMap<string, Adapter>, moduleDir
 			const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' } });
 			const dryRun = values['dry-run'] ?? false;
 			const machine = { steps, moduleDirs, want: loadSettings(io.env).modules };
-			return run(adapters, io, installWants(io.env, moduleDirs, packageRoot()), machine, dryRun, false);
+			return run(adapters, io, installWants(io.env, moduleDirs, packageRoot(), steps), machine, dryRun, false);
 		},
 	};
 }

@@ -112,6 +112,25 @@ test('doctor shows the install mode, the Capabilities that are off and whether t
 	assert.match((await run(doctor, root, [], env)).out, /build: problem: kalfa build changed nothing:\n- \.claude\/rules\/kalfa-guardrails-r\.md: exists and kalfa did not write it/);
 });
 
+test("doctor shows what the machine Modules' steps would still change, and their entries for the agent's environment", async () => {
+	const home = tempRepo({ '.config/kalfa/config.yaml': 'schema: 1\nmodules: [guardrails]\n' });
+	const step = {
+		install: (context: { dryRun: boolean }) => [`hooks folder missing (dry run ${context.dryRun})`],
+		uninstall: () => [],
+		agentEnv: () => ({ GIT_CONFIG_COUNT: '1' }),
+	};
+	const doctor = doctorCommand(adapters, () => [modulesDir], () => checkout(), new Map([['guardrails', step]]));
+	const { out } = await run(doctor, tempDir(), [], { HOME: home });
+	assert.match(out, /machine steps:\n {2}guardrails: hooks folder missing \(dry run true\)\n/);
+	assert.match(out, / {4}agent-env:GIT_CONFIG_COUNT: env\.GIT_CONFIG_COUNT = "1"; in the environment of the agent's commands/);
+	assert.equal(existsSync(join(home, '.claude')), false, 'doctor writes nothing');
+
+	const broken = { ...step, install: () => { throw new Error('git is gone'); } };
+	const failing = doctorCommand(adapters, () => [modulesDir], () => checkout(), new Map([['guardrails', broken]]));
+	assert.match((await run(failing, tempDir(), [], { HOME: home })).out, /machine steps:\n {2}guardrails: problem: git is gone/);
+	assert.match((await run(doctorCommand(adapters, () => [modulesDir], () => checkout()), tempDir(), [], { HOME: home })).out, /machine steps: none/);
+});
+
 test('doctor names the skill references that no installed skill answers', async () => {
 	const home = tempRepo({ '.claude/skills/present/SKILL.md': 'x' });
 	const root = gitRepo({ 'AGENTS.md': 'Use the `present` skill.\n', 'CLAUDE.md': '@AGENTS.md\n\nRun `/compact`, then `/gone`.\n' });

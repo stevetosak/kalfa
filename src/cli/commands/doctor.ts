@@ -1,6 +1,7 @@
 // `kalfa doctor`: what kalfa sees on this machine and in this repository. Where
 // kalfa runs from, whether the harnesses' user settings hold what `kalfa
-// install` writes (hooks, settings kalfa owns), the machine settings, the project file and its Plans, the
+// install` writes (hooks, settings kalfa owns) and what the machine Modules' own
+// steps would still change, the machine settings, the project file and its Plans, the
 // Capabilities each harness lacks with what the Core and the Modules do
 // without them, the size of the last session start's context against the
 // harness's cap, and whether the build is up to date. A broken part is
@@ -11,6 +12,7 @@ import { delimiter, join } from 'node:path';
 import type { Adapter } from '../../adapters/adapter.ts';
 import { contextSizeLine, contextSizes } from '../../core/context-size.ts';
 import { KalfaError } from '../../core/errors.ts';
+import type { MachineStep } from '../../core/machine-step.ts';
 import type { ModuleDirs } from '../../core/module-dirs.ts';
 import { loadModuleSource, MODULE_FILE, moduleFolders, type ModuleManifest } from '../../core/module-source.ts';
 import { findPlans, isOpenPlan } from '../../core/plans.ts';
@@ -50,11 +52,27 @@ function installMode(env: NodeJS.ProcessEnv, packageRoot: string): string {
 }
 
 /** Per harness, whether its user settings are what `kalfa install` writes, and the changes it would make. */
-function userSettingLines(adapters: ReadonlyMap<string, Adapter>, env: NodeJS.ProcessEnv, moduleDirs: ModuleDirs, packageRoot: string): string[] {
-	const lines = pendingInstall(adapters, env, installWants(env, moduleDirs, packageRoot)).flatMap(({ harness, changes }) =>
+function userSettingLines(adapters: ReadonlyMap<string, Adapter>, env: NodeJS.ProcessEnv, moduleDirs: ModuleDirs, packageRoot: string, steps: ReadonlyMap<string, MachineStep>): string[] {
+	const lines = pendingInstall(adapters, env, installWants(env, moduleDirs, packageRoot, steps)).flatMap(({ harness, changes }) =>
 		changes.length ? [`${harness}: ${changes.length} change(s) waiting; run kalfa install`, ...changes.map((c) => `  ${c}`)] : [`${harness}: up to date`],
 	);
 	return ['', ...lines];
+}
+
+/** Per machine Module that is on and has a step, what its install would do now (a dry run). */
+function machineStepLines(env: NodeJS.ProcessEnv, moduleDirs: ModuleDirs, steps: ReadonlyMap<string, MachineStep>): string[] {
+	const lines: string[] = [];
+	for (const name of loadSettings(env).modules) {
+		const step = steps.get(name);
+		if (!step) continue;
+		try {
+			const report = step.install({ env, moduleDir: loadModuleSource(moduleDirs(env), name).dir, dryRun: true });
+			lines.push(...report.map((line) => `${name}: ${line}`));
+		} catch (error) {
+			lines.push(`${name}: problem: ${(error as Error).message}`);
+		}
+	}
+	return lines.length ? ['', ...lines] : ['none'];
 }
 
 function capabilityLines(project: Project | undefined, adapters: ReadonlyMap<string, Adapter>, dirs: readonly string[]): string[] {
@@ -103,7 +121,7 @@ function skillRefLines(root: string, env: NodeJS.ProcessEnv, adapters: ReadonlyM
 	return ['', ...lines];
 }
 
-export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs, packageRoot: () => string): Command {
+export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs: ModuleDirs, packageRoot: () => string, steps: ReadonlyMap<string, MachineStep> = new Map()): Command {
 	return {
 		summary: 'Report what kalfa sees on this machine and in this repository',
 		usage: 'kalfa doctor [--smoke]   (--smoke: install, use and remove this kalfa in a throw-away HOME and repository)',
@@ -112,7 +130,8 @@ export function doctorCommand(adapters: ReadonlyMap<string, Adapter>, moduleDirs
 			if (values.smoke) return runSmoke(packageRoot(), io);
 			io.out(`kalfa ${version} from ${packageRoot()}`);
 			part(io, 'install', () => [installMode(io.env, packageRoot())]);
-			part(io, 'user settings', () => userSettingLines(adapters, io.env, moduleDirs, packageRoot()));
+			part(io, 'user settings', () => userSettingLines(adapters, io.env, moduleDirs, packageRoot(), steps));
+			part(io, 'machine steps', () => machineStepLines(io.env, moduleDirs, steps));
 			const path = settingsPath(io.env);
 			part(io, 'machine settings', () => {
 				loadSettings(io.env);

@@ -55,13 +55,21 @@ still needs after a Reset goes in Found and Next.
 
 ## 2. The push rule as a pre-push hook
 
-**Done when:** in a repository where an agent session started, a push from the agent to a protected branch is refused by git's pre-push hook whatever the command looks like (one line, many lines, a heredoc, a script, an alias); the repository's own pre-push hook still runs after it; the shell rule only refuses `--no-verify` on a push and a change of `core.hooksPath`; the old false refusals (a heredoc with `${…}`) pass; local checks pass.
+**Done when:** after `kalfa install`, a push from an agent session to a protected branch is refused by git's pre-push hook whatever the command looks like (one line, many lines, a heredoc, a script, an alias); every hook the repository has still runs, the pre-push hook after the check; no repository file changes, and a push outside the agent's sessions is not checked; the shell rule only refuses `--no-verify` on a push and a change of `core.hooksPath` or of git's config through the environment; the old false refusals (a heredoc with `${…}`) pass; `kalfa doctor` reports a missing or changed part; `kalfa uninstall` removes it all; local checks pass.
 
-- [ ] The hook: a small script that reads the refs git hands it on stdin and refuses a remote ref on a protected branch; it then runs the hook that was there before (kept beside it), so nothing the repository had is lost.
-- [ ] Install: the guardrails Module is a machine Module, so its `session.start` handler writes the hook into the repository's hooks folder (`core.hooksPath` when set, as in cloud-infra; else `.git/hooks`, shared by every worktree) when it is missing or old, and says so once. git 2.34 has no hooks from config, so the file is the only route.
-- [ ] The hook judges only a push from an agent session: Claude Code sets `CLAUDECODE=1` in its shell. Not portable: each Adapter names its own marker. The Operator's own pushes pass.
-- [ ] The shell rule shrinks to a text check: `push` with `--no-verify`, or `core.hooksPath` in a `git config` or `-c`. Tests for a two-line push, a heredoc with `${…}` and a push through a script.
-- [ ] `kalfa doctor` reports a repository whose hook is missing or not kalfa's.
+The hook lives in one folder on the machine, not in each repository: two
+repositories here keep `core.hooksPath` in a tracked folder (a new file there
+could be committed), and husky writes its folder again on each install. git
+reads `core.hooksPath` from the environment (`GIT_CONFIG_COUNT`,
+`GIT_CONFIG_KEY_0`, `GIT_CONFIG_VALUE_0`, git 2.31 and later), and the
+harness sets the environment of the agent's commands only, so only the
+agent's git uses kalfa's folder (decision push-rule-machine-hooks-folder).
+
+- [x] The hooks folder: the guardrails Module's machine step writes a folder in the machine data folder with one wrapper per git hook name; each wrapper runs the repository's own hook of that name (`core.hooksPath` read without kalfa's entry, else the `hooks` folder of the common git folder) with the same arguments and input. Uninstall removes the folder.
+- [x] The agent's environment: an Adapter names where its harness keeps the environment of the agent's commands (Claude Code: `env` in `settings.json`; not portable, each Adapter names its own); a machine step asks for entries, `kalfa install` sets them and `uninstall` puts back what was there.
+- [x] The check: `kalfa guardrails pre-push <remote> <url>` reads the refs git hands the hook and refuses a remote ref on a protected branch of the repository's settings; the pre-push wrapper runs it before the repository's own pre-push hook, and refuses the push when kalfa cannot run.
+- [x] The shell rule shrinks to a text check: `push` with `--no-verify`, `core.hooksPath` in a command, or a `GIT_CONFIG` variable. Tests for a two-line push, a heredoc with `${…}` and a push through a script, through the real hook in a scratch repository.
+- [x] `kalfa doctor` reports a missing or changed hooks folder or environment entry.
 
 ## 3. A Task across branches
 
