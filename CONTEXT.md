@@ -88,7 +88,7 @@ Work the Operator has named but not taken on, with the condition that brings it 
 _Avoid_: deferred record, backlog item, parked task
 
 **Cleanup**:
-The agent's reconciling of a closed Task Record into Long-term memory and the Rule packs, from the findings in its Sections' Remember parts, with the upkeep of a layer over its budget; kalfa gives its steps at Task close, and after it `kalfa task reconciled` marks the record reconciled.
+The agent's reconciling of a closed Task Record into Long-term memory and the Rule packs, from the findings in its Sections' Remember parts, with the upkeep of a layer over its budget; kalfa gives its steps at Task close, and after it `kalfa task reconciled` marks the record reconciled. The records closed before the Cleanup existed had their findings sent to the inbox, so `kalfa memory migrate` marks them reconciled without one, once per repository.
 _Avoid_: consolidation, reflection, memory review, Memory candidate
 
 **Remember part**:

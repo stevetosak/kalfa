@@ -1,14 +1,11 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { checkpointsDir, writeCheckpoint } from '../../src/core/checkpoint.ts';
-import { memoryHome, projectLayerOfKey } from '../../src/core/memory/home.ts';
-import { loadProject, type Project } from '../../src/core/project.ts';
+import { checkpointsDir } from '../../src/core/checkpoint.ts';
 import { loadSettings } from '../../src/core/settings.ts';
-import { recordPath, type TaskHeader, type TaskRecord, writeRecord } from '../../src/core/task-record.ts';
-import { gitRepo, tempRepo } from '../../test/helpers.ts';
+import { recordPath, type TaskHeader, type TaskRecord } from '../../src/core/task-record.ts';
+import { archived, DAYS, header, homeLog, KEY, setup } from '../../test/short-term-fixtures.ts';
 import { memoryModule, sourceScope } from './handlers.ts';
 import { tierOf } from './ranking.ts';
 import { openIndex } from './search.ts';
@@ -18,23 +15,8 @@ import { archiveOutsideWindow, namesTask, stayReason, type WindowFacts } from '.
 // A zone east of UTC, as in the Active days tests: the days are local ones.
 process.env.TZ = 'Europe/Skopje';
 
-const KEY = 'github.com/someone/project';
-const plan = (status: string) => `---\ntype: plan\ntitle: A Plan\nstatus: ${status}\n---\n\n# A Plan\n\n- [ ] A step.\n`;
-
-const header = (fields: Partial<TaskHeader> = {}): TaskHeader => ({
-	schema: 1,
-	goal: 'A goal',
-	status: 'closed',
-	started: '2026-03-01',
-	closed: '2026-03-01',
-	reconciled: '2026-03-01',
-	...fields,
-});
-
 const record = (id: string, fields: Partial<TaskHeader> = {}): TaskRecord => ({ id, path: `/nowhere/${id}.md`, header: header(fields), sections: [] });
 
-/** Active days 2026-03-01 to 2026-03-06: five of them after a close on 2026-03-01. */
-const DAYS = ['2026-03-01', '2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06'];
 const facts = (more: Partial<WindowFacts> = {}): WindowFacts => ({ planOpen: () => false, openTexts: [], activeDays: DAYS, days: 5, ...more });
 
 test('an open record, or a closed one the Cleanup has not reconciled, stays whatever its age', () => {
@@ -69,39 +51,6 @@ test('a Task id is named only as a whole word', () => {
 	assert.ok(!namesTask('feat-a_b', 'feat-a'));
 	assert.ok(!namesTask('featxa', 'feat.a'), 'the id is matched as text, not as a pattern');
 });
-
-function git(root: string, ...args: string[]): void {
-	const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t', GIT_COMMITTER_DATE: '2026-03-01T12:00:00', GIT_AUTHOR_DATE: '2026-03-01T12:00:00' };
-	execFileSync('git', ['-C', root, ...args], { env, stdio: 'ignore' });
-}
-
-/** A repository with Plans, one commit on 2026-03-01, and the session days 2026-03-02 to 2026-03-06; a machine with the memory Module on. */
-function setup(settings = '') {
-	const root = realpathSync(
-		gitRepo({
-			'kalfa.yaml': 'schema: 1\nmodules: []\n',
-			'.gitignore': '.kalfa/\n',
-			'docs/plan-open.md': plan('active'),
-			'docs/plan-done.md': plan('done'),
-			'docs/plan-broken.md': plan('unknown'),
-		}),
-	);
-	git(root, 'add', '.');
-	git(root, 'commit', '-q', '-m', 'first');
-	git(root, 'remote', 'add', 'origin', 'git@github.com:Someone/Project.git');
-	mkdirSync(join(root, '.kalfa'), { recursive: true });
-	writeFileSync(join(root, '.kalfa/active-days'), `${DAYS.slice(1).join('\n')}\n`);
-	const machine = tempRepo({ '.config/kalfa/config.yaml': `schema: 1\nmodules: [memory]\n${settings}` });
-	const env = { HOME: machine } as NodeJS.ProcessEnv;
-	const project = loadProject(root) as Project;
-	const write = (id: string, fields: Partial<TaskHeader> = {}, next = 'Nothing.') =>
-		writeRecord(root, { id, header: header(fields), sections: [{ title: `Work on ${id}`, parts: new Map([['Done', `The zeppelin work of ${id}.`], ['Next', next]]) }] });
-	const checkpoint = (task: string, at: string) => writeCheckpoint(root, { task, trigger: 'auto', at, summary: `Where ${task} stood at ${at}.` });
-	return { root, env, home: memoryHome(env), project, write, checkpoint };
-}
-
-const archived = (home: string, ...path: string[]) => join(projectLayerOfKey(home, KEY).dir, ...path);
-const homeLog = (home: string) => execFileSync('git', ['-C', home, 'log', '--format=%s'], { encoding: 'utf8' }).trim().split('\n');
 
 test('the records outside the window move with their Checkpoints to the archive in one commit; the others stay', () => {
 	const { root, home, project, write, checkpoint } = setup();

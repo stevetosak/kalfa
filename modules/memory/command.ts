@@ -1,17 +1,18 @@
 // `kalfa memory`: the memory Module owns Long-term memory (ADR 0003), so it
-// owns the whole command: the record subcommands (records.ts), search, lint
-// and inbox. The Core keeps the Memory home, the record format and the use
+// owns the whole command: the record subcommands (records.ts), search, lint,
+// inbox and the Migration of the Task Records (migrate.ts). The Core keeps the Memory home, the record format and the use
 // counts, which its own commands and the session start read too.
 import { type Command, parseCommandArgs, UsageError } from '../../src/cli/command.ts';
 import type { Io } from '../../src/cli/io.ts';
 import { layerName } from '../../src/cli/layers.ts';
-import { requireModule } from '../../src/cli/project.ts';
+import { requireModule, requireProject } from '../../src/cli/project.ts';
 import { commitHome, memoryHome, personalLayer, projectLayerOfKey, sessionLayers } from '../../src/core/memory/home.ts';
 import { markUsed } from '../../src/core/memory/usage.ts';
 import { loadProject, type Project } from '../../src/core/project.ts';
 import { loadSettings } from '../../src/core/settings.ts';
 import { findCandidate, readInbox } from './inbox.ts';
 import { findingLine } from './lint.ts';
+import { migrate, migrationLines, migrationPlan } from './migrate.ts';
 import { lintHere, settingsOf, sourceScope } from './handlers.ts';
 import { addRecord, type MemorySubcommand, RECORD_USAGE, recordSubcommands, recordType } from './records.ts';
 import { type Hit, openIndex } from './search.ts';
@@ -113,7 +114,17 @@ async function inbox(args: string[], io: Io): Promise<number> {
 	return run(rest, io);
 }
 
-const subcommands: Record<string, MemorySubcommand> = { ...recordSubcommands, search, lint: lintCommand, inbox };
+async function migrateCommand(args: string[], io: Io): Promise<number> {
+	const { values } = parseCommandArgs(args, { 'dry-run': { type: 'boolean' } });
+	const project = requireProject(io);
+	const days = settingsOf({ project, settings: loadSettings(io.env) })['window-days'];
+	const dryRun = values['dry-run'] === true;
+	const result = dryRun ? migrationPlan(project, days) : migrate(project, memoryHome(io.env), days);
+	io.out(migrationLines(result, dryRun).join('\n'));
+	return result.failure ? 1 : 0;
+}
+
+const subcommands: Record<string, MemorySubcommand> = { ...recordSubcommands, search, lint: lintCommand, inbox, migrate: migrateCommand };
 
 const USAGE = [
 	...RECORD_USAGE,
@@ -122,6 +133,7 @@ const USAGE = [
 	'kalfa memory inbox [list]',
 	'kalfa memory inbox accept <id> --type fact|decision|open|hub --layer personal|project --summary "<one line>" [--id <id>] [--source <link>]   (body on stdin, optional)',
 	'kalfa memory inbox reject <id> "<reason>"',
+	'kalfa memory migrate [--dry-run]   (once per repository: the closed Task Records from before the Cleanup are marked reconciled, then those outside the Short-term window move to the archive)',
 ];
 
 /** `kalfa memory`: it runs only where the machine settings or the project file turn the memory Module on. */

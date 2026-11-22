@@ -62,7 +62,7 @@ it, and the agent keeps its memory without a review by the Operator.
 
 **Done when:** `kalfa memory migrate` has run for every repository; each layer has a Root Hub, its subject Hubs and links, every rule has its form, and no proposed record or inbox candidate is left; the managed `/etc/claude-code/CLAUDE.md` names `kalfa rule add` and `kalfa memory add`; `kalfa doctor` shows every repository's session report below the cap; each layer's migration Task lists where each rule went and what it made active or closed.
 
-- [ ] `kalfa memory migrate [--dry-run]`: the existing closed Task Records are marked reconciled, since their candidates went through the old path, and those outside the window move to the archive.
+- [x] `kalfa memory migrate [--dry-run]`: the existing closed Task Records are marked reconciled, since their candidates went through the old path, and those outside the window move to the archive.
 - [ ] The kalfa layer: rule forms, Root Hub, subject Hubs, links, the proposed records and the inbox.
 - [ ] The Personal layer, the same way.
 - [ ] The infrastructure repository's layer, the same way.

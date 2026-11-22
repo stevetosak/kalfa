@@ -71,6 +71,12 @@ function windowFacts(root: string, records: readonly TaskRecord[], days: number)
 
 const checkpointFiles = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((name) => name.endsWith('.md')).sort() : []);
 
+/** The records among the repository's `records` that are outside the window. */
+export function outsideWindow(root: string, records: readonly TaskRecord[], days: number): TaskRecord[] {
+	const facts = windowFacts(root, records, days);
+	return records.filter((record) => stayReason(record, facts) === undefined);
+}
+
 /**
  * Moves each Task Record outside the window, with its Checkpoints, to the
  * archive in the Memory home in one commit, then removes them from the
@@ -78,9 +84,7 @@ const checkpointFiles = (dir: string) => (existsSync(dir) ? readdirSync(dir).fil
  * commit fails it throws, and the repository keeps every file.
  */
 export function archiveOutsideWindow(project: Project, home: string, days: number): string[] {
-	const records = listRecords(project.root);
-	const facts = windowFacts(project.root, records, days);
-	const leaving = records.filter((record) => stayReason(record, facts) === undefined);
+	const leaving = outsideWindow(project.root, listRecords(project.root), days);
 	if (!leaving.length) return [];
 	const tasks = projectTasksDir(home, project);
 	const checkpoints = projectCheckpointsDir(home, project);
