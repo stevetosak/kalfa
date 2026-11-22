@@ -53,7 +53,7 @@ it, and the agent keeps its memory without a review by the Operator.
 
 - [x] The Remember part replaces Memory candidates; the old names are still read.
 - [x] The Cleanup at Task close: the memory Module gives the agent its steps; `kalfa task reconciled [--task <id>]` marks the record.
-- [ ] Active days: the day of each session start per repository, beside the commit dates.
+- [x] Active days: the day of each session start per repository, beside the commit dates.
 - [ ] The window: a closed record stays while its Plan is active, an open Task links to it, or it closed fewer than N Active days ago (N = 5, a setting); otherwise, once reconciled, it moves with its Checkpoints to the archive.
 - [ ] Session start lines: the closed records that are not reconciled, and each Task with no write for seven days.
 - [ ] The inbox retires, after Part 5 decides the waiting candidates; Task close no longer adds to it since the Cleanup.
