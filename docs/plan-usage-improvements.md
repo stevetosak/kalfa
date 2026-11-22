@@ -81,13 +81,15 @@ agent's git uses kalfa's folder (decision push-rule-machine-hooks-folder).
 
 ## 4. Memory candidates from the Section
 
-**Done when:** `kalfa section close` writes each candidate of its Memory candidates part as a proposed record and prints the ids; a candidate that names an existing id is not written again; `none` with or without a reason writes nothing; the guidance tells the agent to commit and close the Section in one Bash call; local checks pass.
+Replaced on 2026-11-22 by the [memory revision](plan-memory-revision.md) ([ADR 0003](adr/0003-short-and-long-term-memory.md)): the Operator no longer reviews candidates, a Section marks what to keep, and the Cleanup at Task close writes it. Only the one-call step stays.
 
-- [ ] One candidate per line in the part: a summary, an optional layer (`[personal]`, else project) and an optional body after it; `section close` writes them with the same code as `kalfa memory add --proposed`.
-- [ ] A bare id of an existing record counts as a reference, not a new candidate (the form agents use today).
-- [ ] `none (<reason>)` counts as no candidate (the open record candidates-none-with-reason).
+**Done when:** the guidance tells the agent to commit and close the Section in one Bash call; local checks pass.
+
+- [ ] ~~One candidate per line in the part: a summary, an optional layer (`[personal]`, else project) and an optional body after it; `section close` writes them with the same code as `kalfa memory add --proposed`.~~
+- [ ] ~~A bare id of an existing record counts as a reference, not a new candidate (the form agents use today).~~
+- [ ] ~~`none (<reason>)` counts as no candidate (the open record candidates-none-with-reason).~~
 - [ ] The core hint and the successor prompt: commit, `section close` and anything else at a Section end in one Bash call.
-- [ ] Supersede the personal rule memory-candidates-written-proposed: candidates go in the Section; `kalfa memory add --proposed` stays for one found in the middle of a Section.
+- [ ] ~~Supersede the personal rule memory-candidates-written-proposed: candidates go in the Section; `kalfa memory add --proposed` stays for one found in the middle of a Section.~~
 
 ## Order
 

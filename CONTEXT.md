@@ -64,7 +64,7 @@ One logical step inside a Task, recorded when it closes.
 _Avoid_: chunk, phase, step
 
 **Task Record**:
-The private, git-ignored file that holds one Task's Sections, findings with proof, decisions, Lesson candidates and next steps.
+The private, git-ignored file that holds one Task's Sections: what was done, findings with proof, decisions, the findings to keep and next steps.
 _Avoid_: brief, notes, journal
 
 **Handoff**:
@@ -87,13 +87,9 @@ _Avoid_: roadmap, backlog, todo
 Work the Operator has named but not taken on, with the condition that brings it back. It lives in the private deferred list of its Memory layer, not in the repository, and it is not a Memory record: it leaves the list when the Operator takes it on (it becomes a Plan or a Task) or drops it. A condition is only reported; it never starts the work.
 _Avoid_: deferred record, backlog item, parked task
 
-**Memory candidate**:
-A finding from a Task (a possible rule, fact, decision or open item), with its proof, kept until the Operator accepts or drops it. Candidates not yet answered wait in the inbox of the Memory home.
-_Avoid_: Lesson candidate, learning, takeaway
-
-**Lesson**:
-An accepted rule that came from a fault, with a link to the proof of that fault.
-_Avoid_: learning, takeaway
+**Cleanup**:
+The agent's reconciling of a closed Task Record into Long-term memory and the Rule packs, from the findings its Sections marked to keep; after it the record is reconciled.
+_Avoid_: consolidation, reflection, memory review, Memory candidate
 
 ### Sessions
 
@@ -123,38 +119,56 @@ _Avoid_: compaction (a `/compact` is not a Reset), restart, handoff
 
 ### Memory
 
+**Short-term memory**:
+The detailed memory of a project's recent work: the Task Records and Checkpoints of its open Tasks, and of each closed Task that open work still links to or that closed only a few Active days ago. The agent cleans it up into Long-term memory; a record that leaves it moves to the archive and stays searchable.
+_Avoid_: working memory, session memory, journal
+
+**Active day**:
+A day with a commit or a session start in a repository; the age of a closed Task counts in these, so idle days do not age it.
+_Avoid_: working day, business day
+
+**Long-term memory**:
+The reconciled, lasting memory of the agent: Memory records in the Memory home, linked to each other, that the agent retrieves as the work needs them, not all at once.
+_Avoid_: standing memory, recall memory, archive, knowledge base
+
+**Hub**:
+A Memory record that maps one subject: a short text and the links to the records of that subject.
+_Avoid_: index, topic, map of content
+
+**Root Hub**:
+The top Hub of a Memory layer: a short map of the layer, with links to its subject Hubs, that loads at every session start.
+_Avoid_: index, home page, MEMORY.md
+
 **Memory layer**:
-One of three scopes of standing agent memory, each with its own budget: the personal layer, the Module rule packs and the project layer.
+One of the two private scopes in the Memory home, each with its Long-term memory and its private Rule pack: the Personal layer and the Project layer.
 _Avoid_: memory file, context
 
 **Personal layer**:
-The operator's private memory that loads in every session: profile, generic preferences, generic standing rules and cross-project Lessons.
+The Operator's private layer that applies in every project: what the agent knows about the Operator and the work in general, and the rules that hold everywhere.
 _Avoid_: global memory, user memory
 
-**Rule pack**:
-The generic, publishable domain rules a Module carries, loaded only where that Module is on.
-_Avoid_: domain memory, guidelines
-
 **Project layer**:
-The private memory of one repository: its sessions, decisions and environment facts. It is kept outside the repository, in the Memory home, and every work tree and clone of the repository shares it.
+The private layer of one repository: its decisions, environment facts and rules. It is kept outside the repository, in the Memory home, and every work tree and clone of the repository shares it.
 _Avoid_: local memory, repo notes
 
 **Memory home**:
 The one private place, with its own history, that holds the Personal layer and every Project layer. It is never inside a project repository.
 _Avoid_: memory store, memory dir
 
-**Standing memory**:
-The memory that must be in every session where it applies: the in-scope part of the three Memory layers, under their budgets. The Core owns it, so it never depends on a Module being on.
-_Avoid_: always-on memory, context
-
-**Instruction file**:
-The file a harness loads in full at every session start, where kalfa writes the Personal layer's Loaded tier, because a hook's context has a cap the layer passes. `kalfa install` writes it first; every `kalfa memory` command and every session start renew it. For Claude Code it is `~/.claude/rules/kalfa-memory.md`.
-_Avoid_: rules file, CLAUDE.md, memory file
-
 **Memory record**:
-One piece of memory in one file, of one type: a rule (how to act; a Lesson is a rule), a fact (how something is), a decision (what was chosen and why) or an open item (left open on purpose). It has a status and the date it was last confirmed, a newer record can supersede it, and a record whose work is done, or that no longer applies, is closed: it stops loading, and search still finds it. Its layer is its scope.
+One piece of Long-term memory in one file, of one type: a fact (how something is), a decision (what was chosen and why), an open item (left open on purpose) or a Hub. It links to related records, has a status and the date it was last confirmed; a newer record can supersede it, and a closed one stays searchable. Its layer is its scope.
 _Avoid_: memory entry, note, memory file
 
-**Recall memory**:
-The memory that is captured, searched, promoted and checked on demand rather than loaded every time. A replaceable Module owns it.
-_Avoid_: long-term memory, archive
+### Instructions
+
+**Rule pack**:
+A set of rules in harness-neutral files, each loaded at every session start or only when the agent touches a matching file. A Module's Rule pack is generic and public; a Memory layer's Rule pack is private and lives in the Memory home.
+_Avoid_: domain memory, guidelines, rule records
+
+**Instruction file**:
+A harness file that kalfa writes from a Rule pack, so the harness loads its rules natively: always, or for matching paths. For Claude Code it is a file under `.claude/rules/` of the repository or of the user's home.
+_Avoid_: rules file, CLAUDE.md, memory file
+
+**Lesson**:
+A rule that came from a fault, with a link to the Memory record that holds the proof of that fault.
+_Avoid_: learning, takeaway
