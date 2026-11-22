@@ -22,10 +22,10 @@ import { renderItem } from '../plans/deferred.ts';
 import { memoryCommand } from './command.ts';
 import { candidateFiles, readInbox, splitCandidates } from './inbox.ts';
 import { lint } from './lint.ts';
-import { memoryModule, SEARCHABLE_PROMPT } from './handlers.ts';
+import { memoryModule, SEARCHABLE_PROMPT, sourceScope } from './handlers.ts';
 import { openIndex, type SearchOptions } from './search.ts';
 import { memorySettings } from './settings.ts';
-import { type ShadowEntry, shadowDir } from './shadow.ts';
+import { SHADOW_HITS, type ShadowEntry, shadowDir } from './shadow.ts';
 import { markdownPieces } from './sources.ts';
 
 const KEY = 'github.com/someone/project';
@@ -419,6 +419,17 @@ test('the shadow log: each prompt with words writes its own hits and what recall
 	const hit = (kind: string) => second!.hits.find((h) => h.kind === kind);
 	assert.deepEqual({ ...hit('doc'), score: 0 }, { kind: 'doc', tier: 'long-term', ref: 'docs/runbook.md:3', score: 0, share: 1, band: true, held: false });
 	assert.equal(hit('task')?.held, true, "the Task's own record is held");
+});
+
+test('a shadow line counts every match of the prompt and keeps the first ten', async () => {
+	const { repo, env } = machine(SHADOW_ON);
+	for (let i = 0; i < 12; i++) await memory(repo, env, ['add', '--type', 'fact', '--layer', 'project', '--summary', `Zeppelin hangar note ${i}.`]);
+	const words = 'where is the zeppelin hangar';
+	const all = openIndex(sourceScope(loadProject(repo), memorySettings.parse({}), env)).search(words, 1000);
+	await dispatch({ name: 'prompt.submit', harness: 'fake', cwd: repo, prompt: words, sessionId: 's1' }, modules, contextOf(repo, env));
+	const [line] = shadowLines(env);
+	assert.ok(all.length > SHADOW_HITS, `${all.length} matches`);
+	assert.deepEqual([line!.first, line!.matches, line!.hits.length], [false, all.length, SHADOW_HITS]);
 });
 
 test('with the shadow log on, the shim runs on prompts with words to search, through the filter in the event table', () => {
