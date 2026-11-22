@@ -38,10 +38,12 @@ related records and into the Hub of its subject. When a layer is over its
 budget, the steps also list its likely duplicates and its open items: merge
 the duplicates and close each item whose work you can show is done. You
 decide; do not ask the Operator. Then mark the record with `kalfa task
-reconciled --task <id>`. A marked record stays in the repository while its
-Plan is open, an open Task names it, or fewer than five Active days follow its
-close; a later Task close then moves it with its Checkpoints to the archive in
-the Memory home, where search still finds it.
+reconciled --task <id>`. The steps also list up to three closed records that
+missed their Cleanup, the oldest first: take their findings in the same way,
+with their own Task as the source, and mark each one. A marked record stays
+in the repository while its Plan is open, an open Task names it, or fewer than
+five Active days follow its close; a later Task close then moves it with its
+Checkpoints to the archive in the Memory home, where search still finds it.
 
 Candidates from before the Cleanup wait in the inbox (`kalfa memory inbox`)
 until the Migration decides them (Plan Part 5); leave them.
