@@ -32,11 +32,19 @@ test('the event table lists each handled event once, in Core event order', () =>
 });
 
 test('an event a Module handles only on a wake is in no event table', () => {
-	const woken = { name: 'woken', handlers: { 'prompt.submit': () => undefined, 'session.start': () => undefined }, wakeOnly: ['prompt.submit' as const] };
+	const woken = { name: 'woken', handlers: { 'prompt.submit': () => undefined, 'session.start': () => undefined }, wakeOnly: { 'prompt.submit': true as const } };
 	assert.deepEqual(handledEvents([woken]), ['session.start']);
 	const meter = { name: 'meter', handlers: { 'prompt.submit': () => undefined }, filters: { 'prompt.submit': '/meter' } };
 	const root = gitRepo({ '.gitignore': '.kalfa/\n' });
 	assert.equal(readFileSync(writeEventTable(root, [woken, meter]), 'utf8'), 'session.start\nprompt.submit\t(/meter)\n', 'the wake-only Module takes no filter away');
+	const gated = (gate: () => boolean) => ({ name: 'gated', handlers: { 'prompt.submit': () => undefined }, wakeOnly: { 'prompt.submit': gate } });
+	const context = { project: undefined, settings: { schema: 1 as const, modules: [] } };
+	assert.deepEqual(handledEvents([gated(() => true)], context), [], 'wake-only here');
+	assert.deepEqual(handledEvents([gated(() => false)], context), ['prompt.submit'], 'a setting makes it run on every prompt');
+	const broken = () => {
+		throw new Error('bad setting');
+	};
+	assert.deepEqual(handledEvents([gated(broken)], context), ['prompt.submit'], 'a gate that fails starts Node, so the handler reports it');
 });
 
 test('an event keeps its filter only while every Module that handles it has one', () => {

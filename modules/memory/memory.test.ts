@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { sectionCommand, taskCommand } from '../../src/cli/commands/task.ts';
 import { dispatch } from '../../src/core/dispatcher.ts';
 import { KalfaError } from '../../src/core/errors.ts';
+import type { SessionStartSource } from '../../src/core/events.ts';
 import { handledEvents } from '../../src/core/fast-path.ts';
 import { deferredDir, memoryHome, personalLayer, projectLayerOfKey, scanLayer } from '../../src/core/memory/home.ts';
 import { markUsed, readUsage } from '../../src/core/memory/usage.ts';
@@ -13,6 +14,7 @@ import { renderMemoryRecord } from '../../src/core/memory/record.ts';
 import type { HandlerContext } from '../../src/core/modules.ts';
 import { loadProject } from '../../src/core/project.ts';
 import { DEFAULT_MEMORY_BUDGETS, loadSettings } from '../../src/core/settings.ts';
+import { wakePath } from '../../src/core/wake.ts';
 import { coreModule } from '../../src/modules/core.ts';
 import { fakeAdapter, registry } from '../../test/fakes.ts';
 import { captureIo, gitRepo, tempRepo } from '../../test/helpers.ts';
@@ -21,7 +23,7 @@ import { memoryCommand } from './command.ts';
 import { candidateFiles, readInbox, splitCandidates } from './inbox.ts';
 import { lint } from './lint.ts';
 import { memoryModule } from './handlers.ts';
-import { openIndex } from './search.ts';
+import { openIndex, type SearchOptions } from './search.ts';
 import { memorySettings } from './settings.ts';
 import { markdownPieces } from './sources.ts';
 
@@ -163,7 +165,7 @@ test('kalfa memory search marks the records it returns as used, and the recall d
 	const project = projectLayerOfKey(memoryHome(env), KEY);
 	const personal = personalLayer(memoryHome(env));
 	const prompt = { name: 'prompt.submit', harness: 'fake', cwd: repo, prompt: 'how does the walrus gateway and the walrus laptop work' } as const;
-	const recall = await memoryModule.handlers['prompt.submit']?.(prompt, contextOf(repo, env));
+	const recall = await memoryModule.handlers['prompt.submit']?.(prompt, { ...contextOf(repo, env), wake: {} });
 	assert.match(String(recall?.context), /walrus gateway/);
 	assert.deepEqual(readUsage(project, env), {}, 'the recall is not a use');
 	assert.equal((await memory(repo, env, ['search', 'walrus'])).code, 0);
@@ -202,9 +204,9 @@ test('search ranks the relevant Long-term sources first, then the Task Records, 
 	writeFileSync(older, readFileSync(join(tasks, 'feat-rotation.md'), 'utf8').replace('Wrote the rotation.', 'Wrote the rotation: rotate the database password with kluster.'));
 	utimesSync(older, new Date('2026-01-01'), new Date('2026-01-01'));
 	const scope = { project: loadProject(repo), env, archives: memorySettings.parse({}).archives };
-	const names = () =>
+	const names = (options?: SearchOptions) =>
 		openIndex(scope)
-			.search('rotate the database password with kluster', 20)
+			.search('rotate the database password with kluster', 20, options)
 			.map((h) => h.record?.id ?? /^kalfa defer show (\S+)/.exec(h.ref)?.[1] ?? `${h.kind}${h.task ? ` ${h.task}` : ''}`);
 	const before = names();
 	assert.ok(before.indexOf('vault-a') < before.indexOf('vault-b'), `without use the better match leads: ${before.join(', ')}`);
@@ -215,6 +217,8 @@ test('search ranks the relevant Long-term sources first, then the Task Records, 
 	assert.ok(before.indexOf('task aaa-older') < before.indexOf('rotation-closed'), `a closed record after the Task Records: ${before.join(', ')}`);
 	assert.ok(before.indexOf('task feat-rotation') < before.indexOf('rotation-dropped'), `a dropped deferred item after the Task Records: ${before.join(', ')}`);
 	assert.equal(before.at(-1), 'weak', `a Long-term record under the band comes last: ${before.join(', ')}`);
+	assert.deepEqual(names({ relevantOnly: true }), before.slice(0, -1), 'only the relevant band: the hit under it is left out');
+	assert.deepEqual(names({ relevantOnly: true, keep: (h) => h.record?.id === 'weak' }), ['weak'], 'the band counts among the hits kept');
 	markUsed(layer, ['vault-b'], env, '2026-06-01');
 	const after = names();
 	assert.ok(after.indexOf('vault-b') < after.indexOf('vault-a'), `the record used later leads its tier: ${after.join(', ')}`);
@@ -256,17 +260,79 @@ test('task close proposes upkeep only for a layer over its budget: its duplicate
 	assert.match(close.err + close.out, /upkeep proposed for github\.com\/someone\/project \(over budget\)/);
 });
 
-test('session start recalls for the open Task without its own record, and counts the inbox', async () => {
+/** A session in `repo`: its start and its prompts, through the Dispatcher, which owns the wakes. */
+function sessionIn(repo: string, env: NodeJS.ProcessEnv, sessionId = 's1') {
+	const start = (source: SessionStartSource = 'startup') => dispatch({ name: 'session.start', harness: 'fake', cwd: repo, source, sessionId }, modules, contextOf(repo, env));
+	const prompt = (text: string) => dispatch({ name: 'prompt.submit', harness: 'fake', cwd: repo, prompt: text, sessionId }, modules, contextOf(repo, env));
+	return { start, prompt };
+}
+
+test('session start does not recall, asks a wake and counts the inbox; the first prompt recalls once for the Task without its own record', async () => {
 	const { repo, env } = machine();
 	await startTask(repo, env, 'none');
 	mkdirSync(join(memoryHome(env), 'inbox'), { recursive: true });
 	writeFileSync(join(memoryHome(env), 'inbox', 'x-1.md'), `---\nschema: 1\nproject: ${KEY}\ntask: other\ncreated: 2026-10-31\n---\n\nA candidate.\n`);
-	const result = await dispatch({ name: 'session.start', harness: 'fake', cwd: repo, source: 'startup' }, modules, contextOf(repo, env));
-	const context = result.context.join('\n');
-	assert.match(context, /Recall for Task feat-rotation[\s\S]*\[doc\] docs\/runbook\.md › Runbook › Rotate the database password — docs\/runbook\.md:3/);
+	const { start, prompt } = sessionIn(repo, env);
+	const result = await start();
+	assert.doesNotMatch(result.context.join('\n'), /Recall/);
+	assert.match(result.context.join('\n'), /1 Memory candidate waits in the inbox/);
+	assert.ok(result.notice.includes('kalfa: memory: 1 in the inbox'), result.notice.join('\n'));
+	assert.ok(existsSync(wakePath(repo, 'prompt.submit', 's1')));
+	assert.deepEqual((await prompt('/kalfa-status')).context, [], 'a slash command keeps the wake, also with a Task');
+
+	const first = await prompt('continue');
+	const context = first.context.join('\n');
+	assert.match(context, /^Recall for this prompt and Task feat-rotation \(kalfa memory search[^\n]*\n- \[doc\] docs\/runbook\.md › Runbook › Rotate the database password — docs\/runbook\.md:3/);
 	assert.doesNotMatch(context, /\[task\] Task feat-rotation/);
-	assert.match(context, /1 Memory candidate waits in the inbox/);
-	assert.ok(result.notice.includes('kalfa: memory: recall 1 hit · 1 in the inbox'), result.notice.join('\n'));
+	assert.deepEqual(first.notice, ['kalfa: memory: recall 1 hit']);
+	assert.deepEqual((await prompt('how do we rotate the database password')).context, [], 'once per session');
+});
+
+test('the first prompt searches with its words and the Task, the relevant hits only', async () => {
+	const { repo, env } = machine();
+	await startTask(repo, env, 'none');
+	await memory(repo, env, ['add', '--type', 'fact', '--layer', 'project', '--summary', 'The zeppelin gateway runs on Envoy.']);
+	await memory(repo, env, ['add', '--type', 'fact', '--layer', 'project', '--summary', 'Kluster is the cluster tool.']);
+	const { start, prompt } = sessionIn(repo, env);
+	await start();
+	const context = (await prompt('why does the zeppelin gateway use Envoy')).context.join('\n');
+	assert.match(context, /- \[memory\] [^\n]*The zeppelin gateway runs on Envoy\./, 'from the prompt');
+	assert.match(context, /- \[doc\] docs\/runbook\.md › Runbook › Rotate the database password/, 'from the Task');
+	assert.doesNotMatch(context, /Kluster is the cluster tool/, 'a hit under the relevant band stays out');
+});
+
+test('a slash command, or a short prompt with no Task, keeps the wake for the next prompt', async () => {
+	const { repo, env } = machine();
+	const { start, prompt } = sessionIn(repo, env);
+	await start();
+	assert.deepEqual((await prompt('/kalfa-status')).context, []);
+	assert.deepEqual((await prompt('go on')).context, []);
+	assert.ok(existsSync(wakePath(repo, 'prompt.submit', 's1')), 'still waiting');
+	assert.match((await prompt('how do we rotate the database password')).context.join('\n'), /^Recall for this prompt \(kalfa[\s\S]*docs\/runbook\.md:3/);
+	assert.ok(!existsSync(wakePath(repo, 'prompt.submit', 's1')));
+});
+
+test('a resumed or forked session does not recall again; a compacted one does', async () => {
+	const { repo, env } = machine();
+	await startTask(repo, env, 'none');
+	const { start, prompt } = sessionIn(repo, env);
+	for (const source of ['resume', 'fork'] as const) {
+		await start(source);
+		assert.deepEqual((await prompt('continue')).context, [], source);
+	}
+	await start('compact');
+	assert.match((await prompt('continue')).context.join('\n'), /^Recall for this prompt and Task feat-rotation/);
+});
+
+test('parallel sessions in one checkout each recall on their own first prompt', async () => {
+	const { repo, env } = machine();
+	await startTask(repo, env, 'none');
+	const one = sessionIn(repo, env, 'one');
+	const two = sessionIn(repo, env, 'two');
+	await one.start();
+	await two.start();
+	assert.match((await two.prompt('continue')).context.join('\n'), /^Recall for this prompt and Task/);
+	assert.match((await one.prompt('continue')).context.join('\n'), /^Recall for this prompt and Task/);
 });
 
 test('session start loads the Root Hub of a layer that has one, first, in place of its index lines; a cut one gets a notice', async () => {
@@ -283,14 +349,13 @@ test('session start loads the Root Hub of a layer that has one, first, in place 
 	const context = result.context.join('\n\n');
 	assert.match(context, /Personal layer\nIndex[^\n]*\n- \[fact\] The keyboard has a Compose key\./, 'a layer without a Root Hub loads its index lines');
 	assert.doesNotMatch(context, /Project layer \(github\.com\/someone\/project\)\nIndex/);
-	assert.match(context, /\n\nRoot Hub of the Project layer \(github\.com\/someone\/project\);[^\n]*\nThe map of this project\.\n\nGateways: \[\[the-zeppelin-gateway-runs-on-envoy\]\]\.\n\nRecall for Task/);
-	assert.ok(context.indexOf('Root Hub of') < context.indexOf('Recall for Task feat-rotation'), 'the Root Hub comes before recall');
-	assert.match(result.notice.join('\n'), /^kalfa: memory: 1 Root Hub \(github\.com\/someone\/project\) · recall \d hits?$/m);
+	assert.match(context, /\n\nRoot Hub of the Project layer \(github\.com\/someone\/project\);[^\n]*\nThe map of this project\.\n\nGateways: \[\[the-zeppelin-gateway-runs-on-envoy\]\]\.$/);
+	assert.match(result.notice.join('\n'), /^kalfa: memory: 1 Root Hub \(github\.com\/someone\/project\)$/m);
 	assert.doesNotMatch(result.notice.join('\n'), /over its limit|memory lint/);
 
 	await memory(repo, env, ['supersede', 'root', '--layer', 'project', '--summary', 'The map of this project, longer.'], `${'- A subject: [[the-zeppelin-gateway-runs-on-envoy]]\n'.repeat(12)}`);
 	const cut = await dispatch({ name: 'session.start', harness: 'fake', cwd: repo, source: 'startup' }, modules, contextOf(repo, env));
-	const hub = cut.context.join('\n\n').split('\n\nRoot Hub of ')[1]?.split('\n\nRecall for Task')[0] ?? '';
+	const hub = cut.context.join('\n\n').split('\n\nRoot Hub of ')[1] ?? '';
 	assert.ok(`Root Hub of ${hub}`.length <= 300, `${hub.length} characters`);
 	assert.match(hub, /kalfa memory show the-map-of-this-project-longer for this one[\s\S]*\n… cut at 300 characters: kalfa memory show the-map-of-this-project-longer has the rest$/);
 	const notices = cut.notice.join('\n');
@@ -298,11 +363,22 @@ test('session start loads the Root Hub of a layer that has one, first, in place 
 	assert.match(notices, /^kalfa: memory lint: 1 finding/m, 'the lint names it too');
 });
 
-test('recall on each prompt is off by default: the shim does not run for it, and the Dispatcher skips it', async () => {
+test('the first prompt does not recall a Root Hub the session start loaded', async () => {
+	const { repo, env } = machine();
+	await memory(repo, env, ['add', '--type', 'fact', '--layer', 'project', '--summary', 'The zeppelin gateway runs on Envoy.']);
+	await memory(repo, env, ['add', '--type', 'hub', '--layer', 'project', '--id', 'root', '--summary', 'The zeppelin map.'], 'Gateways: [[the-zeppelin-gateway-runs-on-envoy]].');
+	const { start, prompt } = sessionIn(repo, env);
+	await start();
+	const context = (await prompt('where is the zeppelin gateway')).context.join('\n');
+	assert.match(context, /The zeppelin gateway runs on Envoy\./);
+	assert.doesNotMatch(context, /The zeppelin map/);
+});
+
+test('recall on each prompt is off by default: the shim runs only on a wake, and with no wake the handler adds nothing', async () => {
 	const off = machine();
 	const offContext = contextOf(off.repo, off.env);
 	assert.ok(!handledEvents([memoryModule], offContext).includes('prompt.submit'));
-	assert.ok(handledEvents([memoryModule]).includes('prompt.submit'), 'without a context every handler counts');
+	assert.ok(handledEvents([memoryModule]).includes('prompt.submit'), 'without a context the gate counts as no wake');
 	const prompt = { name: 'prompt.submit', harness: 'fake', cwd: off.repo, prompt: 'how do we rotate the database password' } as const;
 	assert.deepEqual((await dispatch(prompt, modules, offContext)).context, []);
 

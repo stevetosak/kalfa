@@ -7,8 +7,11 @@
 # The table: in a repository with kalfa.yaml, its own (the machine's Modules
 # and the project's); elsewhere the machine's, and none at all when the machine
 # settings do not exist. A missing table, or one older than a file it is made
-# from, starts Node, and Node writes it again. A wake marker for the event
-# (.kalfa/wake/<event>, set by a handler) starts Node once; the handler removes it.
+# from, starts Node, and Node writes it again. The session's wake marker for
+# the event (.kalfa/wake/<event>.<session>, set by a handler) starts Node once;
+# the Dispatcher removes it. The Adapter's probe reads the session id; when it
+# cannot (no jq, a harness without session ids), any marker for the event
+# starts Node, and Node takes the right one.
 set -u
 harness=${1:-}
 event=${2:-}
@@ -18,11 +21,26 @@ here=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 # shim would go on and could start Node a second time.
 run() { exec "${KALFA_NODE:-node}" "$here/kalfa.mjs" hook "$@" < <(printf '%s' "$input"); }
 
+probe() {
+	local probe=$here/adapters/$harness/context-probe
+	[[ -x $probe ]] && "$probe" "$1" <<< "$input" 2> /dev/null
+}
+woken() {
+	local wakes=$root/.kalfa/wake marker session
+	for marker in "$wakes/$event" "$wakes/$event".*; do
+		[[ -e $marker ]] || continue
+		session=$(probe session)
+		[[ -z $session || -e $wakes/$event.${session//[^A-Za-z0-9_-]/_} ]]
+		return
+	done
+	return 1
+}
+
 case " @CORE_EVENTS@ " in *" $event "*) run "$@" ;; esac
 config=${XDG_CONFIG_HOME:-$HOME/.config}/kalfa/config.yaml
 root=$PWD
 until [[ -e $root/.git || $root == / ]]; do root=$(dirname "$root"); done
-[[ -e $root/.git && -e $root/.kalfa/wake/$event ]] && run "$@"
+[[ -e $root/.git ]] && woken && run "$@"
 if [[ -e $root/.git && -f $root/kalfa.yaml ]]; then
 	table=$root/.kalfa/events
 	[[ $table -nt $root/kalfa.yaml ]] || run "$@"
@@ -34,9 +52,8 @@ fi
 # The probe prints the context size, 0 when no Module acts on this session
 # (a subagent), or nothing when it cannot tell; then Node decides.
 context_from() {
-	local probe=$here/adapters/$harness/context-probe size
-	[[ -x $probe ]] || return 0
-	size=$("$probe" <<< "$input" 2> /dev/null)
+	local size
+	size=$(probe size)
 	[[ -z $size ]] || ((size >= $1))
 }
 tab=$'\t'

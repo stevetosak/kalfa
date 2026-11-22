@@ -43,7 +43,7 @@ it, and the agent keeps its memory without a review by the Operator.
 
 - [x] The Root Hubs in the session report, with their limit; a layer without a Root Hub still loads its index lines.
 - [x] The deferred items as a count; `/kalfa-status` keeps the full list.
-- [ ] First-prompt recall: one search with the prompt and the Task, once per session.
+- [x] First-prompt recall: one search with the prompt and the Task, once per session.
 - [ ] The shadow log: each prompt's search hits written to a log in the cache folder, not injected.
 - [ ] The personal Instruction file `kalfa-memory.md` retires; the rules come from Part 1's files.
 

@@ -1,6 +1,7 @@
 // Adapter contract tests on payloads recorded from real Claude Code sessions
 // (scripts/record-claude-fixtures.sh). Every recorded version must pass.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -127,3 +128,18 @@ test('after a compaction only a notice is printed', () => {
 	assert.deepEqual(json(expected['compact.after']!, { context: ['ignored'], notice: ['saved'] }), { systemMessage: 'saved' });
 });
 
+
+const hasJq = (() => {
+	try {
+		execFileSync('jq', ['--version'], { stdio: 'ignore' });
+		return true;
+	} catch {
+		return false;
+	}
+})();
+
+test('the Claude probe prints the session id for the wake marker, nothing without one', { skip: !hasJq && 'jq is not installed' }, () => {
+	const probe = (payload: object) => execFileSync('bash', ['src/adapters/claude/context-probe.sh', 'session'], { input: JSON.stringify(payload), encoding: 'utf8' }).trim();
+	assert.equal(probe({ session_id: '0f3e-9a', prompt: 'hi' }), '0f3e-9a');
+	assert.equal(probe({ prompt: 'hi' }), '');
+});

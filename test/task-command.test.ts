@@ -7,6 +7,7 @@ import { sectionCommand, taskCommand } from '../src/cli/commands/task.ts';
 import { main } from '../src/cli/main.ts';
 import { isContinueWord } from '../src/core/continue-word.ts';
 import { CHECKPOINTS_KEPT, checkpointsDir, lastCheckpoint, writeCheckpoint } from '../src/core/checkpoint.ts';
+import { dispatch } from '../src/core/dispatcher.ts';
 import { COMPACT_FOCUS_MAX, compactFocus, writeRecord } from '../src/core/task-record.ts';
 import { wakePath } from '../src/core/wake.ts';
 import { coreModule } from '../src/modules/core.ts';
@@ -136,38 +137,46 @@ test('after /clear the Operator sees the brief, and the agent gets a pointer, no
 	assert.doesNotMatch(clear?.context ?? '', /Next: render it/);
 });
 
-test('the first prompt after /clear: a continue word loads the Handoff once', async () => {
+/** The first prompts after a session start, through the Dispatcher, which owns the wakes. */
+async function clearedTask() {
 	const { root, context, base } = await openTask();
-	await coreModule.handlers['session.start']!({ ...base, source: 'clear', sessionId: 's1' }, context);
-	assert.equal(existsSync(wakePath(root, 'prompt.submit')), true);
-	const prompt = (text: string) => coreModule.handlers['prompt.submit']!({ harness: 'fake', cwd: root, name: 'prompt.submit', prompt: text, sessionId: 's1' }, context);
+	const start = (sessionId: string) => dispatch({ ...base, source: 'clear', sessionId }, modules, context);
+	const prompt = (text: string, sessionId = 's1') => dispatch({ harness: 'fake', cwd: root, name: 'prompt.submit', prompt: text, sessionId }, modules, context);
+	return { root, start, prompt };
+}
+
+test('the first prompt after /clear: a continue word loads the Handoff once', async () => {
+	const { root, start, prompt } = await clearedTask();
+	await start('s1');
+	assert.equal(existsSync(wakePath(root, 'prompt.submit', 's1')), true);
 	const first = await prompt(' Continue! ');
-	assert.match(first?.context ?? '', /^The Operator continues Task feat-monitoring\. Continue the Task from its record[\s\S]*\nDone when: it works\n[\s\S]*Next: render it\.$/);
-	assert.equal(first?.notice, 'kalfa: Handoff of Task feat-monitoring loaded');
-	assert.equal(existsSync(wakePath(root, 'prompt.submit')), false);
-	assert.equal(await prompt('continue'), undefined);
+	assert.match(first.context.join('\n'), /^The Operator continues Task feat-monitoring\. Continue the Task from its record[\s\S]*\nDone when: it works\n[\s\S]*Next: render it\.$/);
+	assert.deepEqual(first.notice, ['kalfa: Handoff of Task feat-monitoring loaded']);
+	assert.equal(existsSync(wakePath(root, 'prompt.submit', 's1')), false);
+	assert.deepEqual((await prompt('continue')).context, []);
 });
 
-test('the first prompt after /clear: any other prompt is a new task and uses up the wake', async () => {
-	const { root, context, base } = await openTask();
-	await coreModule.handlers['session.start']!({ ...base, source: 'clear', sessionId: 's1' }, context);
-	const prompt = (text: string, sessionId = 's1') => coreModule.handlers['prompt.submit']!({ harness: 'fake', cwd: root, name: 'prompt.submit', prompt: text, sessionId }, context);
-	assert.equal(await prompt('fix the login page'), undefined);
-	assert.equal(existsSync(wakePath(root, 'prompt.submit')), false);
-	assert.equal(await prompt('continue'), undefined);
+test('the first prompt after /clear: any other prompt is a new task and uses up the wake; another session leaves it', async () => {
+	const { root, start, prompt } = await clearedTask();
+	await start('s1');
+	assert.deepEqual((await prompt('fix the login page')).context, []);
+	assert.equal(existsSync(wakePath(root, 'prompt.submit', 's1')), false);
+	assert.deepEqual((await prompt('continue')).context, []);
 
-	await coreModule.handlers['session.start']!({ ...base, source: 'clear', sessionId: 's1' }, context);
-	assert.equal(await prompt('continue', 'another session'), undefined, 'a wake from another session is dropped');
-	assert.equal(existsSync(wakePath(root, 'prompt.submit')), false);
+	await start('s1');
+	await start('s2');
+	assert.deepEqual((await prompt('fix the login page', 's2')).context, [], "the other session's first prompt");
+	assert.equal(existsSync(wakePath(root, 'prompt.submit', 's1')), true, "it leaves this session's wake");
+	assert.match((await prompt('continue')).context.join('\n'), /^The Operator continues Task feat-monitoring/);
 });
 
 for (const source of ['compact', 'fork'] as const) {
 	test(`after ${source} the Handoff loads at once, with no brief`, async () => {
-		const { root, context, base } = await openTask();
+		const { context, base } = await openTask();
 		const result = await coreModule.handlers['session.start']!({ ...base, source }, context);
 		assert.match(result?.context ?? '', /^Continue the Task[\s\S]*\nDone when: it works\n[\s\S]*Next: render it\.$/);
 		assert.equal(result?.notice, 'kalfa: Handoff of Task feat-monitoring loaded again');
-		assert.equal(existsSync(wakePath(root, 'prompt.submit')), false);
+		assert.equal(result?.wake, undefined, 'no wake: the Handoff is loaded already');
 	});
 }
 
