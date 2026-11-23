@@ -64,7 +64,7 @@ it, and the agent keeps its memory without a review by the Operator.
 
 - [x] `kalfa memory migrate [--dry-run]`: the existing closed Task Records are marked reconciled, since their candidates went through the old path, and those outside the window move to the archive.
 - [x] The kalfa layer: rule forms, Root Hub, subject Hubs, links and the proposed records.
-- [ ] The Personal layer, the same way.
+- [x] The Personal layer, the same way.
 - [ ] The infrastructure repository's layer, the same way.
 - [ ] The three remaining project layers.
 - [ ] The managed instruction text: the agent writes the new text; the Operator puts it in `/etc/claude-code/CLAUDE.md`, which is root's.
@@ -96,7 +96,8 @@ layer's index lines (a budget of 4,096 bytes) load first in the session report
 and take most of the room the project's index lines had. Part 5's step for the
 Personal layer keeps the rest of its work. Part 3 itself closes only after
 Part 5's step for the kalfa layer, since its report reaches 5,000 characters
-only with that layer's Root Hub.
+only with that layer's Root Hub. With it, on 2026-11-23, the report measured
+4,320 characters.
 
 The inbox retired with the last step of Part 4, ahead of Part 5: each of its
 42 candidates had already been accepted or rejected by then, so none waited
